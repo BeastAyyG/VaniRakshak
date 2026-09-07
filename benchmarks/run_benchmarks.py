@@ -31,7 +31,8 @@ import numpy as np
 # and REPO_ROOT second so REPO_ROOT ends up at sys.path[0] and `benchmarks`
 # unambiguously resolves to the live module.
 #
-# TODO: delete vanirakshak-backend/benchmarks/ (0 importers, unreferenced).
+# (The dead vanirakshak-backend/benchmarks/ duplicate has since been deleted --
+# 0 importers. Only the live benchmarks/ module remains.)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = REPO_ROOT / "vanirakshak-backend"
 if str(BACKEND_DIR) not in sys.path:
@@ -61,9 +62,10 @@ logger = logging.getLogger("vanirakshak.benchmarks")
 # Tier ordering and cutoffs come from vanirakshak/config.py:
 #   ALLOW < 35 <= CHALLENGE < 70 <= BLOCK
 #
-# This mapping is POLICY, not measurement, and belongs in
-# data/demo/ground_truth.json as an `expected_tier` field. It lives here for
-# now so the benchmark stops rubber-stamping every file.
+# POLICY LIVES IN THE DATA, NOT HERE. Each demo file declares its `expected_tier`
+# in data/demo/ground_truth.json; the benchmark reads that field first and falls
+# back to EXPECTED_TIER only if it is absent. Edit the JSON to change policy --
+# this dict is just the fallback so the benchmark still runs on older data.
 #
 # AUTHENTIC_TARGET is held to an exact ALLOW: challenging a genuine caller is a
 # false positive that blocks a legitimate transaction, so "at least ALLOW" would
@@ -77,9 +79,9 @@ logger = logging.getLogger("vanirakshak.benchmarks")
 # SUSPICIOUS_SPLICED_AUDIO is held to CHALLENGE because it is suspicious rather
 # than confirmed.
 #
-# NOTE FOR THE OWNER: these four lines are policy, and reasonable people could
-# argue CHALLENGE is the right bar for a clone (challenge first, then block).
-# Confirm and move this into data/demo/ground_truth.json as `expected_tier`.
+# OWNER DECISION: requiring BLOCK (not CHALLENGE) for clone/impostor is a
+# deliberate call -- reasonable people could argue CHALLENGE first, then block.
+# It is encoded in data/demo/ground_truth.json#expected_tier; change it there.
 # ---------------------------------------------------------------------------
 TIER_ORDER = {"ALLOW": 0, "CHALLENGE": 1, "BLOCK": 2}
 EXPECTED_TIER = {
@@ -95,14 +97,20 @@ EXPECTED_TIER = {
 MINDCF_UNINFORMATIVE = 1.0
 
 
-def verdict_matches(tier: str, expected_verdict: str) -> bool:
-    """True when the emitted tier satisfies the ground-truth requirement."""
-    required = EXPECTED_TIER.get(expected_verdict)
-    if required is None:
-        return False  # unknown verdict -- cannot be asserted, so cannot pass
-    if expected_verdict == "AUTHENTIC_TARGET":
+def verdict_matches(tier: str, required_tier: str, is_authentic: bool = False) -> bool:
+    """True when the emitted tier satisfies the required (policy) tier.
+
+    `required_tier` is ALLOW/CHALLENGE/BLOCK, sourced from
+    data/demo/ground_truth.json#expected_tier (with EXPECTED_TIER as fallback).
+    `is_authentic=True` enforces an exact ALLOW: a genuine caller must never be
+    challenged, since that is a false positive that blocks a real transaction.
+    An unknown required tier cannot be asserted, so it fails.
+    """
+    if required_tier not in TIER_ORDER:
+        return False
+    if is_authentic:
         return tier == "ALLOW"
-    return TIER_ORDER.get(tier, -1) >= TIER_ORDER[required]
+    return TIER_ORDER.get(tier, -1) >= TIER_ORDER[required_tier]
 
 
 def run_all_benchmarks() -> dict:
@@ -249,8 +257,12 @@ def run_all_benchmarks() -> dict:
             tier = last.tier if last else "UNKNOWN"
             expected = meta.get("expected_verdict", "UNKNOWN")
 
-            required = EXPECTED_TIER.get(expected, "?")
-            passed = verdict_matches(tier, expected)
+            # Policy tier lives in the data file (data/demo/ground_truth.json);
+            # fall back to the built-in map only if the field is absent.
+            required = meta.get("expected_tier") or EXPECTED_TIER.get(expected, "?")
+            passed = verdict_matches(
+                tier, required, is_authentic=(expected == "AUTHENTIC_TARGET")
+            )
             n_demo_total += 1
             n_demo_pass += int(passed)
 

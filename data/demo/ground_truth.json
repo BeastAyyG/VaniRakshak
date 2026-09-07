@@ -7,14 +7,16 @@
       "target_speaker": "Narendra Modi",
       "is_clone": false,
       "is_spliced": false,
-      "expected_verdict": "AUTHENTIC_TARGET"
+      "expected_verdict": "AUTHENTIC_TARGET",
+      "expected_tier": "ALLOW"
     },
     "demo_02_full_clone.wav": {
       "label": "spoof",
       "target_speaker": "Narendra Modi (Cloned)",
       "is_clone": true,
       "is_spliced": false,
-      "expected_verdict": "SYNTHETIC_VOICE_CLONE"
+      "expected_verdict": "SYNTHETIC_VOICE_CLONE",
+      "expected_tier": "BLOCK"
     },
     "demo_03_partial_splice.wav": {
       "label": "spliced",
@@ -27,14 +29,16 @@
           8.0
         ]
       ],
-      "expected_verdict": "SUSPICIOUS_SPLICED_AUDIO"
+      "expected_verdict": "SUSPICIOUS_SPLICED_AUDIO",
+      "expected_tier": "CHALLENGE"
     },
     "demo_04_impostor.wav": {
       "label": "impostor",
       "target_speaker": "Impostor (Different Speaker)",
       "is_clone": false,
       "is_spliced": false,
-      "expected_verdict": "IMPOSTOR_SPEAKER"
+      "expected_verdict": "IMPOSTOR_SPEAKER",
+      "expected_tier": "BLOCK"
     }
   }
 }
