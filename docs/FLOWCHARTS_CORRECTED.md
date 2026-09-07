@@ -83,7 +83,7 @@ flowchart TD
 
     subgraph Audit["Audit and Privacy"]
         Q["SHA-256 audit receipt<br/>append-only hash chain"]
-        R["Alerting stub<br/>webhook and email planned"]
+        R["Webhook alerting<br/>server-side dispatch"]
     end
     O1 --> Q
     O2 --> Q
@@ -171,7 +171,7 @@ flowchart TD
 
 | Original node | Problem | Correction |
 |---|---|---|
-| Audio Capture (Live call, Recorded file, Screen-captured) | VaniRakshak captures **live mic only** via an AudioWorklet; no "recorded file" or "screen-captured" path | Live mic PCM capture at 16 kHz via Web Audio API, streamed over WebSocket |
+| Audio Capture (Live call, Recorded file, Screen-captured) | VaniRakshak captures live mic via AudioWorklet AND accepts recorded file uploads via POST /v1/analyze; no screen-captured path. | Live mic PCM capture at 16 kHz via Web Audio API, streamed over WebSocket |
 | Speech-to-Text Service (Whisper / ASR) | **No STT exists** in the system | Removed - operates on raw waveform, never transcripts |
 | Transcript Preprocessing / Speaker & time segmentation | No transcript is produced | Removed |
 | Claim Extraction (payments, KYC, prizes, threats, urgency) | Detection is **acoustic**, not semantic/NLP | Replaced by Multi-Layer Forensic Scoring (CM, ASV, channel, prosody) |

@@ -94,5 +94,10 @@ class Settings:
     fusion: FusionConfig = field(default_factory=FusionConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
 
+    def __post_init__(self):
+        preset = os.environ.get("VR_FUSION_PRESET")
+        if preset in _DEMO_OVERRIDES:
+            object.__setattr__(self, "fusion", FusionConfig(**_DEMO_OVERRIDES[preset]))
+
 
 settings = Settings()

@@ -58,9 +58,9 @@ Emitted once per analysis window (4.04 s sliding window, 1.0 s hop).
   "receipt_hash": "9f2c…",
   "challenge": {
     "phrase": "Say: Mango 8 nadi 4 blue",
-    "expected_digits": "84",
+    "expected_digits": ["8", "4"],
     "expected_full": "Mango 8 nadi 4 blue",
-    "instructions": "Repeat the phrase exactly.",
+    "instructions": "Now repeat ONLY the digits, in order, quickly.",
     "issued_at_ms": 1699999999999,
     "seed": 42
   }
@@ -71,9 +71,7 @@ Emitted once per analysis window (4.04 s sliding window, 1.0 s hop).
 
 ## 4. Field mapping
 
-The backend's names predate the dashboard, so `normalizeResult()` in
-`frontend/app/page.tsx` maps them. **Do not read backend field names directly
-in components** — always go through the normaliser.
+The backend's names predate the dashboard, so the normalization is done inline in `ws.onmessage` in `frontend/app/page.tsx`.
 
 | Dashboard (`AnalysisResult`) | Backend payload |
 |---|---|

@@ -49,6 +49,7 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const manualCloseRef = useRef<boolean>(false);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -88,6 +89,21 @@ export default function Home() {
     const interval = setInterval(checkHealth, 15000);
     return () => clearInterval(interval);
   }, [addEvent]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      manualCloseRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      processorRef.current?.disconnect();
+      workletNodeRef.current?.disconnect();
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      audioContextRef.current?.close();
+      socketRef.current?.close();
+    };
+  }, []);
 
   // Execute forensic analysis against backend POST /api/v1/analyze/audio
   const analyzeAudioFile = useCallback(async (file: File | Blob, fileName: string) => {
@@ -200,58 +216,101 @@ export default function Home() {
       socketRef.current = ws;
 
       ws.onopen = async () => {
-        setMicLive(true);
-        reconnectAttemptsRef.current = 0;
-        addEvent("Microphone forensic stream connected (16 kHz)", "info");
+        try {
+          setMicLive(true);
+          reconnectAttemptsRef.current = 0;
+          addEvent("Microphone forensic stream connected (16 kHz)", "info");
 
-        // Protocol requirement: first frame MUST be a JSON text handshake
-        const sessionId = `mic-${Date.now()}`;
-        ws.send(
-          JSON.stringify({
-            session_id: sessionId,
-            sample_rate: 16000,
-            caller_id: "+91-STREAM-MIC",
-            claimed_identity: "",
-            transaction_value_inr: 0,
-            origin_country: "IN",
-            prior_fraud_score: 0,
-          })
-        );
+          // Protocol requirement: first frame MUST be a JSON text handshake
+          const sessionId = `mic-${Date.now()}`;
+          ws.send(
+            JSON.stringify({
+              session_id: sessionId,
+              sample_rate: 16000,
+              caller_id: "+91-STREAM-MIC",
+              claimed_identity: "",
+              transaction_value_inr: 0,
+              origin_country: "IN",
+              prior_fraud_score: 0,
+            })
+          );
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, sampleRate: 16000 },
-        });
-        mediaStreamRef.current = stream;
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { channelCount: 1, sampleRate: 16000 },
+          });
+          mediaStreamRef.current = stream;
 
-        const AudioContextClass =
-          window.AudioContext ||
-          (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        const audioContext = new AudioContextClass({ sampleRate: 16000 });
-        audioContextRef.current = audioContext;
+          const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          const audioContext = new AudioContextClass({ sampleRate: 16000 });
+          audioContextRef.current = audioContext;
 
-        const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-        processorRef.current = processor;
+          const source = audioContext.createMediaStreamSource(stream);
 
-        processor.onaudioprocess = (e) => {
-          if (ws.readyState !== WebSocket.OPEN) return;
-          const input = e.inputBuffer.getChannelData(0);
+          // Use AudioWorklet instead of deprecated ScriptProcessorNode
+          try {
+            await audioContext.audioWorklet.addModule("/worklets/pcm-capture.js");
+            const workletNode = new AudioWorkletNode(audioContext, "pcm-capture");
+            workletNodeRef.current = workletNode;
 
-          let sum = 0;
-          for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
-          const rms = Math.sqrt(sum / input.length);
-          setAudioLevel(Math.min(100, Math.round(rms * 350)));
+            workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              const input = e.data;
 
-          const pcm = new Int16Array(input.length);
-          for (let i = 0; i < input.length; i++) {
-            const s = Math.max(-1, Math.min(1, input[i]));
-            pcm[i] = s < 0 ? s * 32768 : s * 32767;
+              let sum = 0;
+              for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+              const rms = Math.sqrt(sum / input.length);
+              setAudioLevel(Math.min(100, Math.round(rms * 350)));
+
+              const pcm = new Int16Array(input.length);
+              for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                pcm[i] = s < 0 ? s * 32768 : s * 32767;
+              }
+              try {
+                ws.send(pcm.buffer);
+              } catch {
+                // Socket transitioning states; skip frame
+              }
+            };
+
+            source.connect(workletNode);
+            workletNode.connect(audioContext.destination);
+          } catch {
+            // Fallback to ScriptProcessorNode for older browsers
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            processorRef.current = processor;
+
+            processor.onaudioprocess = (e) => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              const input = e.inputBuffer.getChannelData(0);
+
+              let sum = 0;
+              for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+              const rms = Math.sqrt(sum / input.length);
+              setAudioLevel(Math.min(100, Math.round(rms * 350)));
+
+              const pcm = new Int16Array(input.length);
+              for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                pcm[i] = s < 0 ? s * 32768 : s * 32767;
+              }
+              try {
+                ws.send(pcm.buffer);
+              } catch {
+                // Socket transitioning states; skip frame
+              }
+            };
+
+            source.connect(processor);
+            processor.connect(audioContext.destination);
           }
-          ws.send(pcm.buffer);
-        };
-
-        source.connect(processor);
-        processor.connect(audioContext.destination);
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          addEvent(`Microphone error: ${errMsg}`, "critical");
+          setMicLive(false);
+          manualCloseRef.current = true;
+          ws.close();
+        }
       };
 
       ws.onmessage = (msg) => {
@@ -317,11 +376,6 @@ export default function Home() {
                 timestamp: new Date().toISOString(),
               },
             }));
-          } else if (telemetry.type === "WINDOW_ANALYSIS") {
-            addEvent(
-              `Live window #${telemetry.window_index}: Anomaly=${telemetry.acoustic_anomaly_score}, ASV=${telemetry.speaker_similarity ?? "N/A"} (${telemetry.inference_ms}ms)`,
-              telemetry.acoustic_anomaly_score > 0.5 ? "warning" : "info"
-            );
           }
         } catch (err) {
           console.error("Failed to parse telemetry:", err);
@@ -334,6 +388,17 @@ export default function Home() {
 
       ws.onclose = () => {
         setMicLive(false);
+
+        // Clean up existing audio resources before reconnect
+        processorRef.current?.disconnect();
+        processorRef.current = null;
+        workletNodeRef.current?.disconnect();
+        workletNodeRef.current = null;
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+        audioContextRef.current?.close();
+        audioContextRef.current = null;
+
         if (manualCloseRef.current) {
           addEvent("Live stream stopped", "info");
           return;
@@ -367,6 +432,8 @@ export default function Home() {
     }
     processorRef.current?.disconnect();
     processorRef.current = null;
+    workletNodeRef.current?.disconnect();
+    workletNodeRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
     audioContextRef.current?.close();
@@ -380,10 +447,9 @@ export default function Home() {
   // Interlock condition: server-owned tier or risk
   const currentRisk = report?.overall_risk_score ?? 0;
   const transactionLocked =
-    currentRisk >= 35 ||
+    currentRisk >= 70 ||
     report?.verdict === "SYNTHETIC_VOICE_CLONE" ||
-    report?.verdict === "IMPOSTOR_SPEAKER" ||
-    report?.verdict === "SUSPICIOUS_SPLICED_AUDIO";
+    report?.verdict === "IMPOSTOR_SPEAKER";
 
   return (
     <main className="min-h-screen bg-black text-[#ededed] selection:bg-white selection:text-black">

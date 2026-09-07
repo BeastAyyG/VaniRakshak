@@ -1,4 +1,4 @@
-﻿# VaniRakshak — Operations Runbook
+# VaniRakshak — Operations Runbook
 
 ## Starting the Stack
 
@@ -72,6 +72,6 @@ npm run build
 
 ## Monitoring
 
-- **Audit log**: SHA-256 hash-chained events in `AuditLog` (in-memory; export via `/api/v1/audit` when implemented)
-- **Event log**: Frontend displays last 12 events with severity badges
+- **Audit log**: SHA-256 hash-chained events in `AuditLog` (in-memory; export via `/api/v1/audit`)
+- **Event log**: Frontend displays last 20 events with severity badges
 - **Alert delivery**: Logged at WARNING level on failure; best-effort, never breaks the stream

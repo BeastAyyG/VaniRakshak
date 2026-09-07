@@ -222,6 +222,86 @@ def test_route_aliases() -> None:
     assert_(True, "/api/v1/stream websocket handshake succeeds")
 
 
+def test_audit_receives_events_after_analyze() -> None:
+    """Verify the global AUDIT receives events when /v1/analyze is called."""
+    print("[test] global audit log receives events after /v1/analyze")
+    from fastapi.testclient import TestClient
+    from vanirakshak.server.app import app, AUDIT
+
+    client = TestClient(app)
+
+    # Check initial audit state
+    initial_count = len(AUDIT._events)
+
+    # Post an analyze request with a valid WAV
+    import io, wave, struct
+    sr = 16000
+    duration = 5.0
+    n_samples = int(sr * duration)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(struct.pack(f"<{n_samples}h", *([1000] * n_samples)))
+    buf.seek(0)
+
+    r = client.post(
+        "/api/v1/analyze/audio",
+        files={"file": ("test.wav", buf, "audio/wav")},
+    )
+    assert_(r.status_code == 200, f"/api/v1/analyze/audio status {r.status_code}")
+
+    # The global audit should now have more events
+    after_count = len(AUDIT._events)
+    assert_(after_count > initial_count, f"AUDIT grew from {initial_count} to {after_count}")
+
+    # And GET /v1/audit should return them
+    r2 = client.get("/v1/audit?n=5")
+    assert_(r2.status_code == 200, "/v1/audit status ok")
+    events = r2.json().get("events", [])
+    assert_(len(events) > 0, f"/v1/audit returned {len(events)} events (expected > 0)")
+
+
+def test_short_audio_no_keyerror() -> None:
+    """Verify short audio doesn't crash with KeyError in channel detector."""
+    print("[test] short audio (<0.25s) does not crash channel.detect")
+    from vanirakshak.detectors.channel import detect as channel_detect
+    import numpy as np
+
+    sr = 16000
+    short = np.zeros(sr // 8, dtype=np.float32)  # 0.125s — below the sr//4 threshold
+    result = channel_detect(short, sr)
+    assert_("low_band_share" in result, f"short audio result has low_band_share: {result}")
+    assert_(result["codec_guess"] == "unknown", f"short audio codec_guess: {result['codec_guess']}")
+
+    # Also verify the full pipeline doesn't crash
+    from vanirakshak.detectors.pipeline import DetectionPipeline
+    pipeline = DetectionPipeline()
+    wr = pipeline.analyse(short, sr)
+    assert_(wr.codec_guess == "unknown", "pipeline.analyse on short audio returned codec_guess")
+
+
+def test_shared_pipeline_enrollment() -> None:
+    """Verify that ASV enrollment in one session is visible to another via shared pipeline."""
+    print("[test] shared pipeline preserves ASV enrollment across sessions")
+    import numpy as np
+    from vanirakshak.detectors.pipeline import DetectionPipeline
+    from vanirakshak.session import CallSession, SessionContext
+
+    shared = DetectionPipeline()
+    sr = 16000
+
+    # Enrol in session 1
+    s1 = CallSession("s1", SessionContext(claimed_identity="alice"), pipeline=shared)
+    enrol_audio = np.random.randn(sr * 5).astype(np.float32)
+    s1.enrol("alice", enrol_audio, sr)
+
+    # Verify session 2 sees the enrollment
+    s2 = CallSession("s2", SessionContext(claimed_identity="alice"), pipeline=shared)
+    assert_(s2.is_enrolled("alice"), "s2 sees alice enrollment from s1 via shared pipeline")
+
+
 def main() -> int:
     tests = [
         test_cm_signs,
@@ -233,6 +313,9 @@ def main() -> int:
         test_alaw_round_trip,
         test_mindcf_harness_runs,
         test_route_aliases,
+        test_audit_receives_events_after_analyze,
+        test_short_audio_no_keyerror,
+        test_shared_pipeline_enrollment,
     ]
     t0 = time.time()
     for t in tests:

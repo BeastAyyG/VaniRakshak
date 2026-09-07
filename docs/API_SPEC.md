@@ -65,13 +65,34 @@ Returns backend status and hardware information.
 
 ```json
 {
-  "status": "ok",
-  "version": "0.1.0",
-  "hardware": {
-    "device_name": "CPU (Host Execution)"
-  }
+  "ok": true,
+  "status": "healthy",
+  "version": "0.1.0-sprint1",
+  "active_sessions": 0,
+  "hardware": { "device": "cpu", "device_name": "CPU (Acoustic Forensic Core)" },
+  "models": { "wavlm_model": "AASIST / ECAPA Forensic Pipeline", "vad_enabled": true, "zero_retention": true }
 }
 ```
+
+### `POST /v1/enroll` (and `/api/v1/enroll`)
+
+Speaker enrollment with user_id + audio file.
+
+### `POST /v1/analyze` (and `/api/v1/analyze`, `/v1/analyze/audio`, `/api/v1/analyze/audio`)
+
+One-shot forensic file analysis.
+
+### `POST /v1/sessions` (and `/api/v1/sessions`)
+
+Initialize call session with caller metadata.
+
+### `POST /v1/sessions/{sid}/challenge` (and `/api/v1/sessions/{sid}/challenge`)
+
+Grade challenge response.
+
+### `GET /v1/audit` (and `/api/v1/audit`)
+
+Tail SHA-256 audit log.
 
 ## Environment Variables
 
@@ -87,5 +108,6 @@ Returns backend status and hardware information.
 
 | WebSocket Close Code | Meaning |
 |---|---|
-| `1003` | First frame was binary instead of JSON handshake |
 | `1000` | Normal closure |
+| `1003` | First frame was binary instead of JSON handshake |
+| `4000` | Pipeline error |

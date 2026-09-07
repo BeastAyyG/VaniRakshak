@@ -37,7 +37,7 @@ export default function AudioUploadZone({
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type.startsWith("audio/") || /\.(wav|mp3|flac|ogg|m4a)$/i.test(file.name)) {
+      if (file.type === "audio/wav" || /\.wav$/i.test(file.name)) {
         setCurrentFile(file);
         onFileSelected(file);
       }
@@ -89,7 +89,7 @@ export default function AudioUploadZone({
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a"
+          accept="audio/wav,.wav"
           className="hidden"
           onChange={handleFileChange}
           disabled={isAnalyzing}
@@ -116,7 +116,7 @@ export default function AudioUploadZone({
             </div>
 
             <p className="mt-1 text-xs text-[#888888]">
-              WAV, MP3, FLAC, OGG, M4A up to 50 MB · Standardized in volatile RAM to 16 kHz mono
+              WAV up to 50 MB · Standardized in volatile RAM to 16 kHz mono
             </p>
 
             <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-[10.5px] font-mono text-[#888888]">

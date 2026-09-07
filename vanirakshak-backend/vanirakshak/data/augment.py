@@ -169,6 +169,8 @@ def apply_augmentation(x: np.ndarray, sr: int, name: str, rng: np.random.Generat
         return gsm_efr_simulate(x, sr)
     if name == "babble_5db":
         return add_babble_simple(x, snr_db=5.0, sr=sr, rng=rng)
+    if name == "babble_10db":
+        return add_babble_simple(x, snr_db=10.0, sr=sr, rng=rng)
     if name == "babble_15db":
         return add_babble_simple(x, snr_db=15.0, sr=sr, rng=rng)
     if name == "rir_office":

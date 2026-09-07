@@ -29,6 +29,7 @@ from ..config import settings
 from ..session import CallSession, SessionContext
 from ..privacy.audit import AuditLog
 from ..alerts import AlertDispatcher, build_alert_payload
+from ..detectors.pipeline import DetectionPipeline
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +47,7 @@ app = FastAPI(
 SESSIONS: Dict[str, CallSession] = {}
 AUDIT = AuditLog(max_events=10_000)
 ALERTS = AlertDispatcher()
+PIPELINE = DetectionPipeline()
 
 # Browser dashboard runs on a different origin (localhost:3001 by default).
 # Origins are configurable via VR_CORS_ORIGINS (comma-separated).
@@ -203,7 +205,7 @@ async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> Enr
         raise HTTPException(400, "enrolment audio too short (need ≥ 0.5 s)")
     # Re-use or create a session for enrolment
     sid = f"enroll-{uuid.uuid4().hex[:8]}"
-    sess = CallSession(sid, SessionContext(caller_id="enrolment", claimed_identity=user_id))
+    sess = CallSession(sid, SessionContext(caller_id="enrolment", claimed_identity=user_id), audit=AUDIT, pipeline=PIPELINE)
     sess.enrol(user_id, x, sr)
     SESSIONS[sid] = sess
     return EnrollResponse(
@@ -241,6 +243,8 @@ async def analyze(
     sess = CallSession(
         sid,
         SessionContext(caller_id=caller_id, claimed_identity=claimed_identity),
+        audit=AUDIT,
+        pipeline=PIPELINE
     )
     sess.set_sample_rate(sr)
 
@@ -331,6 +335,15 @@ async def analyze(
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
+    if last.tier in ("CHALLENGE", "BLOCK") or last.risk >= 70:
+        ALERTS.dispatch(build_alert_payload(
+            session_id=sid,
+            risk=last.risk,
+            tier=last.tier,
+            interlock_active=(last.tier == "BLOCK"),
+            receipt_hash=last.receipt_hash,
+        ))
+
     return AnalyzeResponse(
         status="success",
         file_duration_sec=file_duration,
@@ -379,6 +392,8 @@ def start_session(req: SessionStartRequest) -> dict:
             origin_country=req.origin_country,
             prior_fraud_score=req.prior_fraud_score,
         ),
+        audit=AUDIT,
+        pipeline=PIPELINE
     )
     return {"session_id": sid}
 
@@ -425,7 +440,7 @@ async def stream_endpoint(ws: WebSocket) -> None:
         origin_country=str(handshake.get("origin_country", "IN")),
         prior_fraud_score=float(handshake.get("prior_fraud_score", 0.0)),
     )
-    sess = CallSession(sid, ctx)
+    sess = CallSession(sid, ctx, audit=AUDIT, pipeline=PIPELINE)
     sess.set_sample_rate(sr)
     SESSIONS[sid] = sess
 
@@ -458,7 +473,9 @@ async def stream_endpoint(ws: WebSocket) -> None:
                 # Server-side alerting on challenge / block. Best-effort:
                 # a delivery failure must not break the stream.
                 if result.trigger_challenge or result.interlock_active:
-                    ALERTS.dispatch(
+                    import asyncio
+                    await asyncio.to_thread(
+                        ALERTS.dispatch,
                         build_alert_payload(
                             session_id=sid,
                             risk=result.risk,
@@ -472,5 +489,8 @@ async def stream_endpoint(ws: WebSocket) -> None:
                             ),
                         )
                     )
-    except WebSocketDisconnect:
-        return
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    finally:
+        sess.buffer.wipe()
+        SESSIONS.pop(sid, None)

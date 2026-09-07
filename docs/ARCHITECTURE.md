@@ -1,4 +1,4 @@
-﻿# VaniRakshak — Architecture Overview
+# VaniRakshak — Architecture Overview
 
 ## System Components
 
@@ -7,7 +7,7 @@
 │                        Client (Browser)                             │
 │  ┌──────────────────┐   ┌───────────────────┐   ┌───────────────┐ │
 │  │  AudioWorklet     │   │  WebSocket Client  │   │  React 19 UI  │ │
-│  │  PCM Capture      │──▶│  Binary + JSON     │──▶│  Dashboard    │ │
+│  │  with fallback    │──▶│  Binary + JSON     │──▶│  Dashboard    │ │
 │  │  16-bit @ 16kHz   │   │  Streaming         │   │  + Interlock  │ │
 │  └──────────────────┘   └───────────────────┘   └───────────────┘ │
 └──────────────────────────────────┬──────────────────────────────────┘

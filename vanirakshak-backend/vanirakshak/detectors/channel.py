@@ -15,7 +15,7 @@ def detect(x: np.ndarray, sr: int) -> dict:
 
     x = x.astype(np.float32)
     if x.size < sr // 4:
-        return {"codec_guess": "unknown", "anomaly": 0.0, "snr_db": 0.0}
+        return {"codec_guess": "unknown", "anomaly": 0.0, "snr_db": 0.0, "low_band_share": 0.0}
 
     f, pxx = welch(x, fs=sr, nperseg=min(2048, x.size), noverlap=512)
     total = pxx.sum() + 1e-12

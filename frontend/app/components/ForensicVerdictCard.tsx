@@ -244,7 +244,7 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
             </div>
 
             <div className="text-[10.5px] font-mono text-[#888888]">
-              Receipt SHA-256: <span className="text-[#a1a1a1]">{report.dpdp_compliance?.receipt_sha256.slice(0, 16)}...</span>
+              Receipt SHA-256: <span className="text-[#a1a1a1]">{report.dpdp_compliance?.receipt_sha256?.slice(0, 16)}...</span>
             </div>
           </div>
         </div>

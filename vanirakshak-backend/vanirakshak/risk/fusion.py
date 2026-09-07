@@ -80,9 +80,10 @@ class RiskFusionEngine:
 
     def update(self, window: WindowResult, context_risk: float = 0.0) -> RiskDecision:
         p = calibrate(window, context_risk, self.fusion_cfg)
-        # fast-rise override: if the CM LLR is decisively spoof, ignore the EMA
-        if window.cm_score < -2.0:
+        # fast-rise override: if the posterior is decisively spoof, ignore the EMA
+        if p > self.risk_cfg.fast_rise_threshold:
             risk = 100.0 * p
+            self._ema = risk
         else:
             risk = 100.0 * p
             if self._ema is None:

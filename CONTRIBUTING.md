@@ -1,4 +1,4 @@
-﻿# VaniRakshak — Collaboration Guidelines & Team Rules
+# VaniRakshak — Collaboration Guidelines & Team Rules
 
 Welcome to **VaniRakshak**! To ensure seamless collaboration, prevent merge conflicts, keep code quality high, and maintain acoustic data integrity, all contributors and AI agents must follow these rules.
 
@@ -40,6 +40,9 @@ VaniRakshak/
 ├── frontend/             # Next.js 16 (App Router) + Tailwind CSS + AudioWorklet
 ├── vanirakshak-backend/  # FastAPI real-time forensic WebSocket/REST service
 ├── docs/                 # Single source of truth for contracts & architecture
+├── backend/
+├── ml/
+├── benchmarks/
 └── data/                 # Benchmark scripts and demo audio ground-truth
 ```
 
@@ -59,7 +62,7 @@ VaniRakshak/
 
 * **Framework:** Next.js 16 (App Router) + React 19 + TypeScript.
 * **Audio Capture:** Audio must be captured via the Web Audio API **AudioWorklet** (`public/worklets/pcm-capture.js`), delivering raw 16-bit mono PCM @ 16 kHz. Avoid deprecated `ScriptProcessorNode`.
-* **Field Normalization:** Always consume backend WebSocket responses via `normalizeResult()` in `frontend/app/page.tsx`. Do not bind unvalidated raw JSON keys directly to UI components.
+* **Field Normalization:** The normalization is done inline in `ws.onmessage` in `frontend/app/page.tsx`. Do not bind unvalidated raw JSON keys directly to UI components.
 * **Linting & Type Safety:**
   Before pushing frontend code, verify:
   ```bash

@@ -27,7 +27,7 @@ from typing import List, Optional, Tuple
 
 
 HINDI_WORDS = ["aam", "nadi", "kela", "suraj", "chai", "tara", "kitaab", "ghar"]
-ENGLISH_WORDS = ["mango", "river", "blue", "seven", "table", "green", "orange", "river"]
+ENGLISH_WORDS = ["mango", "river", "blue", "seven", "table", "green", "orange", "cloud"]
 DIGITS = list("0123456789")
 
 

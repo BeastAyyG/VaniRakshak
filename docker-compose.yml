@@ -21,9 +21,11 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_BACKEND_WS=ws://localhost:8000/ws/stream
+        - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     ports:
       - "3001:3001"
     environment:
       - NEXT_PUBLIC_BACKEND_WS=ws://localhost:8000/ws/stream
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     depends_on:
       - backend

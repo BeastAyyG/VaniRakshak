@@ -75,7 +75,14 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
 │           ├── WaveformEvidenceTimeline.tsx # sliding-window waveform & boundary inspector
 │           ├── DemoQuickSelector.tsx        # standardized forensic benchmark selector
 │           └── AudioUploadZone.tsx          # custom audio drag-and-drop ingestion
+├── ml/
+├── benchmarks/
+├── data/
+├── backend/              # (legacy)
+├── enroll_target.py
 └── vanirakshak-backend/  # Python FastAPI forensic service
+    ├── tests/
+    │   └── test_stream_e2e.py  # protocol conformance test
     └── vanirakshak/
         ├── server/app.py       # REST + WebSocket endpoints
         ├── session.py          # per-call state, interlock, challenges
@@ -83,8 +90,7 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
         ├── detectors/          # asv, channel, cm (spoof), prosody, pipeline
         ├── challenge/engine.py # dynamic phrase generation + grading
         ├── alerts/             # server-side alert dispatch (webhook)
-        ├── privacy/            # DPDP-style audit log
-        └── tests/test_stream_e2e.py  # protocol conformance test
+        └── privacy/            # DPDP-style audit log
 ```
 
 The wire format between the two halves is documented in **[docs/PROTOCOL.md](docs/PROTOCOL.md)**.
@@ -197,7 +203,7 @@ Status of pipeline components:
 - Architecture and specification documents are located in `docs/` (`ARCHITECTURE.md`, `PROTOCOL.md`, `API_SPEC.md`, `RUNBOOK.md`, `FLOWCHARTS_CORRECTED.md`).
 - Evaluation harness: ASVspoof-5 evaluation harness available via `benchmarks/compute_mindcf.py` (`python -m vanirakshak eval`).
 - Reconnection & Alerting: Robust 5-stage backoff reconnect logic in frontend; server-side webhook dispatcher in `vanirakshak/alerts/`.
-- Frontend modular components (`AudioUploadZone`, `DemoQuickSelector`, `ForensicVerdictCard`, `WaveformEvidenceTimeline`) are reserved for the file-upload and timeline inspection views.
+- Frontend modular components (`AudioUploadZone`, `DemoQuickSelector`, `ForensicVerdictCard`, `WaveformEvidenceTimeline`) are actively rendered on the file-upload and timeline inspection views.
 - The interlock is `interlock_active || action === "BLOCK" || risk >= 70`. The server owns the decision; client-side thresholds exist only for demo mode.
 
 ## License
