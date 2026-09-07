@@ -1,6 +1,6 @@
 {
-  "timestamp_iso": "2026-09-07T23:19:04Z",
-  "total_benchmark_duration_sec": 17.39,
+  "timestamp_iso": "2026-09-07T23:25:58Z",
+  "total_benchmark_duration_sec": 16.83,
   "all_passed": false,
   "checks": [
     {
@@ -8,7 +8,7 @@
       "passed": false
     },
     {
-      "check": "Latency SLA p95 < 200 ms (p95=24.00)",
+      "check": "Latency SLA p95 < 200 ms (p95=23.98)",
       "passed": true
     },
     {
@@ -39,10 +39,10 @@
     "calibrated": false
   },
   "latency_sla": {
-    "p50_ms": 21.381400001700968,
-    "p95_ms": 24.00462499645073,
-    "p99_ms": 25.113043995370386,
-    "mean_ms": 19.320537999847147,
+    "p50_ms": 21.736449998570606,
+    "p95_ms": 23.983439999210532,
+    "p99_ms": 24.505802003768608,
+    "mean_ms": 18.415182499811635,
     "sla_threshold_p95_ms": 200.0,
     "compliant": true
   },
