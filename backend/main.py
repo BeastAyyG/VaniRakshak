@@ -71,3 +71,16 @@ async def health() -> dict:
         "service": "vanirakshak-claim-verification",
         "version": "0.1.0",
     }
+
+
+# ---------------------------------------------------------------------------
+# Frontend Static Files
+# ---------------------------------------------------------------------------
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+

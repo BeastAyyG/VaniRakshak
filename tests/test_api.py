@@ -115,3 +115,24 @@ class TestVerifyEndpoint:
             json={},
         )
         assert response.status_code == 422
+
+    def test_verify_text_endpoint(self, client: TestClient, patched_pipeline):
+        """Raw text endpoint should auto-segment and verify claims."""
+        response = client.post(
+            "/api/v1/claims/verify-text",
+            json={
+                "text": "Hello sir. It is raining heavily in Delhi right now. Thank you.",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["transcript"]) >= 1
+        assert len(data["claims"]) >= 1
+        assert data["claims"][0]["claim_type"] == "WEATHER"
+
+    def test_frontend_served(self, client: TestClient):
+        """Frontend index.html should be served at root /."""
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "VaniRakshak" in response.text
+

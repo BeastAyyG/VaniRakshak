@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VaniRakshak — Factual Claim Verification Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-badge">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">VaniRakshak <span class="brand-tag">FORENSICS</span></div>
+          <div class="brand-sub">Factual Claim Verification & Web Evidence Intelligence</div>
+        </div>
+      </div>
+      <div class="nav-status">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span id="apiStatusText">API Ready</span>
+        </div>
+        <div class="tavily-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          Tavily Live Search
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace Grid -->
+    <main class="main-grid">
+      <!-- Left Panel: Input & Control Console -->
+      <section class="panel console-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            Test Input Console
+          </div>
+          <div class="mode-toggles">
+            <button class="mode-btn active" id="textModeBtn" title="Paste raw conversational text or sentences">Text / Dialogue</button>
+            <button class="mode-btn" id="jsonModeBtn" title="Input timestamped segments in JSON format">JSON Segments</button>
+          </div>
+        </div>
+
+        <div class="panel-body">
+          <!-- Preset Scenarios -->
+          <div class="presets-section">
+            <div class="section-label">Quick Test Scenarios:</div>
+            <div class="preset-chips">
+              <button class="preset-chip" id="presetWeather">
+                <span class="chip-icon">🌦️</span> Delhi Weather
+              </button>
+              <button class="preset-chip" id="presetFinance">
+                <span class="chip-icon">🏦</span> RBI Repo Rate
+              </button>
+              <button class="preset-chip" id="presetScam">
+                <span class="chip-icon">🔒</span> Bank KYC Scam
+              </button>
+              <button class="preset-chip" id="presetCall">
+                <span class="chip-icon">🎙️</span> Full Call Dialogue
+              </button>
+            </div>
+          </div>
+
+          <!-- Input Area -->
+          <div class="input-container">
+            <div class="input-meta-bar">
+              <span id="inputModeLabel">Enter transcript text or dialogue:</span>
+              <button class="ghost-btn" id="clearInputBtn">Clear</button>
+            </div>
+            <textarea id="transcriptInput" rows="10" placeholder="Type or paste conversation text here...
+Example:
+Caller: Good morning sir. It is raining heavily in Delhi right now.
+Caller: Your bank KYC verification has expired yesterday.
+Receiver: Okay, thank you for letting me know."></textarea>
+          </div>
+
+          <!-- Action Bar -->
+          <div class="action-bar">
+            <div class="shortcut-tip">Tip: Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to verify</div>
+            <button class="primary-btn" id="verifyBtn">
+              <span class="btn-spinner" id="btnSpinner"></span>
+              <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span id="btnText">Verify Claims</span>
+            </button>
+          </div>
+
+          <!-- Live Rule-Based Filter Info -->
+          <div class="info-card">
+            <div class="info-card-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>How this test console works</span>
+            </div>
+            <p class="info-text">
+              1. <strong>Factual Detection</strong>: Sentences are classified into factual assertions vs greetings/noise. Non-factual items are filtered out.<br>
+              2. <strong>Structured Parsing</strong>: Extracts location, organization, event, and temporal reference.<br>
+              3. <strong>Web Retrieval</strong>: Executes search queries via Tavily with claim-type filters.<br>
+              4. <strong>Forensic Verdict</strong>: Compares claims against retrieved evidence to return <code>SUPPORTED</code>, <code>CONTRADICTED</code>, or <code>UNVERIFIABLE</code> with risk scores.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Panel: Intelligence & Results Dashboard -->
+      <section class="panel results-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Forensic Intelligence Dashboard
+          </div>
+          <div class="results-tabs">
+            <button class="tab-btn active" data-tab="claimsTab">Claims & Evidence</button>
+            <button class="tab-btn" data-tab="timelineTab">Transcript Timeline</button>
+            <button class="tab-btn" data-tab="jsonTab">Raw JSON</button>
+          </div>
+        </div>
+
+        <div class="panel-body results-body">
+          <!-- Overview Metric Ribbon -->
+          <div class="metrics-ribbon" id="metricsRibbon">
+            <div class="metric-card">
+              <div class="metric-label">Total Segments</div>
+              <div class="metric-value" id="statSegments">0</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Claims Extracted</div>
+              <div class="metric-value highlight" id="statClaims">0</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Noise Filtered</div>
+              <div class="metric-value muted" id="statFiltered">0</div>
+            </div>
+            <div class="metric-card risk-metric-card" id="riskCard">
+              <div class="metric-label">Factual Risk Score</div>
+              <div class="risk-metric-content">
+                <span class="metric-value" id="statRiskScore">0.00</span>
+                <span class="risk-badge risk-none" id="riskBadge">NONE</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3>No Transcript Analyzed Yet</h3>
+            <p>Select a quick test scenario on the left or enter any dialogue, then click <strong>Verify Claims</strong>.</p>
+          </div>
+
+          <!-- Loading State -->
+          <div class="loading-state hidden" id="loadingState">
+            <div class="radar-spinner"></div>
+            <h3>Verifying Claims via Tavily Web Evidence...</h3>
+            <p class="loading-subtitle">Filtering noise &bull; Structuring entities &bull; Executing live search &bull; Calculating risk</p>
+          </div>
+
+          <!-- Tab 1: Claims & Evidence View -->
+          <div class="tab-content active" id="claimsTab">
+            <div class="claims-list" id="claimsList"></div>
+          </div>
+
+          <!-- Tab 2: Transcript Timeline View -->
+          <div class="tab-content" id="timelineTab">
+            <div class="timeline-container" id="timelineContainer"></div>
+          </div>
+
+          <!-- Tab 3: Raw JSON View -->
+          <div class="tab-content" id="jsonTab">
+            <div class="json-container">
+              <div class="json-header">
+                <span>Response Payload (HTTP 200)</span>
+                <button class="ghost-btn" id="copyJsonBtn">Copy JSON</button>
+              </div>
+              <pre id="jsonViewer">{}</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

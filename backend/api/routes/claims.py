@@ -39,6 +39,20 @@ class VerifyRequest(BaseModel):
     )
 
 
+class VerifyTextRequest(BaseModel):
+    """Request body for raw text verification without pre-segmentation."""
+
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Raw conversation text or paragraph to analyze.",
+    )
+    speaker: str | None = Field(
+        default=None,
+        description="Optional default speaker label.",
+    )
+
+
 class EvidenceResponse(BaseModel):
     title: str
     url: str
@@ -183,3 +197,65 @@ async def verify_claims(request: VerifyRequest) -> VerifyResponse:
             risk_level=result.risk.risk_level,
         ),
     )
+
+
+@router.post(
+    "/verify-text",
+    response_model=VerifyResponse,
+    summary="Verify factual claims directly from raw text",
+    description=(
+        "Convenience endpoint: accepts raw unsegmented text or dialogue, "
+        "automatically chunks it into timestamped segments, and runs the "
+        "verification pipeline."
+    ),
+)
+async def verify_text(request: VerifyTextRequest) -> VerifyResponse:
+    """Segment raw text and verify factual claims."""
+    import re
+
+    raw_text = request.text.strip()
+    if not raw_text:
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+
+    # Split into lines/sentences
+    raw_lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+    chunks: list[str] = []
+
+    for line in raw_lines:
+        sentences = re.split(r"(?<=[.!?])\s+", line)
+        for s in sentences:
+            s_clean = s.strip()
+            if s_clean:
+                chunks.append(s_clean)
+
+    if not chunks:
+        chunks = [raw_text]
+
+    # Generate sequential segments
+    segments: list[TranscriptSegment] = []
+    current_time = 0.0
+    for chunk in chunks:
+        # Estimate duration based on word count (~130 words per minute -> ~2.2 words per second)
+        word_count = max(1, len(chunk.split()))
+        duration = max(2.0, round(word_count * 0.45, 1))
+        
+        # Check if line has speaker prefix like "Speaker 1:" or "Caller:"
+        speaker = request.speaker
+        text_content = chunk
+        prefix_match = re.match(r"^([A-Za-z0-9_\s]{2,15}):\s*(.+)$", chunk)
+        if prefix_match:
+            speaker = prefix_match.group(1).strip()
+            text_content = prefix_match.group(2).strip()
+
+        segments.append(
+            TranscriptSegment(
+                start=round(current_time, 1),
+                end=round(current_time + duration, 1),
+                text=text_content,
+                speaker=speaker,
+            )
+        )
+        current_time += duration + 0.5
+
+    return await verify_claims(VerifyRequest(segments=segments))
+
