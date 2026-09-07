@@ -1,1 +1,0 @@
-"""VaniRakshak Services Package."""
