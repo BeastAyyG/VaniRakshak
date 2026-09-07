@@ -1,0 +1,45 @@
+{
+  "mapping": {
+    "NATURAL_ACOUSTIC_PROFILE": "AUTHENTIC_TARGET",
+    "SYNTHETIC_VOCODER_DETECTED": "SYNTHETIC_VOICE_CLONE",
+    "SUSPICIOUS_HIGH_FREQUENCY_FLATNESS": "SYNTHETIC_VOICE_CLONE",
+    "SUSPICIOUS_PHASE_DISCONTINUITY": "SUSPICIOUS_SPLICED_AUDIO"
+  },
+  "unreachable": {
+    "IMPOSTOR_SPEAKER": "needs speaker-identity (ASV), not acoustic DSP"
+  },
+  "records": [
+    {
+      "file": "demo_01_genuine.wav",
+      "expected": "AUTHENTIC_TARGET",
+      "engine_verdict": "NATURAL_ACOUSTIC_PROFILE",
+      "mapped": "AUTHENTIC_TARGET",
+      "composite_risk_pct": 8.05,
+      "error": null
+    },
+    {
+      "file": "demo_02_full_clone.wav",
+      "expected": "SYNTHETIC_VOICE_CLONE",
+      "engine_verdict": "SYNTHETIC_VOCODER_DETECTED",
+      "mapped": "SYNTHETIC_VOICE_CLONE",
+      "composite_risk_pct": 74.85,
+      "error": null
+    },
+    {
+      "file": "demo_03_partial_splice.wav",
+      "expected": "SUSPICIOUS_SPLICED_AUDIO",
+      "engine_verdict": "SUSPICIOUS_PHASE_DISCONTINUITY",
+      "mapped": "SUSPICIOUS_SPLICED_AUDIO",
+      "composite_risk_pct": 34.81,
+      "error": null
+    },
+    {
+      "file": "demo_04_impostor.wav",
+      "expected": "IMPOSTOR_SPEAKER",
+      "engine_verdict": "SUSPICIOUS_HIGH_FREQUENCY_FLATNESS",
+      "mapped": "SYNTHETIC_VOICE_CLONE",
+      "composite_risk_pct": 49.37,
+      "error": null
+    }
+  ]
+}

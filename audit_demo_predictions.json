@@ -1,0 +1,38 @@
+{
+  "demo_01_genuine.wav": {
+    "expected": "AUTHENTIC_TARGET",
+    "cm_score": 1.5443,
+    "cm_genuine_prob": 0.8241,
+    "asv_score": 0.5,
+    "asv_enrolled": false,
+    "channel_anomaly": 0.2394,
+    "prosody_unnatural": 0.0
+  },
+  "demo_02_full_clone.wav": {
+    "expected": "SYNTHETIC_VOICE_CLONE",
+    "cm_score": 1.5394,
+    "cm_genuine_prob": 0.8234,
+    "asv_score": 0.5,
+    "asv_enrolled": false,
+    "channel_anomaly": 0.2431,
+    "prosody_unnatural": 0.0
+  },
+  "demo_03_partial_splice.wav": {
+    "expected": "SUSPICIOUS_SPLICED_AUDIO",
+    "cm_score": 1.5358,
+    "cm_genuine_prob": 0.8229,
+    "asv_score": 0.5,
+    "asv_enrolled": false,
+    "channel_anomaly": 0.2426,
+    "prosody_unnatural": 0.0
+  },
+  "demo_04_impostor.wav": {
+    "expected": "IMPOSTOR_SPEAKER",
+    "cm_score": 2.7358,
+    "cm_genuine_prob": 0.9391,
+    "asv_score": 0.5,
+    "asv_enrolled": false,
+    "channel_anomaly": 0.2499,
+    "prosody_unnatural": 0.0
+  }
+}
