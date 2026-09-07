@@ -1,0 +1,55 @@
+# VaniRakshak - development and test environment
+#
+# Why this file exists: the repo previously had no single manifest that could
+# bootstrap it. Dependencies were split across backend/requirements.txt,
+# ml/requirements.txt and vanirakshak-backend/requirements.txt, and NONE of them
+# included pytest -- so `make test` (which runs bare `pytest`) could never work
+# on a clean checkout.
+#
+# This manifest installs everything needed to run the FULL suite (21 tests) and
+# to boot either backend.
+#
+#   pip install -r requirements-dev.txt
+#
+# torch/torchaudio are large. The CPU wheels keep it to roughly 200 MB and are
+# what `make setup` uses:
+#
+#   pip install -r requirements-dev.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- test runner -------------------------------------------------------------
+pytest>=8.0
+
+# --- core numerics -----------------------------------------------------------
+numpy>=1.24
+scipy>=1.10
+
+# --- vanirakshak-backend (deterministic-stub realtime service) ---------------
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.9
+python-multipart>=0.0.10
+httpx>=0.27
+websockets>=12.0
+
+# --- backend (heavy forensic path) -------------------------------------------
+# backend/tests/test_forensic_signal.py is the ONLY coverage of this tree.
+# Without these four, 9 of 21 tests silently skip.
+#
+# The old skip message blamed "torch, soundfile", which was wrong: both of those
+# are importable, but backend.app.core.audio needs torchaudio and
+# backend.app.core.forensic_signal needs librosa. Installing what the old
+# message asked for left the tests skipped with no clue why.
+soundfile>=0.12
+torch>=2.1
+torchaudio>=2.1
+librosa>=0.10
+
+# --- optional real model backends --------------------------------------------
+# Imported at module scope by backend/app/models/wavlm_detector.py, which
+# backend/app/main.py needs in order to boot the heavy service.
+transformers>=4.36
+
+# Imported lazily inside ECAPAVerifier._ensure_model_loaded(), which falls back
+# to a deterministic stub per CONTRIBUTING.md. Only needed for real ECAPA-TDNN:
+# speechbrain>=1.0

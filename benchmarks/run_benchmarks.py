@@ -20,13 +20,24 @@ from pathlib import Path
 
 import numpy as np
 
-# Ensure repository root is on sys.path
+# Ensure repository root is on sys.path.
+#
+# ORDER MATTERS. There are two importable packages named `benchmarks`:
+#   benchmarks/                        <- the live one (docs point here)
+#   vanirakshak-backend/benchmarks/    <- a dead byte-identical duplicate
+# Whichever parent directory lands at sys.path[0] wins, so inserting
+# BACKEND_DIR last silently made the benchmark import the DEAD COPY -- edits to
+# benchmarks/compute_mindcf.py had no effect at all. Insert BACKEND_DIR first
+# and REPO_ROOT second so REPO_ROOT ends up at sys.path[0] and `benchmarks`
+# unambiguously resolves to the live module.
+#
+# TODO: delete vanirakshak-backend/benchmarks/ (0 importers, unreferenced).
 REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 BACKEND_DIR = REPO_ROOT / "vanirakshak-backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.compute_mindcf import evaluate_system
 from vanirakshak.cli.bench import run_bench
@@ -43,6 +54,55 @@ from vanirakshak.session import CallSession, SessionContext
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("vanirakshak.benchmarks")
+
+# ---------------------------------------------------------------------------
+# Ground-truth verdict -> the risk tier the system is REQUIRED to reach.
+#
+# Tier ordering and cutoffs come from vanirakshak/config.py:
+#   ALLOW < 35 <= CHALLENGE < 70 <= BLOCK
+#
+# This mapping is POLICY, not measurement, and belongs in
+# data/demo/ground_truth.json as an `expected_tier` field. It lives here for
+# now so the benchmark stops rubber-stamping every file.
+#
+# AUTHENTIC_TARGET is held to an exact ALLOW: challenging a genuine caller is a
+# false positive that blocks a legitimate transaction, so "at least ALLOW" would
+# be meaningless (ALLOW is the floor -- everything trivially satisfies it).
+#
+# The two CONFIRMED-fraud classes require BLOCK, not merely CHALLENGE. This is
+# the important part: the system currently emits CHALLENGE for every input, so a
+# "minimum tier of CHALLENGE" policy would let it pass 3 of 4 by accident. Per
+# the README, BLOCK is the tier that "engages the transaction interlock", which
+# is the correct response to a confirmed clone or a confirmed impostor.
+# SUSPICIOUS_SPLICED_AUDIO is held to CHALLENGE because it is suspicious rather
+# than confirmed.
+#
+# NOTE FOR THE OWNER: these four lines are policy, and reasonable people could
+# argue CHALLENGE is the right bar for a clone (challenge first, then block).
+# Confirm and move this into data/demo/ground_truth.json as `expected_tier`.
+# ---------------------------------------------------------------------------
+TIER_ORDER = {"ALLOW": 0, "CHALLENGE": 1, "BLOCK": 2}
+EXPECTED_TIER = {
+    "AUTHENTIC_TARGET": "ALLOW",
+    "SYNTHETIC_VOICE_CLONE": "BLOCK",
+    "SUSPICIOUS_SPLICED_AUDIO": "CHALLENGE",
+    "IMPOSTOR_SPEAKER": "BLOCK",
+}
+
+# docs/04-metrics-and-honest-evaluation.md: "An uninformative system scores
+# minDCF = 1.0." Anything at or above that carries no information, so a codec
+# condition that degrades the detector to that point is a FAIL, not a PASS.
+MINDCF_UNINFORMATIVE = 1.0
+
+
+def verdict_matches(tier: str, expected_verdict: str) -> bool:
+    """True when the emitted tier satisfies the ground-truth requirement."""
+    required = EXPECTED_TIER.get(expected_verdict)
+    if required is None:
+        return False  # unknown verdict -- cannot be asserted, so cannot pass
+    if expected_verdict == "AUTHENTIC_TARGET":
+        return tier == "ALLOW"
+    return TIER_ORDER.get(tier, -1) >= TIER_ORDER[required]
 
 
 def run_all_benchmarks() -> dict:
@@ -70,9 +130,21 @@ def run_all_benchmarks() -> dict:
     print("  --------------------------------------------------------")
     print(f"  * Equal Error Rate (EER)          : {m1['EER']:.2f}%")
     print(f"  * Minimum Detection Cost (minDCF) : {m1['minDCF']:.4f}")
-    print(f"  * Actual Detection Cost (actDCF)  : {m1['actDCF']:.4f}")
+    print(f"  * Actual Detection Cost (actDCF)  : {m1['actDCF']:.4f}"
+          f"   @ tau={m1['threshold_actdcf']:.3f} ({m1['threshold_source']})")
+    print(f"  * actDCF at tau_Bayes             : {m1['actDCF_bayes']:.4f}"
+          f"   @ tau={m1['threshold_bayes']:.3f}")
     print(f"  * Log-Likelihood Ratio Cost (CLLR): {m1['CLLR']:.4f}")
+    print(f"  * Score calibration               : "
+          f"{'OK' if m1['calibrated'] else 'MISCALIBRATED'}")
     print("  --------------------------------------------------------")
+    if not m1["calibrated"]:
+        print("  ! Scores are not calibrated LLRs. EER/minDCF measure separation only;")
+        print("    actDCF at the Bayes threshold is the number that reflects deployment.")
+        print("    See docs/04-metrics-and-honest-evaluation.md section 1.2.")
+    if m1["CLLR"] > 1.0:
+        print(f"  ! CLLR {m1['CLLR']:.4f} > 1.0 -- per docs/04 section 1.3 this is")
+        print("    \"misleading calibration (confident false information)\".")
 
     # -------------------------------------------------------------------------
     # Benchmark 2: CPU Streaming Latency SLA
@@ -120,6 +192,7 @@ def run_all_benchmarks() -> dict:
     }
 
     m3 = {}
+    n_codec_pass = 0
     print(f"  {'Codec / Channel Condition':<26} | {'EER':<8} | {'minDCF':<8} | Status")
     print("  " + "-" * 26 + " | " + "-" * 8 + " | " + "-" * 8 + " | ------")
     for cname, fn in codecs.items():
@@ -130,8 +203,14 @@ def run_all_benchmarks() -> dict:
             b_list.append(pipe.analyse(fn(b), sr).cm_score)
             s_list.append(pipe.analyse(fn(s), sr).cm_score)
         res = evaluate_system(np.array(b_list), np.array(s_list))
+        # minDCF >= 1.0 means the detector is no better than uninformative under
+        # this channel condition (docs/04 section 1.1). That is a FAIL.
+        passed = bool(res["minDCF"] < MINDCF_UNINFORMATIVE)
+        n_codec_pass += int(passed)
+        res["passed"] = passed
         m3[cname] = res
-        print(f"  {cname:<26} | {res['EER']:>6.2f}% | {res['minDCF']:>8.4f} | PASS")
+        print(f"  {cname:<26} | {res['EER']:>6.2f}% | {res['minDCF']:>8.4f} | "
+              f"{'PASS' if passed else 'FAIL'}")
 
     # -------------------------------------------------------------------------
     # Benchmark 4: Standardized Demo Suite
@@ -140,12 +219,15 @@ def run_all_benchmarks() -> dict:
     demo_dir = REPO_ROOT / "data" / "demo"
     gt_file = demo_dir / "ground_truth.json"
     demo_results = {}
+    n_demo_pass = 0
+    n_demo_total = 0
     if gt_file.is_file():
         gt = json.loads(gt_file.read_text(encoding="utf-8"))
         import wave
 
-        print(f"  {'File':<26} | {'Risk':<6} | {'Tier':<10} | {'Expected':<22} | Verdict")
-        print("  " + "-" * 26 + " | " + "-" * 6 + " | " + "-" * 10 + " | " + "-" * 22 + " | -------")
+        print(f"  {'File':<26} | {'Risk':<6} | {'Tier':<10} | {'Expected':<24} | {'Required':<10} | Verdict")
+        print("  " + "-" * 26 + " | " + "-" * 6 + " | " + "-" * 10 + " | " + "-" * 24
+              + " | " + "-" * 10 + " | -------")
         for fname, meta in gt.get("files", {}).items():
             fpath = demo_dir / fname
             if not fpath.is_file():
@@ -167,22 +249,75 @@ def run_all_benchmarks() -> dict:
             tier = last.tier if last else "UNKNOWN"
             expected = meta.get("expected_verdict", "UNKNOWN")
 
+            required = EXPECTED_TIER.get(expected, "?")
+            passed = verdict_matches(tier, expected)
+            n_demo_total += 1
+            n_demo_pass += int(passed)
+
             demo_results[fname] = {
                 "risk": round(risk, 1),
                 "tier": tier,
                 "expected": expected,
+                "required_tier": required,
                 "windows": len(dsess.history),
+                "passed": passed,
             }
-            print(f"  {fname:<26} | {risk:>6.1f} | {tier:<10} | {expected:<22} | PASS")
+            print(f"  {fname:<26} | {risk:>6.1f} | {tier:<10} | {expected:<24} | "
+                  f"{required:<10} | {'PASS' if passed else 'FAIL'}")
 
     total_elapsed = time.perf_counter() - t_global_start
+
+    # -------------------------------------------------------------------------
+    # Honest summary. A benchmark whose only possible output is "SUCCESS" is
+    # decoration, not a test -- so count the failures and say so.
+    # -------------------------------------------------------------------------
+    checks = []
+    if m1["calibrated"]:
+        checks.append(("ASVspoof 5 score calibration", True))
+    else:
+        msg = (
+            f"ASVspoof 5 score calibration (actDCF@tau_Bayes={m1['actDCF_bayes']:.2f} "
+            f"vs minDCF={m1['minDCF']:.2f})"
+        )
+        checks.append((msg, False))
+    checks.append((f"Latency SLA p95 < 200 ms (p95={p95:.2f})", p95 < 200.0))
+    msg = (
+        f"Telephony robustness ({n_codec_pass}/{len(m3)} conditions "
+        f"below uninformative minDCF)"
+    )
+    checks.append((msg, n_codec_pass == len(m3)))
+    if n_demo_total:
+        msg = (
+            f"Demo ground-truth verification ({n_demo_pass}/{n_demo_total} files "
+            f"reach their required tier)"
+        )
+        checks.append((msg, n_demo_pass == n_demo_total))
+    else:
+        checks.append(("Demo ground-truth verification (no files scored)", False))
+
+    all_passed = all(ok for _, ok in checks)
+
     print("\n" + "=" * 72)
-    print(f"  ALL BENCHMARKS COMPLETED SUCCESSFULLY IN {total_elapsed:.2f} SECONDS")
+    print("  CHECK SUMMARY")
+    print("=" * 72)
+    for name, ok in checks:
+        print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
+    print("=" * 72)
+    if all_passed:
+        print(f"  ALL BENCHMARKS PASSED IN {total_elapsed:.2f} SECONDS")
+    else:
+        failures = sum(1 for _, ok in checks if not ok)
+        print(f"  {failures} OF {len(checks)} CHECKS FAILED "
+              f"({total_elapsed:.2f}s) -- see above for detail.")
+        print("  These failures are the real result. Do not silence them without")
+        print("  fixing the underlying cause.")
     print("=" * 72)
 
     report = {
         "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_benchmark_duration_sec": round(total_elapsed, 2),
+        "all_passed": all_passed,
+        "checks": [{"check": name, "passed": ok} for name, ok in checks],
         "asvspoof5": m1,
         "latency_sla": {
             "p50_ms": p50,
@@ -193,10 +328,14 @@ def run_all_benchmarks() -> dict:
             "compliant": p95 < 200.0,
         },
         "telephony_robustness": {
-            k: {"EER_pct": v["EER"], "minDCF": v["minDCF"]}
+            k: {"EER_pct": v["EER"], "minDCF": v["minDCF"], "passed": v.get("passed")}
             for k, v in m3.items()
         },
         "demo_verification": demo_results,
+        "demo_verification_summary": {
+            "passed": n_demo_pass,
+            "total": n_demo_total,
+        },
     }
 
     out_json = REPO_ROOT / "benchmarks" / "latest_benchmark_report.json"
@@ -206,4 +345,5 @@ def run_all_benchmarks() -> dict:
 
 
 if __name__ == "__main__":
-    run_all_benchmarks()
+    # Non-zero exit so CI cannot treat a failing benchmark as a green build.
+    sys.exit(0 if run_all_benchmarks()["all_passed"] else 1)

@@ -1,51 +1,81 @@
 {
-  "timestamp_iso": "2026-09-07T19:31:20Z",
-  "total_benchmark_duration_sec": 9.95,
+  "timestamp_iso": "2026-09-07T23:19:04Z",
+  "total_benchmark_duration_sec": 17.39,
+  "all_passed": false,
+  "checks": [
+    {
+      "check": "ASVspoof 5 score calibration (actDCF@tau_Bayes=19.00 vs minDCF=0.00)",
+      "passed": false
+    },
+    {
+      "check": "Latency SLA p95 < 200 ms (p95=24.00)",
+      "passed": true
+    },
+    {
+      "check": "Telephony robustness (4/6 conditions below uninformative minDCF)",
+      "passed": false
+    },
+    {
+      "check": "Demo ground-truth verification (1/4 files reach their required tier)",
+      "passed": false
+    }
+  ],
   "asvspoof5": {
     "min_dcf": 0.0,
-    "act_dcf": 18.999999999999996,
+    "act_dcf": 0.0,
+    "act_dcf_bayes": 18.999999999999996,
     "cllr": 1.8312256289543065,
     "eer": 0.0,
     "minDCF": 0.0,
-    "actDCF": 18.999999999999996,
+    "actDCF": 0.0,
+    "actDCF_bayes": 18.999999999999996,
     "CLLR": 1.8312256289543065,
     "EER": 0.0,
     "threshold_eer": 2.935396253733079,
     "threshold_mindcf": 2.935396253733079,
-    "threshold_actdcf": 0.5
+    "threshold_actdcf": 2.935396253733079,
+    "threshold_bayes": -0.6444820085786643,
+    "threshold_source": "eer_operating_point",
+    "calibrated": false
   },
   "latency_sla": {
-    "p50_ms": 9.510472998954356,
-    "p95_ms": 9.931287298059033,
-    "p99_ms": 10.393009749859626,
-    "mean_ms": 9.515012090050732,
+    "p50_ms": 21.381400001700968,
+    "p95_ms": 24.00462499645073,
+    "p99_ms": 25.113043995370386,
+    "mean_ms": 19.320537999847147,
     "sla_threshold_p95_ms": 200.0,
     "compliant": true
   },
   "telephony_robustness": {
     "Clean (Broadband)": {
       "EER_pct": 0.0,
-      "minDCF": 0.0
+      "minDCF": 0.0,
+      "passed": true
     },
     "G.711 A-law": {
       "EER_pct": 0.0,
-      "minDCF": 0.0
+      "minDCF": 0.0,
+      "passed": true
     },
     "G.711 mu-law": {
       "EER_pct": 0.0,
-      "minDCF": 0.0
+      "minDCF": 0.0,
+      "passed": true
     },
     "AMR-WB (VoLTE)": {
       "EER_pct": 0.5,
-      "minDCF": 1.0
+      "minDCF": 1.0,
+      "passed": false
     },
     "GSM-EFR (2G)": {
       "EER_pct": 1.0,
-      "minDCF": 1.0
+      "minDCF": 1.0,
+      "passed": false
     },
     "Noise (15dB SNR)": {
       "EER_pct": 0.0,
-      "minDCF": 0.0
+      "minDCF": 0.0,
+      "passed": true
     }
   },
   "demo_verification": {
@@ -53,25 +83,37 @@
       "risk": 46.3,
       "tier": "CHALLENGE",
       "expected": "AUTHENTIC_TARGET",
-      "windows": 6
+      "required_tier": "ALLOW",
+      "windows": 6,
+      "passed": false
     },
     "demo_02_full_clone.wav": {
       "risk": 46.2,
       "tier": "CHALLENGE",
       "expected": "SYNTHETIC_VOICE_CLONE",
-      "windows": 6
+      "required_tier": "BLOCK",
+      "windows": 6,
+      "passed": false
     },
     "demo_03_partial_splice.wav": {
       "risk": 46.2,
       "tier": "CHALLENGE",
       "expected": "SUSPICIOUS_SPLICED_AUDIO",
-      "windows": 6
+      "required_tier": "CHALLENGE",
+      "windows": 6,
+      "passed": true
     },
     "demo_04_impostor.wav": {
       "risk": 48.0,
       "tier": "CHALLENGE",
       "expected": "IMPOSTOR_SPEAKER",
-      "windows": 6
+      "required_tier": "BLOCK",
+      "windows": 6,
+      "passed": false
     }
+  },
+  "demo_verification_summary": {
+    "passed": 1,
+    "total": 4
   }
 }

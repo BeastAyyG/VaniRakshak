@@ -21,13 +21,19 @@ from pathlib import Path
 
 import numpy as np
 
-# Add repository root and backend to path
+# Add repository root and backend to path.
+#
+# ORDER MATTERS -- see the identical comment in benchmarks/run_benchmarks.py.
+# Two importable packages are named `benchmarks`; whichever parent lands at
+# sys.path[0] wins. Inserting BACKEND_DIR last made `benchmarks` resolve to the
+# dead duplicate vanirakshak-backend/benchmarks/, silently ignoring every edit
+# to the live benchmarks/compute_mindcf.py. BACKEND_DIR first, REPO_ROOT second.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 BACKEND_DIR = REPO_ROOT / "vanirakshak-backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.compute_mindcf import evaluate_system, print_metrics
 from vanirakshak.data.augment import (

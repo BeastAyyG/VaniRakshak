@@ -75,6 +75,15 @@ VaniRakshak/
 
 ## 4. Backend & ML Guidelines (`vanirakshak-backend/`)
 
+* **Environment Setup (do this first):**
+  ```bash
+  make setup      # pip install -r requirements-dev.txt (CPU torch wheels)
+  make test       # pytest -v  -> expect 21 passed, 0 skipped
+  ```
+  Without `make setup`, 9 of the 21 tests silently skip. Those 9 are the *only*
+  coverage of the heavy `backend/` tree, so a green board of "12 passed" is
+  misleading. The missing modules are **torchaudio** and **librosa** — an older
+  skip message blamed torch/soundfile, which was wrong.
 * **Python Standard:** Python 3.10+ with strict type hinting (`from __future__ import annotations`).
 * **Deterministic Fallbacks ("Honest Stubs"):**
   * When real heavy checkpoints (WavLM, ECAPA-TDNN) are not loaded or GPU is absent, models must gracefully fall back to the deterministic synthetic stubs in `vanirakshak/detectors/`.
@@ -103,6 +112,12 @@ VaniRakshak/
 Before opening a pull request or pushing your branch:
 - [ ] `git status` shows no untracked binaries, weights (`.pt`), or agent session files.
 - [ ] Frontend builds without TypeScript or ESLint errors (`npm run build` in `frontend/`).
-- [ ] Backend tests pass (`pytest vanirakshak-backend/tests/`).
+- [ ] Backend tests pass. Run the **whole** suite — `pytest` (21 tests). Do not
+      run only `pytest vanirakshak-backend/tests/`: that subset skips the heavy
+      `backend/` tree entirely, so it reports "12 passed" while 9 tests never run.
 - [ ] `docs/PROTOCOL.md` reflects any newly introduced payload fields or parameter changes.
+- [ ] `python benchmarks/run_benchmarks.py` exits 0. It exits **non-zero on
+      failure by design** — investigate the failure rather than silencing it.
+      Note the demo ground-truth check compares the emitted tier against a
+      required tier; see `EXPECTED_TIER` in `benchmarks/run_benchmarks.py`.
 - [ ] Commits follow Conventional Commits formatting.

@@ -182,9 +182,12 @@ def test_mindcf_harness_runs() -> None:
     # import the harness
     import importlib.util
     from pathlib import Path
-    harness_path = Path(__file__).resolve().parent.parent / "benchmarks" / "compute_mindcf.py"
+    # LIVE harness first (repo root). The vanirakshak-backend/benchmarks/ copy
+    # is a dead duplicate; preferring it silently pinned this test to stale
+    # metric code that predates the calibration fields.
+    harness_path = Path(__file__).resolve().parents[2] / "benchmarks" / "compute_mindcf.py"
     if not harness_path.is_file():
-        harness_path = Path(__file__).resolve().parents[2] / "benchmarks" / "compute_mindcf.py"
+        harness_path = Path(__file__).resolve().parent.parent / "benchmarks" / "compute_mindcf.py"
     spec = importlib.util.spec_from_file_location("compute_mindcf", harness_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load minDCF harness from {harness_path}")

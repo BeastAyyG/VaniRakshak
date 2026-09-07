@@ -36,9 +36,11 @@ from vanirakshak.detectors.pipeline import DetectionPipeline  # noqa: E402
 
 
 def _load_metric_harness():
+    # LIVE harness first. The vanirakshak-backend/benchmarks/ copy is a dead
+    # duplicate; preferring it silently pinned this eval to stale metric code.
     candidates = [
-        _PKG_PARENT / "benchmarks" / "compute_mindcf.py",
         _REPO / "benchmarks" / "compute_mindcf.py",
+        _PKG_PARENT / "benchmarks" / "compute_mindcf.py",
     ]
     for c in candidates:
         if c.exists():

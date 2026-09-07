@@ -1,4 +1,9 @@
-.PHONY: dev backend lint test eval bench benchmarks clean
+.PHONY: setup dev backend lint test eval bench benchmarks clean
+
+# Installs everything needed to run the FULL suite (21 tests). Without this,
+# `make test` skips 9 of 21 -- see requirements-dev.txt.
+setup:
+	pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
 dev:
 	npm run dev --prefix frontend

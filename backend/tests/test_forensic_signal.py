@@ -17,6 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+_MISSING_DEP: str = "unknown"
+
 try:
     import numpy as np
     import soundfile as sf
@@ -28,11 +30,24 @@ try:
     from backend.app.engine.schemas import WindowAnalysisResult
 
     HAS_DEPS = True
-except ImportError:
+except ImportError as _exc:  # pragma: no cover - depends on the environment
+    # Report the module that ACTUALLY failed to import.
+    #
+    # The previous message hardcoded "torch, soundfile", which was wrong: those
+    # two are importable here, but `backend.app.core.audio` needs torchaudio and
+    # `backend.app.core.forensic_signal` needs librosa. Installing what the old
+    # message asked for left all 9 tests in this file skipped, with no hint why.
+    #
+    # These are the ONLY tests covering the heavy backend/ tree, so a misleading
+    # skip reason silently hides 43% of the suite.
+    _MISSING_DEP = _exc.name or str(_exc)
     HAS_DEPS = False
 
 
-@unittest.skipUnless(HAS_DEPS, "Heavy deep learning dependencies (torch, soundfile) not installed in current environment")
+@unittest.skipUnless(
+    HAS_DEPS,
+    f"missing dependency '{_MISSING_DEP}' - install with: pip install -r requirements-dev.txt",
+)
 class TestForensicSignalProcessing(unittest.TestCase):
     """Test suite for ForensicSignalProcessor and AudioProcessor."""
 

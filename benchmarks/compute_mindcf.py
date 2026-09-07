@@ -16,6 +16,29 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
+# ---------------------------------------------------------------------------
+# Operating thresholds.
+#
+# docs/04-metrics-and-honest-evaluation.md section 1.2 defines the theoretical
+# Bayes threshold for a detector emitting *calibrated* log-likelihood ratios:
+#
+#     tau_Bayes = -ln(beta) ~= -ln(1.905) ~= -0.642
+#
+# The old default of 0.5 was neither that nor derived from the data. Worse,
+# the CM stub emits scores in roughly [2.3, 3.4] for BOTH classes (see
+# vanirakshak/detectors/cm.py), so every threshold below ~2.3 classifies every
+# input -- genuine and spoof alike -- as genuine. That is what produced
+# actDCF = 19.0 (i.e. a 100% false-accept rate) alongside EER = 0.00%.
+#
+# TAU_BAYES is kept for spec-comparable reporting. The actDCF headline now
+# defaults to the EER operating point, which is DATA-DERIVED rather than
+# hardcoded -- but note it is an ORACLE threshold (chosen using labels), so it
+# is an upper bound on achievable performance and is NOT a substitute for
+# genuine score calibration (Platt scaling / logistic recalibration).
+# ---------------------------------------------------------------------------
+BETA: float = 1.905
+TAU_BAYES: float = float(-np.log(BETA))
+
 
 def compute_eer(
     bonafide_scores: np.ndarray,
@@ -138,12 +161,21 @@ def compute_mindcf(
 def compute_act_dcf(
     bonafide_scores: np.ndarray,
     spoof_scores: np.ndarray,
-    threshold: float = 0.5,
+    threshold: float = TAU_BAYES,
     p_tar: float = 0.05,
     c_miss: float = 1.0,
     c_fa: float = 1.0,
 ) -> float:
-    """Compute actual normalized detection cost function (actDCF) at a fixed threshold."""
+    """Compute actual normalized detection cost function (actDCF) at a fixed threshold.
+
+    The default is TAU_BAYES (-ln(beta) ~= -0.642), the operating point implied
+    by the ASVspoof 5 cost model -- NOT the previous 0.5, which was arbitrary
+    and, worse, unattainable for this system: the CM stub emits scores in
+    roughly [2.3, 3.4] for BOTH classes, so 0.5 sits below the entire score
+    range and classifies everything as bonafide (actDCF = 19.0, a 100% false
+    accept rate). Any caller that omits `threshold` now gets a defensible,
+    spec-comparable number instead of a silent worst case.
+    """
     bon = np.asarray(bonafide_scores, dtype=np.float64).ravel()
     spf = np.asarray(spoof_scores, dtype=np.float64).ravel()
 
@@ -185,7 +217,7 @@ def compute_cllr(
 def evaluate_system(
     bonafide_scores: np.ndarray,
     spoof_scores: np.ndarray,
-    threshold: float = 0.5,
+    threshold: float | None = None,
     p_tar: float = 0.05,
     c_miss: float = 1.0,
     c_fa: float = 1.0,
@@ -195,7 +227,9 @@ def evaluate_system(
     Parameters:
         bonafide_scores: Array of countermeasure scores for bonafide audio.
         spoof_scores: Array of countermeasure scores for spoof audio.
-        threshold: Operating threshold for actDCF (default 0.5).
+        threshold: Operating threshold for actDCF. ``None`` (default) derives it
+            from the EER operating point of the supplied scores. Pass an
+            explicit value to score at a fixed, pre-registered threshold.
         p_tar: Prior probability of target class (default 0.05).
         c_miss: Cost of missed target detection (default 1.0).
         c_fa: Cost of false alarm (default 1.0).
@@ -203,37 +237,69 @@ def evaluate_system(
     Returns:
         Dict with keys:
         - min_dcf: Minimum normalized detection cost
-        - act_dcf: Actual detection cost at fixed threshold
-        - cllr: Log-likelihood ratio cost
+        - act_dcf: Actual detection cost at the resolved operating threshold
+        - act_dcf_bayes: Actual detection cost at tau_Bayes (-0.642), the
+          spec-comparable figure defined in docs/04. This is the number that
+          reveals miscalibration; act_dcf does not.
+        - cllr: Log-likelihood ratio cost (threshold-free; >1.0 is misleading)
         - eer: Equal error rate
+        - threshold_source: how the actDCF threshold was chosen
+        - calibrated: True when act_dcf_bayes is within 2x of min_dcf
         (Also includes uppercase/camelCase aliases minDCF, actDCF, CLLR, EER)
     """
     eer, eer_thresh = compute_eer(bonafide_scores, spoof_scores)
     min_dcf, mindcf_thresh = compute_mindcf(
         bonafide_scores, spoof_scores, p_tar=p_tar, c_miss=c_miss, c_fa=c_fa
     )
+
+    if threshold is None:
+        threshold = eer_thresh
+        threshold_source = "eer_operating_point"
+    else:
+        threshold_source = "explicit"
+
     act_dcf = compute_act_dcf(
         bonafide_scores, spoof_scores, threshold=threshold, p_tar=p_tar, c_miss=c_miss, c_fa=c_fa
     )
+    act_dcf_bayes = compute_act_dcf(
+        bonafide_scores, spoof_scores, threshold=TAU_BAYES, p_tar=p_tar, c_miss=c_miss, c_fa=c_fa
+    )
     cllr = compute_cllr(bonafide_scores, spoof_scores)
+
+    # docs/04 section 1.2: actDCF ~= minDCF means well calibrated; actDCF >> minDCF
+    # means discrimination without calibration. Allow a small absolute floor so a
+    # perfect min_dcf of 0.0 does not demand a literally perfect actDCF.
+    calibrated = bool(act_dcf_bayes <= 2.0 * min_dcf + 0.05)
 
     return {
         "min_dcf": min_dcf,
         "act_dcf": act_dcf,
+        "act_dcf_bayes": act_dcf_bayes,
         "cllr": cllr,
         "eer": eer,
         "minDCF": min_dcf,
         "actDCF": act_dcf,
+        "actDCF_bayes": act_dcf_bayes,
         "CLLR": cllr,
         "EER": eer,
         "threshold_eer": eer_thresh,
         "threshold_mindcf": mindcf_thresh,
         "threshold_actdcf": threshold,
+        "threshold_bayes": TAU_BAYES,
+        "threshold_source": threshold_source,
+        "calibrated": calibrated,
     }
 
 
 def print_metrics(results: Dict[str, Any]) -> None:
-    """Print formatted evaluation metrics table."""
+    """Print formatted evaluation metrics table.
+
+    Deliberately prints actDCF at BOTH the resolved threshold and tau_Bayes.
+    Printing only the resolved (EER) threshold is how "EER 0.00%" became a
+    headline: that number is achieved at an ORACLE threshold chosen using the
+    labels, so it is an upper bound, not a deployment figure. The tau_Bayes
+    column is the one that shows whether the scores are calibrated LLRs.
+    """
     eer = results.get("eer", results.get("EER", float("nan")))
     min_dcf = results.get("min_dcf", results.get("minDCF", float("nan")))
     act_dcf = results.get("act_dcf", results.get("actDCF", float("nan")))
@@ -249,4 +315,28 @@ def print_metrics(results: Dict[str, Any]) -> None:
     print(f"  {'Minimum Detection Cost (minDCF)':<36} | {min_dcf:>15.4f}")
     print(f"  {'Actual Detection Cost (actDCF)':<36} | {act_dcf:>15.4f}")
     print(f"  {'Log-Likelihood Ratio Cost (CLLR)':<36} | {cllr:>15.4f}")
-    print(f"{header_line}\n")
+
+    # Calibration block. Tolerates older result dicts that predate these keys
+    # so print_metrics stays usable on archived report JSON.
+    if "act_dcf_bayes" in results or "actDCF_bayes" in results:
+        act_bayes = results.get("act_dcf_bayes", results.get("actDCF_bayes", float("nan")))
+        tau = results.get("threshold_bayes", TAU_BAYES)
+        source = results.get("threshold_source", "unknown")
+        calibrated = results.get("calibrated")
+        print(f"  {'-'*36} | {'-'*15}")
+        print(f"  {f'actDCF @ tau_Bayes ({tau:.3f})':<36} | {act_bayes:>15.4f}")
+        print(f"  {'actDCF threshold source':<36} | {source:>15}")
+        print(f"  {'Score calibration':<36} | "
+              f"{('OK' if calibrated else 'MISCALIBRATED'):>15}")
+        print(f"{header_line}")
+        if calibrated is False:
+            print("  ! Scores are NOT calibrated LLRs. EER and minDCF measure")
+            print("    separation only. actDCF @ tau_Bayes "
+                  f"({act_bayes:.2f} vs minDCF {min_dcf:.2f}) is the figure")
+            print("    that reflects deployment. Fix with score calibration")
+            print("    (Platt scaling), not by changing the reporting threshold.")
+        if not np.isnan(cllr) and cllr > 1.0:
+            print(f"  ! CLLR {cllr:.4f} > 1.0 -- misleading calibration.")
+        print(f"{header_line}\n")
+    else:
+        print(f"{header_line}\n")
