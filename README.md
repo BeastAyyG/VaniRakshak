@@ -41,23 +41,92 @@ Whether it's a podcast, a customer service call, a debate, or a news transcript,
 ## 🚀 How It Works
 
 ```
-User question / transcript
+Call Audio (Mono, 16 kHz)
         │
         ▼
-┌────────────────────────────────────────────────┐
-│               VaniRakshak Pipeline             │
-│                                                │
-│  1. 🔍 Claim Detection   — find factual claims │
-│  2. 🧠 Claim Parsing     — classify & enrich   │
-│  3. 🔎 Query Building    — smart search query  │
-│  4. 🌐 Tavily Search     — live web evidence   │
-│  5. 📊 Evidence Filter   — relevance gating    │
-│  6. 🤖 Gemini Verify     — AI verdict          │
-└────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                   VaniRakshak Speech & Scam Pipeline                   │
+│                                                                        │
+│  1. 🎧 Audio Preprocessing — decode, stereo→mono, resample to 16 kHz   │
+│  2. ⏱️ 4-Second Chunking    — windowing with temporal timestamp buffer │
+│  3. 🇮🇳 IndicConformer ASR   — AI4Bharat 600M multilingual Hindi STT   │
+│  4. 🔤 Hinglish Normalizer — preserve KYC, OTP, SBI, bank terminology  │
+│  5. 🚨 Scam Threat Matrix  — Gemini 2.5 Flash urgency & fraud scoring  │
+│  6. 🌐 Crawl4AI Grounding  — Playwright headless Chromium live search  │
+└────────────────────────────────────────────────────────────────────────┘
         │
         ▼
-   SUPPORTED ✅ | CONTRADICTED ❌ | UNVERIFIABLE ⚠️
+   SUPPORTED ✅ | CONTRADICTED ❌ | CRITICAL SCAM 🚨
 ```
+
+---
+
+## 🎙️ AI4Bharat IndicConformer Speech-to-Text (ASR) Subsystem
+
+VaniRakshak features a dedicated **Hindi and Hinglish Speech-to-Text (ASR) subsystem** powered by **AI4Bharat IndicConformer** (`ai4bharat/indic-conformer-600m-multilingual`), built by IIT Madras for superior recognition across 22+ Indian languages.
+
+### 📐 Architecture & Features
+- **Primary Canonical Output**: Native Devanagari Hindi text (`hindi_text`).
+- **Secondary Normalized Representation**: Colloquial Hinglish (`hinglish_text`) generated via a lightweight, deterministic transliteration layer.
+- **Strict Fraud Terminology Preservation**: Critical terms like `KYC`, `OTP`, `UPI`, `PIN`, `SBI`, `RBI`, `bank account`, `suspend`, `expire`, `headquarters`, `customer care` are preserved in English rather than mangled into unnatural Hindi.
+- **4-Second Chunk Windowing**: Real-time audio streaming buffer with precise millisecond timestamps.
+- **Singleton Lifecycle**: Loaded once during application startup and kept warm in memory (never reloaded per 4-second chunk).
+- **Hardware Acceleration**: Automatically detects CUDA GPUs (`Using device: cuda`) with graceful CPU fallback (`Using device: cpu`).
+- **Zero-Disruption Fallback**: The existing Whisper engine is preserved behind the unified `ASRProvider` interface (`ASR_PROVIDER=indicconformer` or `whisper`).
+
+### 📦 Installation
+```bash
+# Install core ASR dependencies:
+pip install -r requirements.txt
+```
+
+### 🚀 Running the Standalone ASR Test
+```bash
+# Test Native Hindi audio:
+python scripts/test_indicconformer.py test_audio/hindi_sample.wav
+
+# Test Hinglish audio:
+python scripts/test_indicconformer.py test_audio/hinglish_sample.wav
+
+# Test real-world Scam Call phrasing (multiple 4s chunks):
+python scripts/test_indicconformer.py test_audio/scam_sample.wav
+```
+
+### 🧪 Running Automated Unit Tests
+```bash
+pytest tests/test_asr.py -v
+```
+
+### ⚙️ Configuration & Environment Variables
+Configure in your `.env` file:
+```env
+# ASR Provider Configuration
+ASR_PROVIDER=indicconformer                      # 'indicconformer' or 'whisper'
+ASR_MODEL=ai4bharat/indic-conformer-600m-multilingual
+ASR_LANGUAGE=hi
+ASR_SAMPLE_RATE=16000
+ASR_DEVICE=auto                                  # 'auto', 'cuda', or 'cpu'
+ASR_CHUNK_SECONDS=4.0
+ASR_FALLBACK_TO_WHISPER=true                     # Fallback to faster-whisper if gated access not configured
+
+# Hugging Face Access Token (for IndicConformer weights download)
+HF_TOKEN=hf_your_token_here
+```
+
+### 🛠️ Troubleshooting Guide
+
+1. **Hugging Face Gated Repo (401 Error)**:
+   - `ai4bharat/indic-conformer-600m-multilingual` is a gated repository.
+   - **Resolution**: Visit [Hugging Face IndicConformer](https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual), accept user terms, and add `HF_TOKEN=your_token` in `.env` or run `huggingface-cli login`.
+   - If not authenticated, the system automatically falls back to `ExistingWhisperASR` so transcription continues seamlessly.
+
+2. **CUDA Out of Memory (OOM)**:
+   - IndicConformer 600M requires ~1.5 GB of GPU VRAM.
+   - **Resolution**: Set `ASR_DEVICE=cpu` in `.env` to run on system RAM.
+
+3. **Audio Preprocessing Errors**:
+   - Audio must be valid audio (`.wav`, `.mp3`, `.m4a`, `.flac`) and at least 0.1 seconds in duration.
+   - VaniRakshak automatically downmixes stereo to mono and resamples any sample rate (8kHz, 44.1kHz, etc.) to 16,000 Hz.
 
 ---
 

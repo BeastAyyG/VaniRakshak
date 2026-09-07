@@ -14,8 +14,12 @@ venv/
 .venv/
 env/
 
-# Environment variables
+# Environment variables & secrets
 .env
+.env.*
+*.env
+token.txt
+hf_token.txt
 
 # IDE
 .vscode/
