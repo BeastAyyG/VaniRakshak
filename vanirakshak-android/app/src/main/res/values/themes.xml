@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VaniRakshak on Pinterest design system: white canvas, flat surfaces,
+         single red accent for primary CTAs, no chrome shadows. -->
+    <style name="Theme.VaniRakshak" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/pin_red</item>
+        <item name="colorPrimaryVariant">@color/pin_red_pressed</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ink</item>
+        <item name="colorSecondaryVariant">@color/ink_pressed</item>
+        <item name="colorAccent">@color/pin_red</item>
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:statusBarColor">@color/canvas</item>
+        <item name="android:navigationBarColor">@color/canvas</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="fontFamily">sans-serif</item>
+    </style>
+</resources>

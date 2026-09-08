@@ -1,0 +1,29 @@
+# Built outputs
+build/
+.gradle/
+
+# Local build artifacts (never commit — regenerate with ./gradlew)
+*.apk
+*.aab
+
+# Local config (do NOT commit — contains SDK path)
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kotlin daemon / IDE
+.kotlin/
+.externalNativeBuild/
+.cxx/
+
+# Stale snapshot archives of this folder (duplicate source + may embed local.properties)
+Payment_Source_Code.zip
+*.zip

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pin-overlay-pill: white pill anchored on cream card imagery -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/canvas" />
+    <corners android:radius="999dp" />
+</shape>

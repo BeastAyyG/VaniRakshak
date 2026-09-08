@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- feature-card-soft variant with semantic success tint: pale green wash, 16dp radius -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/success_pale" />
+    <corners android:radius="16dp" />
+</shape>

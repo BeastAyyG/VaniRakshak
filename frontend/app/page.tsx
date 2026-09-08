@@ -24,6 +24,50 @@ const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000/ws
 // claims an identity the server has no vector for.
 const CLAIMED_IDENTITY_FALLBACK = "narendra_modi";
 
+// --- CHALLENGE interlock helpers (mirror vanirakshak/challenge/engine.py) --
+type LocalChallenge = {
+  phrase: string;
+  expected_digits: string[];
+  expected_full: string;
+  instructions: string;
+  issued_at_ms: number;
+  seed: number;
+};
+
+function issueLocalChallenge(): LocalChallenge {
+  const words = ["aam", "nadi", "kela", "suraj", "chai", "tara", "mango", "river", "blue", "seven", "table", "green", "orange", "cloud"];
+  const digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+  const d1 = pick(digits);
+  const d2 = pick(digits);
+  const w1 = pick(words);
+  const w2 = pick(words);
+  return {
+    phrase: `${w1}, ${d1}, ${w2}, ${d2}.`,
+    expected_digits: [d1, d2],
+    expected_full: `${d1} ${d2}`,
+    instructions: "Now repeat ONLY the digits, in order, quickly.",
+    issued_at_ms: Date.now(),
+    seed: Math.floor(Math.random() * 1_000_000),
+  };
+}
+
+// Mirrors ChallengeEngine.grade(): digit-order match + human latency window.
+function gradeChallengeLocally(
+  ch: { expected_digits: string[] },
+  responseText: string,
+  latencyMs: number,
+): { passed: boolean; reason: string } {
+  const responseDigits = (responseText.match(/\d/g) || []) as string[];
+  const correctOrder =
+    responseDigits.slice(0, ch.expected_digits.length).join("") ===
+    ch.expected_digits.join("");
+  const latencyOk = latencyMs >= 400 && latencyMs <= 4000;
+  if (!correctOrder) return { passed: false, reason: "digit_order_mismatch" };
+  if (!latencyOk) return { passed: false, reason: "latency_suspicious" };
+  return { passed: true, reason: "ok" };
+}
+
 type EventLog = {
   id: number;
   time: string;
@@ -53,6 +97,9 @@ export default function Home() {
   const [report, setReport] = useState<ForensicReportData | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [showAllEvents, setShowAllEvents] = useState(false);
+  // SHA-256 append-only audit chain integrity (flowchart node Q).
+  // null = not yet verified (engine offline / no audit events).
+  const [chainValid, setChainValid] = useState<boolean | null>(null);
 
   // Live microphone streaming state
   const [micLive, setMicLive] = useState(false);
@@ -65,6 +112,23 @@ export default function Home() {
   const manualCloseRef = useRef<boolean>(false);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // CHALLENGE interlock state (mirrors backend CallSession + ChallengeEngine).
+  // The session_id from the WS handshake is required to grade the response
+  // server-side via POST /api/v1/sessions/{sid}/challenge.
+  const sessionIdRef = useRef<string>("");
+  const activeChallengeRef = useRef<LocalChallenge | null>(null);
+  const challengeIssuedAtRef = useRef<number>(0);
+  const challengePendingRef = useRef<boolean>(false);
+  // Where the active challenge came from. Only a server-issued phrase can be
+  // graded by the backend (it grades against its OWN challenge), so a locally
+  // generated drill phrase must be graded locally.
+  const challengeSourceRef = useRef<"server" | "local">("local");
+  const [activeChallenge, setActiveChallenge] = useState<LocalChallenge | null>(null);
+  const [challengeStatus, setChallengeStatus] = useState<"none" | "awaiting" | "passed" | "failed">("none");
+  const [challengeResponseText, setChallengeResponseText] = useState<string>("");
+  // Latest server tier from the live stream (ALLOW / CHALLENGE / BLOCK).
+  const [currentTier, setCurrentTier] = useState<string>("ALLOW");
 
   const addEvent = useCallback((message: string, severity: EventLog["severity"] = "info", hash?: string) => {
     setEvents((current) => [
@@ -97,6 +161,20 @@ export default function Home() {
             addEvent(`No enrolled anchor: ${data.anchor.error}`, "warning");
           }
           addEvent(`Forensic engine online: ${data.models?.wavlm_model || "WavLM Base+"}`, "info");
+
+          // Verify the SHA-256 append-only audit chain (flowchart node Q).
+          try {
+            const ar = await fetch(`${BACKEND_URL}/api/v1/audit?n=1`);
+            if (ar.ok) {
+              const ad = await ar.json();
+              setChainValid(Boolean(ad.chain_valid));
+              if (ad.chain_valid === false) {
+                addEvent("Audit hash chain integrity check FAILED", "critical");
+              }
+            }
+          } catch {
+            setChainValid(null);
+          }
         }
       } catch {
         setBackendOnline(false);
@@ -244,6 +322,7 @@ export default function Home() {
 
           // Protocol requirement: first frame MUST be a JSON text handshake
           const sessionId = `mic-${Date.now()}`;
+          sessionIdRef.current = sessionId;
           ws.send(
             JSON.stringify({
               session_id: sessionId,
@@ -347,8 +426,30 @@ export default function Home() {
             const interlockActive: boolean = Boolean(
               telemetry.interlock_active || tier === "BLOCK" || risk >= 70
             );
+            // Track the latest server tier so the interlock can reflect it.
+            setCurrentTier(tier);
 
             if (telemetry.trigger_challenge && telemetry.challenge?.phrase) {
+              // Capture the live challenge into UI state so the operator can
+              // surface the phrase, transcribe the caller's answer, and grade it.
+              if (!challengePendingRef.current) {
+                const ch: LocalChallenge = {
+                  phrase: telemetry.challenge.phrase,
+                  expected_digits: telemetry.challenge.expected_digits ?? [],
+                  expected_full: telemetry.challenge.expected_full ?? "",
+                  instructions:
+                    telemetry.challenge.instructions ?? "Repeat ONLY the digits, in order, quickly.",
+                  issued_at_ms: telemetry.challenge.issued_at_ms ?? Date.now(),
+                  seed: telemetry.challenge.seed ?? 0,
+                };
+                activeChallengeRef.current = ch;
+                challengeSourceRef.current = "server";
+                challengeIssuedAtRef.current = Date.now();
+                setActiveChallenge(ch);
+                setChallengeStatus("awaiting");
+                setChallengeResponseText("");
+                challengePendingRef.current = true;
+              }
               addEvent(
                 `Voice challenge required: "${telemetry.challenge.phrase}"`,
                 "warning",
@@ -463,14 +564,114 @@ export default function Home() {
     socketRef.current = null;
     setMicLive(false);
     setAudioLevel(0);
+    // Reset CHALLENGE interlock state on stream stop.
+    activeChallengeRef.current = null;
+    challengePendingRef.current = false;
+    challengeSourceRef.current = "local";
+    setActiveChallenge(null);
+    setChallengeStatus("none");
+    setChallengeResponseText("");
+    setCurrentTier("ALLOW");
   };
 
-  // Interlock condition: server-owned tier or risk
-  const currentRisk = report?.overall_risk_score ?? 0;
-  const transactionLocked =
-    currentRisk >= 70 ||
-    report?.verdict === "SYNTHETIC_VOICE_CLONE" ||
-    report?.verdict === "IMPOSTOR_SPEAKER";
+  // Effective interlock tier.
+  // 1. The CHALLENGE loop can override the live tier: Pass -> ALLOW, Fail -> BLOCK.
+  // 2. Otherwise we trust the server's tier from the live stream (micLive), or
+  //    derive a tier from the one-shot forensic report when no stream is active.
+  const reportTier: string = report
+    ? report.overall_risk_score >= 70 ||
+      report.verdict === "SYNTHETIC_VOICE_CLONE" ||
+      report.verdict === "IMPOSTOR_SPEAKER"
+      ? "BLOCK"
+      : report.overall_risk_score >= 35 || report.verdict === "SUSPICIOUS_SPLICED_AUDIO"
+      ? "CHALLENGE"
+      : "ALLOW"
+    : "ALLOW";
+
+  const liveTier = micLive ? currentTier : reportTier;
+  const effectiveTier: string =
+    challengeStatus === "passed"
+      ? "ALLOW"
+      : challengeStatus === "failed"
+      ? "BLOCK"
+      : liveTier;
+
+  // Grade a challenge response. Only a server-issued phrase can be graded by
+  // the backend (POST /api/v1/sessions/{sid}/challenge) — it grades against its
+  // OWN active challenge, so posting a locally generated drill phrase there
+  // would always fail with "no_active_challenge". Drill phrases, and any
+  // response while the backend is offline, use the local mirror so the
+  // interlock logic stays demonstrable.
+  const submitChallengeResponse = async () => {
+    const ch = activeChallengeRef.current;
+    if (!ch) return;
+    const latencyMs = Date.now() - challengeIssuedAtRef.current;
+    const text = challengeResponseText;
+
+    let passed = false;
+    let reason = "ok";
+
+    if (challengeSourceRef.current === "server" && backendOnline && sessionIdRef.current) {
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/v1/sessions/${sessionIdRef.current}/challenge`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ response_text: text, response_latency_ms: latencyMs }),
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          passed = Boolean(data.ok);
+          reason = data.reason || "ok";
+        } else {
+          const g = gradeChallengeLocally(ch, text, latencyMs);
+          passed = g.passed;
+          reason = g.reason;
+        }
+      } catch {
+        const g = gradeChallengeLocally(ch, text, latencyMs);
+        passed = g.passed;
+        reason = g.reason;
+      }
+    } else {
+      const g = gradeChallengeLocally(ch, text, latencyMs);
+      passed = g.passed;
+      reason = g.reason;
+    }
+
+    if (passed) {
+      setChallengeStatus("passed");
+      addEvent(
+        `Challenge PASSED — digits correct, latency ${latencyMs} ms. Caller re-authenticated → ALLOW.`,
+        "info"
+      );
+    } else {
+      setChallengeStatus("failed");
+      addEvent(
+        `Challenge FAILED (${reason}) — escalating to BLOCK. Transaction interlocked.`,
+        "critical"
+      );
+    }
+  };
+
+  // Manual challenge drill: lets the operator exercise the anti-replay interlock
+  // on demand (e.g. with no backend, or to verify the loop before a live call).
+  const runChallengeDrill = () => {
+    const ch = issueLocalChallenge();
+    activeChallengeRef.current = ch;
+    challengeSourceRef.current = "local";
+    challengeIssuedAtRef.current = Date.now();
+    setActiveChallenge(ch);
+    setChallengeStatus("awaiting");
+    setChallengeResponseText("");
+    challengePendingRef.current = true;
+    addEvent(
+      `Challenge drill issued: "${ch.phrase}". Ask the caller to repeat ONLY the digits.`,
+      "warning"
+    );
+  };
 
   return (
     <main className="min-h-screen bg-black text-[#ededed] selection:bg-white selection:text-black">
@@ -482,8 +683,15 @@ export default function Home() {
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             className="flex items-center gap-3 cursor-pointer select-none group"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white text-black font-mono font-bold text-sm tracking-tighter">
-              VR
+            <div className="flex h-9 w-9 items-center justify-center rounded-md overflow-hidden bg-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/brand/vani-rakshak-icon.jpg"
+                alt="VaniRakshak shield+mic logo"
+                width={36}
+                height={36}
+                className="h-9 w-9 object-contain"
+              />
             </div>
 
             <div className="flex flex-col">
@@ -601,6 +809,15 @@ export default function Home() {
                 {micLive ? <Square className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
                 <span>{micLive ? `Live stream (${audioLevel}%)` : "Test live stream"}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={runChallengeDrill}
+                className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20 cursor-pointer"
+              >
+                <Lock className="h-3 w-3" />
+                <span>Run challenge drill</span>
+              </button>
             </div>
           </div>
 
@@ -652,32 +869,42 @@ export default function Home() {
             {/* Autonomous Pre-Transaction Interlock */}
             <div
               className={`rounded-xl border p-6 transition-colors ${
-                transactionLocked
+                effectiveTier === "BLOCK"
                   ? "border-rose-500/40 bg-[#160d0e]"
+                  : effectiveTier === "CHALLENGE"
+                  ? "border-amber-500/40 bg-[#1a1408]"
                   : "border-white/[0.08] bg-[#0c0c0c]"
               }`}
             >
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`p-1.5 rounded-md ${transactionLocked ? "bg-rose-500/20 text-rose-400" : "bg-emerald-500/20 text-emerald-400"}`}>
-                    {transactionLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                  <div className={`p-1.5 rounded-md ${
+                    effectiveTier === "BLOCK"
+                      ? "bg-rose-500/20 text-rose-400"
+                      : effectiveTier === "CHALLENGE"
+                      ? "bg-amber-500/20 text-amber-400"
+                      : "bg-emerald-500/20 text-emerald-400"
+                  }`}>
+                    {effectiveTier === "BLOCK" || effectiveTier === "CHALLENGE" ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm tracking-[-0.3px] text-white">
                       Autonomous gateway interlock.
                     </h3>
-                    <p className="text-xs text-[#888888]">Triggered when risk score crosses 35%</p>
+                    <p className="text-xs text-[#888888]">Triggered when risk ≥ 70% or challenge fails</p>
                   </div>
                 </div>
 
                 <span
                   className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase font-medium tracking-wider border ${
-                    transactionLocked
+                    effectiveTier === "BLOCK"
                       ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
+                      : effectiveTier === "CHALLENGE"
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
                       : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                   }`}
                 >
-                  {transactionLocked ? "CIRCUIT LOCKED" : "ARMED / READY"}
+                  {effectiveTier === "BLOCK" ? "CIRCUIT LOCKED" : effectiveTier === "CHALLENGE" ? "CHALLENGE PENDING" : "ARMED / READY"}
                 </span>
               </div>
 
@@ -689,21 +916,27 @@ export default function Home() {
 
                 <button
                   type="button"
-                  disabled={transactionLocked}
+                  disabled={effectiveTier !== "ALLOW"}
                   className={`w-full rounded-full py-2.5 px-4 font-medium text-xs tracking-wide transition ${
-                    transactionLocked
+                    effectiveTier === "BLOCK"
                       ? "cursor-not-allowed bg-rose-500/20 border border-rose-500/40 text-rose-300"
+                      : effectiveTier === "CHALLENGE"
+                      ? "cursor-not-allowed bg-amber-500/20 border border-amber-500/40 text-amber-300"
                       : "bg-white text-black hover:bg-neutral-200 cursor-pointer active:scale-95"
                   }`}
                 >
-                  {transactionLocked
+                  {effectiveTier === "BLOCK"
                     ? "Transaction locked · Voice spoof suspicion"
+                    : effectiveTier === "CHALLENGE"
+                    ? "Awaiting challenge response…"
                     : "Authorize transaction (Voice authenticated)"}
                 </button>
 
                 <p className="mt-2.5 text-center text-[11px] text-[#666666]">
-                  {transactionLocked
+                  {effectiveTier === "BLOCK"
                     ? "Deepfake or biometric impostor anomaly halted payment execution."
+                    : effectiveTier === "CHALLENGE"
+                    ? "Caller must repeat the challenge digits before the gateway can proceed."
                     : "Biological acoustic signature verified within certified target baseline."}
                 </p>
               </div>
@@ -746,6 +979,12 @@ export default function Home() {
                   <span className="text-[#888888]">PROCESSING:</span>
                   <span className="text-emerald-400">Strictly volatile RAM</span>
                 </div>
+                <div className="flex justify-between border-b border-white/[0.04] pb-1.5">
+                  <span className="text-[#888888]">HASH CHAIN:</span>
+                  <span className={chainValid === null ? "text-[#a1a1a1]" : chainValid ? "text-emerald-400" : "text-rose-400"}>
+                    {chainValid === null ? "unverified (engine offline)" : chainValid ? "verified · append-only" : "BROKEN"}
+                  </span>
+                </div>
                 <div className="flex justify-between pt-0.5">
                   <span className="text-[#888888]">STATUTE:</span>
                   <span className="text-[#a1a1a1]">DPDP Act 2023 §8(7)</span>
@@ -753,6 +992,64 @@ export default function Home() {
               </div>
             </div>
           </section>
+
+          {/* Step 5b: Active Voice Challenge (dynamic anti-replay interlock) */}
+          {activeChallenge && (
+            <section className="rounded-xl border border-amber-500/30 bg-[#1a1408] p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-amber-500/20 text-amber-400">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm tracking-[-0.3px] text-white">
+                    Live voice challenge.
+                  </h3>
+                  <p className="text-xs text-[#888888]">Dynamic anti-replay defence — caller must speak the digits live</p>
+                </div>
+                <span className={`ml-auto rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider border ${
+                  challengeStatus === "passed"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    : challengeStatus === "failed"
+                    ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                }`}>
+                  {challengeStatus === "passed" ? "PASSED" : challengeStatus === "failed" ? "FAILED" : "AWAITING"}
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-amber-500/20 bg-[#0c0c0c] p-4">
+                <p className="text-xs text-[#888888] mb-1">Challenge phrase — ask the caller to repeat ONLY the digits, in order:</p>
+                <p className="text-lg font-mono text-amber-300 tracking-wide mb-2">{activeChallenge.phrase}</p>
+                <p className="text-xs text-[#666666] mb-3">{activeChallenge.instructions}</p>
+
+                {challengeStatus === "awaiting" && (
+                  <>
+                    <input
+                      type="text"
+                      value={challengeResponseText}
+                      onChange={(e) => setChallengeResponseText(e.target.value)}
+                      placeholder="Type what the caller said…"
+                      className="w-full rounded-lg border border-white/[0.12] bg-[#080808] px-3 py-2 text-sm text-white placeholder:text-[#555] focus:outline-none focus:border-amber-500/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={submitChallengeResponse}
+                      className="mt-3 w-full rounded-full bg-amber-500 text-black py-2.5 px-4 font-medium text-xs tracking-wide hover:bg-amber-400 cursor-pointer active:scale-95"
+                    >
+                      Submit caller response
+                    </button>
+                  </>
+                )}
+
+                {challengeStatus === "passed" && (
+                  <p className="text-sm text-emerald-400">✓ Digits correct and latency human-like. Caller re-authenticated — transaction may proceed.</p>
+                )}
+                {challengeStatus === "failed" && (
+                  <p className="text-sm text-rose-400">✗ Challenge failed. A pre-recording cannot answer a live phrase; response escalated to BLOCK.</p>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Step 6: Diagnostic Audit Stream */}
           <section className="rounded-xl border border-white/[0.08] bg-[#0c0c0c] p-6 shadow-sm">

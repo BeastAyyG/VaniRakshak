@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#D9000000"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_card"
+        android:elevation="12dp"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Top Threat Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_alert_danger"
+                android:fontFamily="sans-serif-black"
+                android:gravity="center"
+                android:text="!"
+                android:textColor="@color/error_tone"
+                android:textSize="20sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="SCAM COERCION SHIELD"
+                    android:textColor="@color/error_tone"
+                    android:textSize="12sp"
+                    android:letterSpacing="0.04" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Financial Application Detected"
+                    android:textColor="@color/ink"
+                    android:textSize="17sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Threat Detail Body -->
+        <TextView
+            android:id="@+id/tvOverlayMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:lineSpacingExtra="4dp"
+            android:text="You are on a call flagged as HIGH RISK and just opened a banking/payment app.\n\n• Do NOT send UPI payments or share OTPs.\n• Deepfake voice-clone fraudsters routinely impersonate family, police, or bank managers to coerce urgent transfers.\n• If under pressure, disconnect the call immediately."
+            android:textColor="@color/ink"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvTriggerApp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_alert_warning"
+            android:padding="8dp"
+            android:fontFamily="monospace"
+            android:text="Target: com.phonepe.app"
+            android:textColor="@color/warning_deep"
+            android:textSize="11sp" />
+
+        <!-- Actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="vertical">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnEndCallInstead"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:backgroundTint="@color/error_tone"
+                android:text="Return to Call Guard Screen"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                app:cornerRadius="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDismiss"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="6dp"
+                android:text="I Understand the Risk (Dismiss)"
+                android:textColor="@color/mute"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

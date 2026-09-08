@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- filter-chip / search-bar: full pill on warm cream -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/surface_card" />
+    <corners android:radius="999dp" />
+</shape>

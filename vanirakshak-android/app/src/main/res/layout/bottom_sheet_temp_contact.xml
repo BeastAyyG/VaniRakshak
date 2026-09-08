@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_sheet_top"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="20dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="28dp">
+
+    <!-- Header: title + circular close -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvSheetTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="-0.01"
+            android:text="Voice profile"
+            android:textColor="@color/ink"
+            android:textSize="18sp" />
+
+        <ImageView
+            android:id="@+id/btnSheetClose"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_chip"
+            android:contentDescription="Close"
+            android:padding="10dp"
+            android:src="@drawable/ic_close" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvSheetContactPhone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="+91 98765 43210 - no voice profile yet"
+        android:textColor="@color/mute"
+        android:textSize="13sp" />
+
+    <!-- Contact chip -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <TextView
+            android:id="@+id/tvSheetContactName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-medium"
+            android:text="Aarav Sharma"
+            android:textColor="@color/ink"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvSheetBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_enrolled"
+            android:fontFamily="sans-serif-medium"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:text="Enrolled"
+            android:textColor="@color/success_deep"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Prompt card -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:fontFamily="sans-serif-medium"
+        android:text="Read this aloud for 15 seconds"
+        android:textColor="@color/ink"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_chip_white"
+        android:padding="14dp"
+        android:text="VaniRakshak safeguards speech and telephony against AI-generated voice cloning attacks."
+        android:textColor="@color/body"
+        android:textSize="14sp" />
+
+    <!-- Progress + status -->
+    <ProgressBar
+        android:id="@+id/pbEnrollProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:layout_marginTop="18dp"
+        android:max="100"
+        android:progress="0"
+        android:progressTint="@color/pin_red" />
+
+    <TextView
+        android:id="@+id/tvEnrollStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Ready to record reference audio"
+        android:textColor="@color/mute"
+        android:textSize="12sp" />
+
+    <!-- Actions -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnStartEnroll"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_primary"
+            android:fontFamily="sans-serif-medium"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:stateListAnimator="@null"
+            android:text="Record sample"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            app:backgroundTint="@null" />
+
+        <Button
+            android:id="@+id/btnSaveEnroll"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_secondary"
+            android:enabled="false"
+            android:fontFamily="sans-serif-medium"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:stateListAnimator="@null"
+            android:text="Save profile"
+            android:textAllCaps="false"
+            android:textColor="@color/ink"
+            android:textSize="14sp"
+            app:backgroundTint="@null" />
+    </LinearLayout>
+
+</LinearLayout>

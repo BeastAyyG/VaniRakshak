@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- warning-pale pill for unenrolled voice profiles -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/warning_pale" />
+    <corners android:radius="999dp" />
+</shape>

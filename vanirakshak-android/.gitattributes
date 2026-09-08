@@ -1,0 +1,12 @@
+# The Unix launcher MUST keep LF endings or `#!/bin/sh` breaks with CRLF.
+gradlew text eol=lf
+
+# Windows launcher keeps CRLF.
+gradlew.bat text eol=crlf
+
+# Binary assets — never let Git "normalize" these.
+*.jar binary
+*.png binary
+*.jpg binary
+*.apk binary
+*.aab binary

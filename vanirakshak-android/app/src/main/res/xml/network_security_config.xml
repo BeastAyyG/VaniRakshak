@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- The backend runs on the dev PC and is reached via `adb reverse tcp:8000 tcp:8000`,
+         so it appears as localhost on the device. Allow cleartext HTTP to localhost only. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

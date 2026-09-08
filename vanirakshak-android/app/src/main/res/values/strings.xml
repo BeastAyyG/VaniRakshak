@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VaniRakshak</string>
+    <string name="app_tagline">AI Voice-Clone Impersonation Shield</string>
+    <string name="app_sih_code">SIH26104 • AICTE Cyber Security</string>
+    
+    <!-- Dashboard -->
+    <string name="protection_active">SHIELD ACTIVE</string>
+    <string name="protection_subtext">Telephony &amp; VoIP call stream monitoring enabled</string>
+    <string name="header_protected_contacts">Protected Contacts</string>
+    <string name="header_contacts_sub">Verified voice embeddings used for real-time authentication</string>
+    
+    <!-- Quick Actions -->
+    <string name="btn_simulate_genuine">🟢 Test Genuine Call</string>
+    <string name="btn_simulate_clone">🔴 Test AI Clone Attack</string>
+    <string name="btn_verify_call">Verify Call</string>
+    <string name="btn_enroll_voice">Enroll Voice</string>
+    
+    <!-- Status Labels -->
+    <string name="status_enrolled">🛡️ Voice Enrolled (15s sample)</string>
+    <string name="status_not_enrolled">⚠️ Voice Not Enrolled</string>
+    
+    <!-- Call Screen -->
+    <string name="live_call_header">VaniRakshak Real-Time Voice Guard</string>
+    <string name="call_state_ongoing">Call in Progress • Audio Ingesting (16kHz)</string>
+    <string name="risk_score_label">CALIBRATED CLONE RISK SCORE</string>
+    
+    <!-- Alert Strings -->
+    <string name="verdict_danger_title">CRITICAL: AI VOICE CLONE DETECTED</string>
+    <string name="verdict_danger_desc">High synthetic acoustic artifacts detected. Speaker identity does not match enrolled profile. Fraud probability &gt; 85%.</string>
+    
+    <string name="verdict_warning_title">WARNING: SUSPICIOUS CALL ANOMALY</string>
+    <string name="verdict_warning_desc">Telephony compression / vocoder discrepancy detected. Recommend triggering liveness challenge.</string>
+    
+    <string name="verdict_safe_title">AUTHENTIC VOICE VERIFIED</string>
+    <string name="verdict_safe_desc">Acoustic spectrum matches natural human speech. ECAPA-TDNN speaker cosine similarity: 0.94.</string>
+    
+    <!-- Challenge Engine -->
+    <string name="btn_challenge">⚡ Trigger Liveness Challenge</string>
+    <string name="btn_block_call">⛔ Block &amp; Report Fraud</string>
+    <string name="btn_interlock">🔒 Engage Financial Interlock</string>
+    
+    <string name="challenge_title">Active Liveness Challenge</string>
+    <string name="challenge_desc">Defeats pre-recorded deepfake audio. Instruct caller to immediately repeat this dynamic randomized phrase:</string>
+    <string name="sample_challenge_phrase">"Mango, 8, Nadi, 4, Blue"</string>
+
+    <!-- Risk levels shown in the notification and on the guard screen -->
+    <string name="risk_level_high">HIGH CLONE RISK</string>
+    <string name="risk_level_medium">VOICE ANOMALY</string>
+    <string name="risk_level_low">VOICE VERIFIED</string>
+
+    <!-- Live call notifications -->
+    <string name="notif_incoming_title">Incoming call — %1$s</string>
+    <string name="notif_incoming_known">%1$s is a protected contact. Open the live guard to verify the voice.</string>
+    <string name="notif_incoming_unknown">Unknown number. Open the live guard to start real-time voice analysis.</string>
+    <string name="notif_analyzing_title">Listening to the call</string>
+    <string name="notif_analyzing_body">Analyzing %1$s. The clone-risk score appears here as soon as there is speech to measure.</string>
+    <string name="notif_live_title">%1$s · %2$d%%</string>
+    <string name="notif_live_detail">synthetic %1$d%% · voice match %2$d%%</string>
+    <string name="notif_demo_title">%1$s · %2$d%%</string>
+    <string name="notif_demo_detail">synthetic %1$d%% · speaker match %2$d%%</string>
+    <string name="notif_summary_title">%1$s · %2$s</string>
+    <string name="notif_summary_detail">Final risk %1$d%% · synthetic %2$d%% · voice match %3$d%%</string>
+    <string name="notif_action_open">Open guard</string>
+    <string name="notif_action_block">Block &amp; report</string>
+
+    <!-- Analyzer status -->
+    <string name="analyzer_no_audio">No call audio available on this device. Android blocks third-party call recording, so use the in-app demo to exercise the pipeline.</string>
+    <string name="analyzer_no_permission">Microphone permission missing - grant it in the app to analyze live voice.</string>
+    <string name="unknown_caller">Unknown caller</string>
+
+    <!-- Speaker identity verification (honest scope: "is this the enrolled voice?", NOT "is this a clone?") -->
+    <string name="verify_speaker_title">Verify Speaker (Modi ji)</string>
+    <string name="verify_speaker_verified">Speaker verified — this is the enrolled voice (Modi ji).</string>
+    <string name="verify_speaker_not_target">Speaker is NOT the enrolled Modi voice. Verify caller identity before any bank/transaction step.</string>
+    <string name="verify_speaker_unavailable">Speaker verify unavailable: backend not reachable. Ensure the PC backend is running and `adb reverse tcp:8000 tcp:8000` is set.</string>
+    <string name="verify_speaker_no_audio">Speaker verify: not enough live audio captured yet.</string>
+    <string name="toast_call_blocked">Call from %1$s blocked. Incident report filed.</string>
+
+    <!-- Setup -->
+    <string name="btn_simulate_incoming">Simulate incoming call</string>
+    <string name="btn_enable_screening">Enable call screening</string>
+    <string name="btn_enable_alerts">Enable alerts</string>
+    <string name="shield_on">Shield on</string>
+    <string name="shield_off">Setup needed</string>
+    <string name="screening_active">Call screening is active. Incoming calls are verified automatically.</string>
+    <string name="screening_needed">Grant the call screening role so incoming calls can be detected.</string>
+    <string name="alerts_needed">Turn on notifications so the live risk level can be shown during calls.</string>
+</resources>

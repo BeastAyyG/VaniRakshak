@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   title: "VaniRakshak — Enterprise Audio Deepfake & Voice Forensics",
   description:
     "Target-conditioned recorded-audio deepfake & voice cloning forensic intelligence. Segment-level risk localization, ECAPA-TDNN speaker verification, and DPDP Act 2023 compliance.",
+  icons: {
+    icon: [
+      { url: "/brand/vani-rakshak-icon.jpg", type: "image/jpeg" },
+    ],
+    shortcut: ["/brand/vani-rakshak-icon.jpg"],
+    apple: [{ url: "/brand/vani-rakshak-icon.jpg", type: "image/jpeg" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
