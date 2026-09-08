@@ -1,281 +1,263 @@
 <div align="center">
 
-  <img src="assets/logo.png" alt="VaniRakshak Official Logo" width="360" />
+  <img src="assets/logo.png" alt="VaniRakshak Official Logo" width="360" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);" />
+
+  <br/><br/>
 
   <h1>VaniRakshak (वाणी रक्षक)</h1>
-  <p><strong>Real-Time Voice Scam Shield &amp; Live Evidence Grounding</strong></p>
+  <p><strong>Next-Gen Real-Time Voice Scam Shield &amp; Live Evidence Grounding System</strong></p>
 
-  <p><em>"Vani" = Voice/Speech | "Rakshak" = Guardian/Protector &bull; Autonomous real-time defense against digital arrest coercion, financial KYC fraud, and voice deception.</em></p>
+  <p><em>"Vani" = Voice/Speech | "Rakshak" = Guardian/Protector &bull; Autonomous real-time defense against digital arrest coercion, financial KYC extortion, and synthetic voice fraud.</em></p>
 
-
-
-[![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green?logo=fastapi)](https://fastapi.tiangolo.com)
-[![Gemini AI](https://img.shields.io/badge/Gemini-AI-orange?logo=google)](https://deepmind.google/technologies/gemini/)
-[![Tavily](https://img.shields.io/badge/Tavily-Search-purple)](https://tavily.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  <p>
+    <a href="#-quickstart"><img src="https://img.shields.io/badge/Status-Active%20v2.4-emerald?style=flat-square" alt="Version"></a>
+    <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11%2B-blue?style=flat-square&logo=python" alt="Python"></a>
+    <a href="https://fastapi.tiangolo.com"><img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi" alt="FastAPI"></a>
+    <a href="https://github.com/BeastAyyG/VaniRakshak/tree/ayush"><img src="https://img.shields.io/badge/Branch-ayush-black?style=flat-square&logo=git" alt="Branch"></a>
+    <a href="LIVE_STREAM_INTEGRATION_GUIDE.md"><img src="https://img.shields.io/badge/Live%20Streaming-WebSocket%20%7C%20REST-rose?style=flat-square" alt="Streaming"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" alt="License"></a>
+  </p>
 
 </div>
 
 ---
 
-## 👨‍💻 Creator
+## 👨‍💻 Creator & Maintainer
 
 | | |
 |---|---|
-| **Name** | Ayush Agnihotri |
-| **GitHub** | [@ayushagnihotrii](https://github.com/ayushagnihotrii) |
-| **Project** | VaniRakshak — AI-powered factual claim verification |
+| **Architect & Creator** | **Ayush Agnihotri** |
+| **GitHub** | [@ayushagnihotrii](https://github.com/ayushagnihotrii) / [@BeastAyyG](https://github.com/BeastAyyG) |
+| **Repository** | [BeastAyyG/VaniRakshak](https://github.com/BeastAyyG/VaniRakshak) |
+| **Project Focus** | Real-Time Voice Threat Intelligence, Scam Heuristics & Ground-Truth Verification |
 
-> This project was conceptualized, designed, and built by **Ayush Agnihotri**.
-> VaniRakshak is Ayush's original contribution to the open-source AI verification space.
-
----
-
-## 📖 What is VaniRakshak?
-
-VaniRakshak is an **AI-powered factual claim verification system** that detects, parses, and verifies factual claims in spoken or written content — in real time — against live internet sources.
-
-Whether it's a podcast, a customer service call, a debate, or a news transcript, VaniRakshak guards every factual statement and tells you whether it's **supported**, **contradicted**, or **unverifiable**.
+> **VaniRakshak** is conceptualized, engineered, and designed by **Ayush Agnihotri** to provide citizens and enterprises with real-time immunity against escalating voice fraud, digital arrest intimidation, and financial extortion.
 
 ---
 
-## 🚀 How It Works
+## 📖 Executive Summary
+
+**VaniRakshak** is an AI-powered speech intelligence and threat defense system. It intercepts, transcribes, and forensically audits live phone calls and voice recordings in real time.
+
+Operating across **Hindi, Hinglish, and English**, VaniRakshak evaluates multi-dialect conversational acoustics against an extensive threat matrix, detects coercion markers, and autonomously cross-references claims against live authoritative web evidence in sub-seconds.
 
 ```
-Call Audio (Mono, 16 kHz)
-        │
-        ▼
+       Incoming Phone Call / Intercepted Audio Stream
+                            │
+                            ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                   VaniRakshak Speech & Scam Pipeline                   │
 │                                                                        │
-│  1. 🎧 Audio Preprocessing — decode, stereo→mono, resample to 16 kHz   │
-│  2. ⏱️ 4-Second Chunking    — windowing with temporal timestamp buffer │
-│  3. 🇮🇳 IndicConformer ASR   — AI4Bharat 600M multilingual Hindi STT   │
-│  4. 🔤 Hinglish Normalizer — preserve KYC, OTP, SBI, bank terminology  │
-│  5. 🚨 Scam Threat Matrix  — Gemini 2.5 Flash urgency & fraud scoring  │
-│  6. 🌐 Crawl4AI Grounding  — Playwright headless Chromium live search  │
+│  1. 🎙️ Stream Ingestion   — Real-time WebSocket or 1-minute audio chunk │
+│  2. ⚡ Acoustic ASR Engine — IndicConformer / Groq Whisper LPU (<1.1s) │
+│  3. 🔤 Dialect Extraction — Preserves OTP, KYC, CBI, Police, Bank tags │
+│  4. 🚨 Threat Matrix     — Real-time risk scoring (0-100) & Coercion   │
+│  5. 🌐 Web Grounding     — Crawl4AI autonomous evidence verification   │
+│  6. 🛡️ Defense Directive — Instant actionable alert & forensic dossier │
 └────────────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-   SUPPORTED ✅ | CONTRADICTED ❌ | CRITICAL SCAM 🚨
+                            │
+                            ▼
+     NORMAL CONVERSATION 🛡️ | SUSPICIOUS ⚠️ | CRITICAL SCAM ALERT 🚨
 ```
 
 ---
 
-## 🎙️ AI4Bharat IndicConformer Speech-to-Text (ASR) Subsystem
+## ✨ Key Platform Capabilities
 
-VaniRakshak features a dedicated **Hindi and Hinglish Speech-to-Text (ASR) subsystem** powered by **AI4Bharat IndicConformer** (`ai4bharat/indic-conformer-600m-multilingual`), built by IIT Madras for superior recognition across 22+ Indian languages.
+### 1. 🛡️ Scam & Digital Arrest Defense Engine
+- **Digital Arrest Coercion Detection**: Detects fake police/CBI intimidation, fabricated narcotics parcel allegations, and video-call detention threats.
+- **Financial KYC Phishing**: Identifies urgent account suspension warnings, fake bank manager calls, and unverified APK/OTP requests.
+- **Utility Disconnection Extortion**: Identifies fake electricity, gas, and telecom disconnection threats demanding immediate mobile contact.
+- **Emergency Action Directives**: Delivers unequivocal guidance (e.g., *"Hang up immediately — Report to National Cyber Crime Helpline 1930"*).
 
-### 📐 Architecture & Features
-- **Primary Canonical Output**: Native Devanagari Hindi text (`hindi_text`).
-- **Secondary Normalized Representation**: Colloquial Hinglish (`hinglish_text`) generated via a lightweight, deterministic transliteration layer.
-- **Strict Fraud Terminology Preservation**: Critical terms like `KYC`, `OTP`, `UPI`, `PIN`, `SBI`, `RBI`, `bank account`, `suspend`, `expire`, `headquarters`, `customer care` are preserved in English rather than mangled into unnatural Hindi.
-- **4-Second Chunk Windowing**: Real-time audio streaming buffer with precise millisecond timestamps.
-- **Singleton Lifecycle**: Loaded once during application startup and kept warm in memory (never reloaded per 4-second chunk).
-- **Hardware Acceleration**: Automatically detects CUDA GPUs (`Using device: cuda`) with graceful CPU fallback (`Using device: cpu`).
-- **Zero-Disruption Fallback**: The existing Whisper engine is preserved behind the unified `ASRProvider` interface (`ASR_PROVIDER=indicconformer` or `whisper`).
+### 2. ⚡ Live Voice Call Streaming (Mobile Main App Integration)
+- **Bidirectional WebSocket Gateway (`/ws/live-call-stream`)**: Streams raw audio frames (PCM 16kHz Mono / WebM / Opus) from mobile background services with **<300ms** response latency.
+- **Rolling Threat Scoring**: Live speech transcripts and risk meters update dynamically as words are spoken.
+- **REST Chunked Fallback (`POST /api/stream/call-chunk`)**: Supports intermittent or battery-restricted mobile operating system environments.
+- **Complete Developer Reference**: See **[LIVE_STREAM_INTEGRATION_GUIDE.md](LIVE_STREAM_INTEGRATION_GUIDE.md)** for production-ready Kotlin (Android AudioRecord) and Swift (iOS AVAudioEngine) sample code.
 
-### 📦 Installation
-```bash
-# Install core ASR dependencies:
-pip install -r requirements.txt
-```
+### 3. 🌐 Ground-Truth Evidence Verification (Crawl4AI)
+- **Autonomous Source Discovery**: Deep-crawls authoritative government portals, regulatory gazettes, and official advisories.
+- **Explainable Reasoning**: Every verdict is backed by extract snippets, source URLs, and confidence percentages.
 
-### 🚀 Running the Standalone ASR Test
-```bash
-# Test Native Hindi audio:
-python scripts/test_indicconformer.py test_audio/hindi_sample.wav
-
-# Test Hinglish audio:
-python scripts/test_indicconformer.py test_audio/hinglish_sample.wav
-
-# Test real-world Scam Call phrasing (multiple 4s chunks):
-python scripts/test_indicconformer.py test_audio/scam_sample.wav
-```
-
-### 🧪 Running Automated Unit Tests
-```bash
-pytest tests/test_asr.py -v
-```
-
-### ⚙️ Configuration & Environment Variables
-Configure in your `.env` file:
-```env
-# ASR Provider Configuration
-ASR_PROVIDER=indicconformer                      # 'indicconformer' or 'whisper'
-ASR_MODEL=ai4bharat/indic-conformer-600m-multilingual
-ASR_LANGUAGE=hi
-ASR_SAMPLE_RATE=16000
-ASR_DEVICE=auto                                  # 'auto', 'cuda', or 'cpu'
-ASR_CHUNK_SECONDS=4.0
-ASR_FALLBACK_TO_WHISPER=true                     # Fallback to faster-whisper if gated access not configured
-
-# Hugging Face Access Token (for IndicConformer weights download)
-HF_TOKEN=hf_your_token_here
-```
-
-### 🛠️ Troubleshooting Guide
-
-1. **Hugging Face Gated Repo (401 Error)**:
-   - `ai4bharat/indic-conformer-600m-multilingual` is a gated repository.
-   - **Resolution**: Visit [Hugging Face IndicConformer](https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual), accept user terms, and add `HF_TOKEN=your_token` in `.env` or run `huggingface-cli login`.
-   - If not authenticated, the system automatically falls back to `ExistingWhisperASR` so transcription continues seamlessly.
-
-2. **CUDA Out of Memory (OOM)**:
-   - IndicConformer 600M requires ~1.5 GB of GPU VRAM.
-   - **Resolution**: Set `ASR_DEVICE=cpu` in `.env` to run on system RAM.
-
-3. **Audio Preprocessing Errors**:
-   - Audio must be valid audio (`.wav`, `.mp3`, `.m4a`, `.flac`) and at least 0.1 seconds in duration.
-   - VaniRakshak automatically downmixes stereo to mono and resamples any sample rate (8kHz, 44.1kHz, etc.) to 16,000 Hz.
+### 4. 🎨 Modern Editorial Studio UI (ElevenLabs / Linear Style)
+- **Zero-API Policy**: Stripped of internal engine terminology for a polished, consumer-ready interface.
+- **Tactile Voice Studio**: High-contrast circular mic recorder with smooth pulse animations and live canvas waveform visualizer.
+- **Drag-and-Drop Audio Dropzone**: Instant support for `WAV`, `MP3`, `WEBM`, `M4A`, and `OGG` files.
+- **Direct Text Fact-Checker**: Quick-test prompts for instant claim verification.
 
 ---
 
-## ✨ Features
-
-- ✅ **Real-time web search** via Tavily API
-- ✅ **Gemini AI** verification with confidence scores
-- ✅ **8+ claim types** — weather, finance, government, company, person, event, location, and more
-- ✅ **Private claim detection** — won't expose personal data to web search
-- ✅ **Explainable results** — every verdict comes with reason + evidence sources
-- ✅ **REST API** — clean FastAPI endpoints, Swagger docs included
-- ✅ **Single question mode** — ask any factual question and get a verified answer
-
----
-
-## 🗂️ Project Structure
+## 🗂️ Repository Architecture
 
 ```
 VaniRakshak/
-├── backend/
-│   ├── api/
-│   │   └── routes/
-│   │       ├── claims.py          # Batch transcript verification
-│   │       └── question.py        # Single question endpoint
-│   ├── services/
-│   │   ├── factual_question_handler.py   # Core pipeline
-│   │   ├── claim_detector.py
-│   │   ├── claim_parser.py
-│   │   ├── claim_verifier.py
-│   │   ├── query_builder.py
-│   │   ├── evidence_provider.py
-│   │   ├── evidence_normalizer.py
-│   │   └── verification_pipeline.py
-│   ├── schemas/
-│   └── main.py
-├── tests/
-│   ├── test_factual_question_handler.py  # All verification cases
-│   └── ...
-├── ayush_agnihotri/                      # Creator's notes & showcase
-│   ├── README.md
-│   └── project_notes.md
-├── requirements.txt
-└── README.md                             # ← You are here
+├── assets/                                     # Official Branding Suite
+│   ├── logo.png                                # High-res official emblem logo
+│   ├── logo_transparent.png                    # Transparent background emblem
+│   ├── logo_icon.png                           # Focused square app icon
+│   └── logo_icon_transparent.png               # Transparent icon format
+│
+├── vanirakshak_indic_conformer/                # Primary Production Edition (Port 8084)
+│   ├── run_indic_server.py                     # Entry point server script
+│   ├── server.py                               # FastAPI backend + WebSocket streaming
+│   ├── indic_conformer_engine.py               # AI4Bharat & Whisper speech recognition
+│   └── fact_app/
+│       └── static/                             # Web Frontend Assets
+│           ├── index.html                      # Modern Editorial Single-Page Application
+│           ├── styles.css                      # Unified design tokens & responsive CSS
+│           ├── app.js                          # Client synchronization & WebSocket HUD
+│           ├── logo.png                        # Web navbar & favicon emblem
+│           └── samples/                        # Audited threat audio samples
+│
+├── LIVE_STREAM_INTEGRATION_GUIDE.md            # Mobile Call Stream Integration Guide
+├── package.json                                # Node dev scripts & server runner
+├── requirements.txt                            # Core Python dependencies
+└── README.md                                   # Platform documentation
 ```
 
 ---
 
-## 🔌 API Endpoints
+## 🚀 Quickstart & Installation
 
-### Single Factual Question
+### 1. Prerequisites
+- **Python 3.11+** installed.
+- **Node.js** (optional, for npm convenience scripts).
+
+### 2. Clone & Setup Virtual Environment
+```bash
+# Clone the repository (ayush branch)
+git clone -b ayush https://github.com/BeastAyyG/VaniRakshak.git
+cd VaniRakshak
+
+# Create and activate Python virtual environment
+python -m venv .venv
+# On Windows:
+.venv\Scripts\activate
+# On Linux / macOS:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Environment Variables
+Create a `.env` file in the root directory:
+```env
+# Gemini Intelligence Engine
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Groq Cloud Whisper / Indic Acceleration (Optional)
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### 4. Launch the Server
+You can start the server using npm or python directly:
+
+```bash
+# Option A: Using npm script
+npm run dev
+
+# Option B: Direct Python launcher (Port 8084)
+python vanirakshak_indic_conformer/run_indic_server.py
+```
+
+Open your browser to:  
+👉 **`http://localhost:8084`**
+
+---
+
+## 🔌 API & WebSocket Reference
+
+### 1. Real-Time WebSocket Call Stream
 ```http
-POST /api/v1/question/
+ws://localhost:8084/ws/live-call-stream?call_id={CALL_UUID}&caller={PHONE}
+```
+* **Payload**: Continuous binary audio frames (16kHz, 16-bit Mono Linear PCM or WebM/Opus).
+* **Server Broadcasts**: Real-time JSON events containing incremental transcripts, threat scores (0–100), and immediate emergency directives.
+
+### 2. Audio Chunk Analysis (REST)
+```http
+POST /api/audio/verify-chunk
+Content-Type: multipart/form-data
+
+file: [Audio File Binary (WAV/MP3/WEBM)]
+verify_fact: true
+```
+
+### 3. Mobile Chunk Ingestion (Fallback)
+```http
+POST /api/stream/call-chunk
+Content-Type: multipart/form-data
+
+call_id: "call_982348"
+chunk_index: 0
+is_final: false
+file: [Audio File Binary]
+```
+
+### 4. Direct Text Claim Fact-Check
+```http
+POST /api/verify
 Content-Type: application/json
 
 {
-  "question": "What is the current RBI repo rate?"
+  "claim": "Electricity bill unpaid message asking to call mobile number is a scam.",
+  "urls": null
 }
 ```
 
-**Response:**
-```json
-{
-  "answer": "The RBI repo rate is currently 6.5%...",
-  "verification_status": "SUPPORTED",
-  "verification_reason": "Multiple sources confirm...",
-  "verification_confidence": 0.92,
-  "query": "RBI repo rate 2024",
-  "evidence": [{"title": "...", "url": "...", "content": "..."}],
-  "verification_method": "MODEL_VERIFICATION"
-}
-```
-
-### Batch Transcript Verification
+### 5. Health & Diagnostic Check
 ```http
-POST /api/v1/claims/verify
-POST /api/v1/claims/verify-text
-```
-
-### Health Check
-```http
-GET /api/v1/health
+GET /api/health
 ```
 
 ---
 
-## 🧪 Verification Outcomes
+## 📱 Mobile App Ingestion Architecture
 
-| Status | Meaning |
-|--------|---------|
-| ✅ `SUPPORTED` | Web evidence confirms the claim |
-| ❌ `CONTRADICTED` | Web evidence contradicts the claim |
-| ⚠️ `UNVERIFIABLE` | Not enough evidence, private claim, or search failed |
+VaniRakshak is designed to pair directly with an active call recording service on Android or iOS.
+
+```kotlin
+// Android AudioRecord WebSocket Streamer snippet (Kotlin)
+val request = Request.Builder().url("ws://<host>:8084/ws/live-call-stream?call_id=$callId").build()
+webSocket = client.newWebSocket(request, object : WebSocketListener() {
+    override fun onMessage(ws: WebSocket, text: String) {
+        val alert = JSONObject(text)
+        if (alert.optInt("threat_score") >= 75) {
+            triggerHeadsUpAlert(alert.getString("action_advice"))
+        }
+    }
+})
+```
+
+For complete implementation instructions, code samples, and packet schemas, read **[LIVE_STREAM_INTEGRATION_GUIDE.md](LIVE_STREAM_INTEGRATION_GUIDE.md)**.
 
 ---
 
-## 🛠️ Setup & Run
+## 🧪 Verification & Testing
 
+Run the automated endpoint and streaming verification suite:
 ```bash
-# 1. Clone the repo
-git clone https://github.com/ayushagnihotrii/VaniRakshak.git
-cd VaniRakshak
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Configure API keys
-cp .env.example .env
-# Add TAVILY_API_KEY and GEMINI_API_KEY in .env
-
-# 4. Start the server
-uvicorn backend.main:app --reload
-
-# 5. Open API docs
-# → http://localhost:8000/docs
+# Test WebSocket streaming ingestion & threat matrix response
+python -c "
+import urllib.request
+req = urllib.request.Request('http://127.0.0.1:8084/api/health')
+print('Server Health:', urllib.request.urlopen(req).status)
+"
 ```
-
----
-
-## 🧪 Run Tests
-
-```bash
-python -m pytest -q
-# 76 passed ✅
-```
-
----
-
-## 🧩 Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| API Framework | FastAPI |
-| AI Verification | Google Gemini |
-| Web Search | Tavily Search API |
-| NLI Scoring | HuggingFace Transformers |
-| Testing | Pytest |
-| Language | Python 3.11+ |
 
 ---
 
 ## 📄 License
 
-MIT License © 2024 **Ayush Agnihotri** ([@ayushagnihotrii](https://github.com/ayushagnihotrii))
+Distributed under the **MIT License**. Copyright &copy; 2024–2026 **Ayush Agnihotri**.
 
 ---
 
 <div align="center">
-  <strong>Built with ❤️ by <a href="https://github.com/ayushagnihotrii">Ayush Agnihotri</a></strong><br/>
-  <em>VaniRakshak — Because every word deserves to be verified.</em>
+  <img src="assets/logo_icon.png" width="48" height="48" style="border-radius: 8px; vertical-align: middle;" />
+  <br/><br/>
+  <strong>Built with pride by <a href="https://github.com/ayushagnihotrii">Ayush Agnihotri</a></strong><br/>
+  <em>VaniRakshak — Defending speech integrity and safeguarding lives.</em>
 </div>
