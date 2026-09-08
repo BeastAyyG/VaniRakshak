@@ -104,6 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // LOAD PRESET SAMPLES
   // ------------------------------------------------------------------------
   async function loadPresetSamples() {
+    if (!samplesContainer) return;
     try {
       const res = await fetch("/api/audio/samples");
       const data = await res.json();
@@ -172,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  loadPresetSamples();
+  if (samplesContainer) loadPresetSamples();
 
   // ------------------------------------------------------------------------
   // FILE INPUT & DRAG AND DROP

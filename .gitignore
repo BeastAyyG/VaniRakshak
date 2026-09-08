@@ -39,3 +39,6 @@ coverage.xml
 
 # Logs
 *.log
+
+# Local check backups
+VaniRakshak-ayush-check/
