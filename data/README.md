@@ -31,8 +31,12 @@ data/
 
 ## Corpus Composition
 
-The standardized corpus is **two speakers**: 8 target-speaker recordings (`anchor_speaker_std/`)
-and 45 non-target clips (`other_speakers_std/`), all chunked from a single non-target recording.
+The standardized corpus is **two speakers**: 8 target-speaker recordings (`anchor_speaker_std/`,
+all `modi_0XX.wav`) and 45 non-target clips (`other_speakers_std/`), all chunked from a single
+non-target recording. The enrolled target identity is **Narendra Modi**
+(`anchor_speaker_profile.json`, `user_id: narendra_modi`) — models trained on this corpus cover
+that one person and no one else.
+
 `make_splits.py` therefore holds out whole recordings for the target speaker but can only hold out
 a contiguous block for the non-target speaker, and logs a warning when it does. See the note in
 [`../ml/README.md`](../ml/README.md) on how that limits the reported metrics.

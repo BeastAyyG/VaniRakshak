@@ -4,6 +4,15 @@
 
 VaniRakshak listens to a live audio stream, scores it for synthetic/manipulated speech, and drives a risk decision (`ALLOW` → `CHALLENGE` → `BLOCK`) that can lock a transaction mid-call and fire alerts.
 
+> **Read this before quoting any number.** The trained checkpoint in `ml/checkpoints/` is
+> fine-tuned for **one enrolled identity only — Narendra Modi** (`data/anchor_speaker_profile.json`,
+> `user_id: narendra_modi`), represented by 8 recordings. It answers "is this that one person?",
+> **not** "is this audio synthetic?". It was trained against a single non-target speaker
+> (45 clips cut from one recording) and its training set contains **zero** cloned or synthetic
+> voices, so it has never seen the thing it is marketed as detecting. It is not a general
+> voice-clone detector and its headline `100%` accuracy says nothing about other speakers.
+> See [`ml/README.md`](ml/README.md) for the measured figures and why they do not generalise.
+
 ## How it works
 
 The dashboard streams microphone audio to a forensic backend over WebSocket and renders the verdict in real time.
@@ -75,7 +84,7 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
 │           ├── WaveformEvidenceTimeline.tsx # sliding-window waveform & boundary inspector
 │           ├── DemoQuickSelector.tsx        # standardized forensic benchmark selector
 │           └── AudioUploadZone.tsx          # custom audio drag-and-drop ingestion
-├── ml/
+├── ml/                   # 40-dim MFCC target-speaker model; shipped weights cover ONE identity (Modi)
 ├── benchmarks/
 ├── data/
 ├── backend/              # (legacy)

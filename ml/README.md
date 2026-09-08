@@ -1,6 +1,8 @@
 # VaniRakshak Machine Learning & Forensic Benchmark Suite
 
-Target-conditioned neural anti-spoofing models, ASVspoof-5 evaluation metrics, and telephony codec robustness benchmarks.
+Target-conditioned neural models, ASVspoof-5 evaluation metrics, and telephony codec robustness benchmarks.
+
+**The trained checkpoint covers one enrolled identity (Narendra Modi) and has never seen cloned audio — see the note under [Evaluated Metrics](#evaluated-metrics).**
 
 ## Architecture & Modules
 
@@ -43,4 +45,17 @@ python ml/train.py --epochs 50 --batch-size 32
 - **CLLR**: Log-likelihood ratio cost measuring probabilistic calibration. Measured: `0.0049`.
 - **EER**: Equal Error Rate operating point ($P_{\text{miss}} = P_{\text{fa}}$). Measured: `0.00%`.
 
-Measured on the current 11-clip test split (2026-09-08): accuracy `100.00%` (11/11). That corpus is one target speaker (8 recordings) against one non-target speaker (45 chunks of a single recording); target clips score LLR ≈ +6.0 against ≈ −5.5 for non-target, a gap of ~11 nats. `make_splits.py` holds out whole recordings for the target speaker, but the non-target speaker has only one recording session, so a session-disjoint split is impossible there and a contiguous block is held out instead. These figures therefore measure separation of two unrelated recordings, not anti-spoofing generalisation.
+**The shipped checkpoint is fine-tuned for one person.** The enrolled target is a single
+identity — **Narendra Modi** — represented by 8 recordings in `data/anchor_speaker_std/`
+(see `data/anchor_speaker_profile.json`, `user_id: narendra_modi`). It is a one-person
+target-speaker verifier, not a general voice-clone detector. Re-enrolling a different target
+requires retraining; the weights here do not transfer.
+
+Measured on the current 11-clip test split (2026-09-08): accuracy `100.00%` (11/11). That
+corpus is the one target speaker against a single non-target speaker (45 chunks of one
+recording); target clips score LLR ≈ +6.0 against ≈ −5.5 for non-target, a gap of ~11 nats.
+`make_splits.py` holds out whole recordings for the target speaker, but the non-target speaker
+has only one recording session, so a session-disjoint split is impossible there and a
+contiguous block is held out instead. The training set contains **no** cloned or synthetic
+audio. These figures therefore measure separation of two unrelated recordings and say nothing
+about performance on other speakers or on cloned speech.
