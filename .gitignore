@@ -1,44 +1,182 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# ==============================================================================
+# VaniRakshak — Comprehensive .gitignore
+# Stack: Python (FastAPI, PyTorch/AI4Bharat/Whisper, Crawl4AI) + Node.js (Frontend)
+# ==============================================================================
 
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
-*.egg
-
-# Virtual environments
-venv/
-.venv/
-env/
-
-# Environment variables & secrets
+# ------------------------------------------------------------------------------
+# 1. Environment Variables & Secrets (CRITICAL SECURITY)
+# ------------------------------------------------------------------------------
 .env
 .env.*
 *.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 token.txt
 hf_token.txt
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+secrets.json
+credentials.json
+service_account.json
 
-# IDE
+# ------------------------------------------------------------------------------
+# 2. Virtual Environments
+# ------------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+**/venv/
+**/.venv/
+**/env/
+
+# ------------------------------------------------------------------------------
+# 3. Python Bytecode & Build Artifacts
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ------------------------------------------------------------------------------
+# 4. Node.js & Frontend Dependencies
+# ------------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+
+# ------------------------------------------------------------------------------
+# 5. Temporary Audio Recordings & User Uploads
+# ------------------------------------------------------------------------------
+temp_audio/
+tmp_audio/
+recordings/
+uploads/
+*.tmp
+*.temp
+mic_*.wav
+mic_*.webm
+live_speech_*.wav
+live_speech_*.webm
+
+# Preserve official tracked audio samples
+!test_audio/
+!test_audio/**
+!**/fact_app/static/samples/
+!**/fact_app/static/samples/**
+
+# ------------------------------------------------------------------------------
+# 6. AI Model Checkpoints & Large Weights
+# ------------------------------------------------------------------------------
+*.safetensors
+*.onnx
+*.engine
+*.bin
+*.pt
+*.pth
+openvino_models/
+.cache/
+hf_cache/
+models/
+checkpoints/
+whisper_models/
+
+# ------------------------------------------------------------------------------
+# 7. Web Scraper & Browser Automations (Crawl4AI & Playwright)
+# ------------------------------------------------------------------------------
+.playwright/
+pw-browsers/
+.crawl4ai/
+crawl4ai_cache/
+crawl4ai_downloads/
+*.c4a
+
+# ------------------------------------------------------------------------------
+# 8. Testing & Code Quality
+# ------------------------------------------------------------------------------
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+nosetests.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# ------------------------------------------------------------------------------
+# 9. IDE, Editors & AI Workspaces
+# ------------------------------------------------------------------------------
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+*.code-workspace
+.claude/
+.context/
+.cursor/
+.cursorrules
+.gemini/
+.agents/
 
-# OS
+# ------------------------------------------------------------------------------
+# 10. Operating System Junk
+# ------------------------------------------------------------------------------
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 
-# Test / Coverage
-.pytest_cache/
-htmlcov/
-.coverage
-coverage.xml
+# Linux
+.directory
+.fuse_hidden*
+.Trash-*
 
-# Logs
-*.log
-
-# Local check backups
+# ------------------------------------------------------------------------------
+# 11. Local Backups & Scratch Files
+# ------------------------------------------------------------------------------
+*.bak
+scratch/
 VaniRakshak-ayush-check/
