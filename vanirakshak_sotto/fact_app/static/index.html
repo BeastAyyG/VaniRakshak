@@ -7,1667 +7,420 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <title>VaniRakshak (वाणी रक्षक) — Voice Scam Shield & Fact Grounding</title>
-  <meta name="description" content="State-of-the-art Voice Scam Shield & Real-time Fact Detector combining Groq Cloud Whisper Large v3 Turbo, Gemini Threat Matrix, and Crawl4AI live web grounding.">
-  
-  <!-- Google Fonts: Newsreader (Waldenburg editorial serif substitute), Playfair & Inter -->
+  <title>VaniRakshak (वाणी रक्षक) — Voice Scam Shield &amp; Evidence Grounding</title>
+  <meta name="description" content="State-of-the-art voice scam defense, real-time digital arrest coercion detection, and live evidence fact-checking.">
+
+  <!-- Google Fonts: Newsreader (Editorial Serif), Inter (Sans UI), JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-  
-  <link rel="stylesheet" href="/static/styles.css?v=2026_elevenlabs_monochrome_v2">
-<style id="elevenlabs-inlined-styles">
-/* Global Safety Resets - Zero Default Browser Blue */
-a, a:visited, a:hover, a:active {
-  color: inherit !important;
-  text-decoration: none !important;
-}
-input[type="checkbox"], input[type="radio"] {
-  accent-color: #1c1917 !important;
-}
-*:focus-visible {
-  outline: 2px solid #1c1917 !important;
-  outline-offset: 2px !important;
-}
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&display=swap" rel="stylesheet">
 
-/* Global Safety Resets - Zero Default Browser Blue */
-a, a:visited, a:hover, a:active {
-  color: inherit !important;
-  text-decoration: none !important;
-}
-input[type="checkbox"], input[type="radio"] {
-  accent-color: #1c1917 !important;
-}
-*:focus-visible {
-  outline: 2px solid #1c1917 !important;
-  outline-offset: 2px !important;
-}
-
-/* ==========================================================================
-   VANIRAKSHAK — ELEVENLABS EDITORIAL PRINT DESIGN
-   Aesthetic: Quietly Editorial Print Magazine (Inspired by ElevenLabs)
-   Canvas: Warm Off-White Paper (#f8f8f6), Deep Ink (#0c0a09 / #1c1917)
-   Typography: High-Contrast Serif (Newsreader / Playfair) + Inter Editorial Body
-   CTAs: Near-black ink pill primary, hairline outline pill secondary
-   ZERO BLUE / CYAN TINTS — PURE MONOCHROME WITH WARM EDITORIAL ACCENTS
-   ========================================================================== */
-
-:root {
-  /* Warm Paper & Ink Palette */
-  --canvas: #f8f8f6;
-  --canvas-soft: #fcfcfb;
-  --surface-card: #ffffff;
-  --surface-strong: #f1f0eb;
-  
-  --ink: #0c0a09;
-  --ink-secondary: #1c1917;
-  --body: #4a4a47;
-  --body-strong: #1c1917;
-  --muted: #73726d;
-  --muted-soft: #a5a49e;
-  
-  /* Hairlines & Borders */
-  --hairline: #e6e5e0;
-  --hairline-soft: #f0efea;
-  --hairline-strong: #d2d1cb;
-  
-  /* Primary Action */
-  --primary: #1c1917;
-  --primary-active: #000000;
-  --on-primary: #ffffff;
-  
-  /* Semantic (Soft, Muted, Never Neon) */
-  --semantic-success: #15803d;
-  --semantic-success-bg: #f2f8f4;
-  --semantic-success-border: #cde8d5;
-
-  --semantic-error: #b91c1c;
-  --semantic-error-bg: #fdf3f3;
-  --semantic-error-border: #f9d2d2;
-
-  --semantic-warning: #b45309;
-  --semantic-warning-bg: #fef8ed;
-  --semantic-warning-border: #fce3b8;
-
-  /* Typography */
-  --font-display: 'Newsreader', 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-
-  /* Shapes */
-  --rounded-xs: 4px;
-  --rounded-sm: 6px;
-  --rounded-md: 8px;
-  --rounded-lg: 12px;
-  --rounded-xl: 16px;
-  --rounded-pill: 9999px;
-
-  /* Elevation */
-  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px -2px rgba(0, 0, 0, 0.02);
-  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.02), 0 8px 24px -4px rgba(0, 0, 0, 0.03);
-  --shadow-hover: 0 4px 20px -2px rgba(0, 0, 0, 0.06);
-
-  --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  background-color: var(--canvas);
-}
-
-body {
-  font-family: var(--font-body);
-  background-color: var(--canvas);
-  color: var(--ink);
-  min-height: 100vh;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Page Container */
-.container {
-  max-width: 1020px;
-  margin: 0 auto;
-  padding: 3rem 1.75rem 6rem;
-}
-
-/* Editorial Top Navigation */
-.top-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 2rem;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 3.5rem;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: baseline;
-  gap: 0.85rem;
-  text-decoration: none;
-  color: var(--ink);
-}
-
-.brand-name {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-
-.brand-tag {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.nav-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 6px 14px;
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-pill);
-  font-size: 0.76rem;
-  font-weight: 500;
-  color: var(--ink-secondary);
-  box-shadow: var(--shadow-subtle);
-}
-
-.pulse-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--semantic-success);
-}
-
-/* Hero Section */
-header {
-  text-align: left;
-  margin-bottom: 3.5rem;
-  max-width: 820px;
-}
-
-.section-eyebrow {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 1rem;
-}
-
-h1 {
-  font-family: var(--font-display);
-  font-size: clamp(2.6rem, 5.5vw, 4.2rem);
-  font-weight: 400;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  margin-bottom: 1.25rem;
-}
-
-.h1-eng {
-  display: block;
-  font-size: clamp(1.8rem, 3.8vw, 2.7rem);
-  font-weight: 300;
-  color: var(--muted);
-  letter-spacing: -0.02em;
-  margin-top: 0.35rem;
-}
-
-.subtitle {
-  font-size: 1.1rem;
-  color: var(--body);
-  font-weight: 400;
-  line-height: 1.6;
-  max-width: 720px;
-  margin-bottom: 2rem;
-}
-
-.subtitle strong {
-  color: var(--ink-secondary);
-  font-weight: 500;
-}
-
-/* Action Pills Row (like 'Try free' / 'Talk to sales') */
-.hero-cta-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 2.5rem;
-  flex-wrap: wrap;
-}
-
-.btn-pill-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--primary);
-  color: var(--on-primary);
-  border: 1px solid var(--primary);
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.92rem;
-  font-weight: 500;
-  padding: 10px 22px;
-  cursor: pointer;
-  transition: var(--transition);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
-.btn-pill-primary:hover {
-  background-color: var(--primary-active);
-  transform: translateY(-1px);
-}
-
-.btn-pill-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--surface-card);
-  color: var(--ink);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.92rem;
-  font-weight: 500;
-  padding: 10px 22px;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.btn-pill-secondary:hover {
-  border-color: var(--ink);
-}
-
-/* Nav Tabs Switcher */
-.nav-tabs-wrapper {
-  margin-bottom: 2.5rem;
-  border-top: 1px solid var(--hairline-soft);
-  padding-top: 2rem;
-}
-
-.nav-tabs {
-  display: inline-flex;
-  background-color: var(--surface-strong);
-  padding: 4px;
-  border-radius: var(--rounded-pill);
-  border: 1px solid var(--hairline);
-}
-
-.tab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 8px 22px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  font-weight: 500;
-  border-radius: var(--rounded-pill);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.tab-btn:hover {
-  color: var(--ink);
-}
-
-.tab-btn.active {
-  background-color: var(--surface-card);
-  color: var(--ink);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
-.tab-icon {
-  font-size: 0.95rem;
-}
-
-/* Tab Content Visibility */
-.tab-content {
-  display: none;
-}
-
-.tab-content.active {
-  display: block;
-  animation: fadeIn 0.2s ease forwards;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Editorial Section Header */
-.section-marker {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.section-marker::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background-color: var(--hairline);
-}
-
-/* Pure Surface Cards */
-.glass-card, .surface-card {
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-xl);
-  padding: 2.25rem;
-  box-shadow: var(--shadow-card);
-  margin-bottom: 2.5rem;
-  transition: var(--transition);
-}
-
-.glass-card:hover {
-  border-color: var(--hairline-strong);
-}
-
-.card-header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--hairline-soft);
-}
-
-.preset-title {
-  font-size: 1.15rem;
-  font-weight: 500;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
-.section-desc {
-  font-size: 0.88rem;
-  color: var(--muted);
-  margin-top: 0.2rem;
-}
-
-.badge-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  background-color: var(--surface-strong);
-  border-radius: var(--rounded-pill);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* Audio Preset Samples Grid */
-.samples-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 1rem;
-}
-
-.sample-card {
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
-  padding: 1.25rem;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 1rem;
-  transition: var(--transition);
-}
-
-.sample-card:hover {
-  background-color: var(--surface-card);
-  border-color: var(--hairline-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
-}
-
-.sample-card.active {
-  background-color: var(--surface-card);
-  border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink);
-}
-
-.sample-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.sample-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: var(--rounded-pill);
-  background-color: var(--surface-strong);
-  color: var(--muted);
-}
-
-.sample-badge.fraud {
-  background-color: var(--semantic-error-bg);
-  color: var(--semantic-error);
-  border: 1px solid var(--semantic-error-border);
-}
-
-.sample-badge.utility {
-  background-color: var(--semantic-warning-bg);
-  color: var(--semantic-warning);
-  border: 1px solid var(--semantic-warning-border);
-}
-
-.sample-badge.fact {
-  background-color: var(--semantic-success-bg);
-  color: var(--semantic-success);
-  border: 1px solid var(--semantic-success-border);
-}
-
-.sample-lang {
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-
-.sample-title {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--ink);
-  margin-bottom: 0.35rem;
-}
-
-.sample-desc {
-  font-size: 0.82rem;
-  color: var(--body);
-  line-height: 1.45;
-}
-
-.sample-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--muted);
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--hairline-soft);
-  transition: var(--transition);
-}
-
-.sample-card:hover .sample-action {
-  color: var(--ink);
-}
-
-.sample-skeleton {
-  padding: 2.5rem;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.9rem;
-  grid-column: 1 / -1;
-}
-
-/* Voice Controls & Columns */
-.voice-hero-controls {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 2.5rem;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-@media (max-width: 800px) {
-  .voice-hero-controls {
-    grid-template-columns: 1fr;
-    gap: 1.75rem;
-  }
-}
-
-.column-divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.column-divider span {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted-soft);
-  letter-spacing: 0.1em;
-  background-color: var(--surface-card);
-  padding: 6px 12px;
-  border-radius: var(--rounded-pill);
-  border: 1px solid var(--hairline);
-}
-
-/* Microphone HUD */
-.mic-hud {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.mic-circle-btn {
-  width: 54px;
-  height: 54px;
-  border-radius: var(--rounded-pill);
-  border: 1px solid var(--hairline-strong);
-  background-color: var(--surface-card);
-  color: var(--ink);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  transition: var(--transition);
-  box-shadow: var(--shadow-subtle);
-}
-
-.mic-circle-btn:hover {
-  border-color: var(--ink);
-  transform: scale(1.02);
-}
-
-.mic-circle-btn.recording {
-  background-color: var(--semantic-error);
-  color: #ffffff;
-  border-color: var(--semantic-error);
-  animation: micPulse 1.8s infinite;
-}
-
-@keyframes micPulse {
-  0% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.35); }
-  70% { box-shadow: 0 0 0 12px rgba(185, 28, 28, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0); }
-}
-
-.mic-status-wrapper {
-  flex: 1;
-}
-
-.mic-label {
-  font-size: 0.98rem;
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.mic-hint {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.visualizer-canvas {
-  width: 100%;
-  height: 44px;
-  border-radius: var(--rounded-sm);
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  display: block;
-}
-
-/* Timer & Progress */
-.timer-container {
-  margin-top: 0.75rem;
-}
-
-.timer-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-bottom: 0.35rem;
-}
-
-.timer-display {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.timer-badge {
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  background-color: var(--surface-strong);
-  border-radius: var(--rounded-xs);
-  color: var(--muted);
-}
-
-.record-progress-bar {
-  width: 100%;
-  height: 3px;
-  background-color: var(--hairline);
-  border-radius: var(--rounded-pill);
-  overflow: hidden;
-}
-
-.record-progress-fill {
-  height: 100%;
-  background-color: var(--primary);
-  border-radius: var(--rounded-pill);
-  transition: width 0.3s linear;
-}
-
-.auto-detect-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.auto-detect-label input[type="checkbox"] {
-  accent-color: var(--primary);
-}
-
-/* File Dropzone */
-.dropzone {
-  border: 1px dashed var(--hairline-strong);
-  background-color: var(--canvas-soft);
-  border-radius: var(--rounded-lg);
-  padding: 1.75rem 1.25rem;
-  text-align: center;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.dropzone:hover, .dropzone.dragover {
-  background-color: var(--surface-card);
-  border-color: var(--ink);
-}
-
-.file-input-hidden {
-  display: none;
-}
-
-.dropzone-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.dropzone-icon {
-  font-size: 1.5rem;
-  margin-bottom: 0.2rem;
-  color: var(--muted);
-}
-
-.dropzone-text {
-  font-size: 0.9rem;
-  color: var(--ink);
-}
-
-.dropzone-sub {
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-
-.selected-file-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.75rem;
-  padding: 8px 14px;
-  background-color: var(--surface-strong);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-pill);
-  font-size: 0.82rem;
-}
-
-.file-name-text {
-  font-weight: 500;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clear-btn {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-
-.clear-btn:hover {
-  color: var(--semantic-error);
-}
-
-/* Audio Preview Wrapper */
-.audio-preview-wrapper {
-  margin-top: 1.5rem;
-  padding: 1rem 1.25rem;
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.preview-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.audio-player {
-  width: 100%;
-  height: 38px;
-}
-
-/* Primary Action Button */
-.action-row {
-  display: flex;
-  justify-content: center;
-  margin-top: 1.75rem;
-}
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  background-color: var(--primary);
-  color: var(--on-primary);
-  border: 1px solid var(--primary);
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  font-weight: 500;
-  padding: 12px 32px;
-  min-height: 44px;
-  cursor: pointer;
-  transition: var(--transition);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--primary-active);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
-}
-
-.btn-primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-/* Loading State Box */
-.loading-box {
-  display: none;
-  text-align: center;
-  padding: 3.5rem 2rem;
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-xl);
-  box-shadow: var(--shadow-card);
-  margin-bottom: 2.5rem;
-}
-
-.loading-box.active {
-  display: block;
-  animation: fadeIn 0.25s ease;
-}
-
-.loading-radar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid var(--hairline-strong);
-  border-top-color: var(--primary);
-  margin: 0 auto 1.25rem;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-status-text {
-  font-size: 1.05rem;
-  font-weight: 500;
-  color: var(--ink);
-  margin-bottom: 0.35rem;
-}
-
-.loading-subtext {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-/* Results Section */
-.results-box {
-  display: none;
-}
-
-.results-box.active {
-  display: block;
-  animation: fadeIn 0.25s ease;
-}
-
-/* Threat Hero Banner */
-.threat-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.75rem 2rem;
-  border-radius: var(--rounded-lg);
-  margin-bottom: 2rem;
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  transition: var(--transition);
-}
-
-.threat-hero.safe {
-  background-color: var(--semantic-success-bg);
-  border-color: var(--semantic-success-border);
-}
-
-.threat-hero.warning {
-  background-color: var(--semantic-warning-bg);
-  border-color: var(--semantic-warning-border);
-}
-
-.threat-hero.danger {
-  background-color: var(--semantic-error-bg);
-  border-color: var(--semantic-error-border);
-}
-
-.threat-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-bottom: 0.35rem;
-}
-
-.threat-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1.4rem;
-  font-weight: 600;
-  color: var(--ink);
-  margin-bottom: 0.35rem;
-}
-
-.scam-type-tag {
-  font-size: 0.88rem;
-  color: var(--body);
-}
-
-.threat-score-box {
-  text-align: right;
-  min-width: 140px;
-}
-
-.score-caption {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 0.25rem;
-}
-
-.threat-score {
-  font-family: var(--font-mono);
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: var(--ink);
-  margin-bottom: 0.4rem;
-}
-
-.score-meter {
-  width: 100%;
-  height: 5px;
-  background-color: var(--hairline);
-  border-radius: var(--rounded-pill);
-  overflow: hidden;
-}
-
-.score-meter-fill {
-  height: 100%;
-  background-color: var(--primary);
-  border-radius: var(--rounded-pill);
-  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Emergency Advice Banner */
-.emergency-advice-box {
-  padding: 1.25rem 1.75rem;
-  background-color: var(--semantic-warning-bg);
-  border: 1px solid var(--semantic-warning-border);
-  border-radius: var(--rounded-lg);
-  margin-bottom: 2rem;
-}
-
-.advice-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
-}
-
-.advice-title {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--semantic-warning);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.advice-body {
-  font-size: 0.92rem;
-  color: var(--body-strong);
-  line-height: 1.5;
-}
-
-/* Content Info Sections */
-.info-section {
-  padding-top: 1.75rem;
-  border-top: 1px solid var(--hairline-soft);
-  margin-bottom: 1.75rem;
-}
-
-.section-header-flex {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.85rem;
-  flex-wrap: wrap;
-}
-
-.section-heading {
-  font-family: var(--font-body);
-  font-size: 0.98rem;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
-.lang-pills {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.lang-pill, .latency-pill, .duration-pill {
-  padding: 3px 10px;
-  border-radius: var(--rounded-pill);
-  font-size: 0.74rem;
-  font-weight: 500;
-  background-color: var(--surface-strong);
-  color: var(--muted);
-  border: 1px solid var(--hairline);
-}
-
-.transcribed-text-box {
-  padding: 1.5rem;
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
-  font-size: 1.05rem;
-  line-height: 1.65;
-  color: var(--ink);
-}
-
-/* Segments Breakdown */
-.sub-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.segments-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.segment-item {
-  display: flex;
-  align-items: baseline;
-  gap: 0.85rem;
-  padding: 9px 14px;
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline-soft);
-  border-radius: var(--rounded-md);
-  font-size: 0.88rem;
-}
-
-.segment-time {
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--muted);
-  background-color: var(--surface-strong);
-  padding: 2px 6px;
-  border-radius: var(--rounded-xs);
-  white-space: nowrap;
-}
-
-.segment-text {
-  color: var(--ink);
-}
-
-/* Red Flags */
-.red-flags-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.red-flag-item {
-  padding: 10px 14px;
-  background-color: var(--semantic-error-bg);
-  border: 1px solid var(--semantic-error-border);
-  border-radius: var(--rounded-md);
-  font-size: 0.88rem;
-  color: var(--semantic-error);
-}
-
-/* Crawl4AI Verification Card */
-.verdict-card {
-  padding: 1.5rem;
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
-}
-
-.verdict-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.verdict-pill {
-  padding: 4px 12px;
-  border-radius: var(--rounded-pill);
-  font-size: 0.76rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background-color: var(--surface-strong);
-  color: var(--ink);
-  margin-left: 0.5rem;
-}
-
-.confidence-pill {
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.fact-summary {
-  font-size: 0.95rem;
-  color: var(--ink);
-  line-height: 1.55;
-}
-
-.reason-box {
-  font-size: 0.86rem;
-  color: var(--body);
-  background-color: var(--surface-card);
-  padding: 12px 16px;
-  border-radius: var(--rounded-md);
-  border: 1px solid var(--hairline-soft);
-  line-height: 1.5;
-}
-
-/* Sources List */
-.source-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.source-card {
-  padding: 12px 16px;
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-md);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.source-link {
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: var(--primary);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.source-link:hover {
-  text-decoration: underline;
-}
-
-.source-snippet {
-  font-size: 0.8rem;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-/* Text Tab Form */
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.label-hint {
-  font-size: 0.76rem;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.input-field {
-  width: 100%;
-  padding: 12px 16px;
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--rounded-md);
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  color: var(--ink);
-  transition: var(--transition);
-}
-
-.input-field:focus {
-  outline: none;
-  background-color: var(--surface-card);
-  border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink);
-}
-
-.presets-row {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
-}
-
-.preset-btn {
-  padding: 6px 14px;
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-pill);
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--body);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.preset-btn:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
-
-/* Footer */
-footer {
-  text-align: left;
-  padding: 3rem 0 2rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  border-top: 1px solid var(--hairline);
-  margin-top: 4rem;
-}
-
-footer strong {
-  color: var(--ink-secondary);
-  font-weight: 500;
-}
-
-/* Utilities */
-.mt-2 { margin-top: 0.5rem; }
-.mt-3 { margin-top: 0.75rem; }
-.mt-4 { margin-top: 1rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-4 { margin-bottom: 1rem; }
-
-
-/* Hero CTA Pill Buttons (ElevenLabs Style: pure black active pill, hairline outline inactive pill) */
-.hero-cta-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 1.75rem;
-  margin-bottom: 3.5rem;
-  flex-wrap: wrap;
-}
-
-.hero-cta-row .tab-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 22px;
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.92rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: var(--transition);
-  border: 1px solid var(--hairline-strong);
-  background-color: var(--surface-card);
-  color: var(--ink);
-  outline: none;
-}
-
-.hero-cta-row .tab-btn:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
-
-.hero-cta-row .tab-btn.active {
-  background-color: var(--primary);
-  color: var(--on-primary);
-  border-color: var(--primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-}
-
-.hero-cta-row .tab-btn.active:hover {
-  background-color: var(--primary-active);
-}
-
-</style>
+  <link rel="stylesheet" href="/static/styles.css?v=2026_premium_v4">
 </head>
 <body>
 
-  <div class="container">
-    
-    <!-- Top Editorial Header Navigation -->
-    <nav class="top-nav">
-      <a href="/" class="nav-brand">
-        <span class="brand-name">VaniRakshak</span>
-        <span class="brand-tag">Voice Defense</span>
-      </a>
+<div class="container">
+
+  <!-- Top Sticky Navigation -->
+  <nav class="top-nav">
+    <a href="/" class="nav-brand" title="VaniRakshak Home">
+      <div class="brand-emblem">
+        <!-- Shield + Soundwave SVG -->
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M9 12v-1a3 3 0 0 1 6 0v1"/>
+          <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+        </svg>
+      </div>
+      <span class="brand-name">VaniRakshak</span>
+      <span class="brand-devanagari">वाणी रक्षक</span>
+    </a>
+
+    <div class="nav-actions">
+      <span class="nav-lang-tag">HINDI • HINGLISH • ENGLISH</span>
       <div class="nav-status-badge">
         <span class="pulse-dot"></span>
-        <span>Groq Whisper Large v3 Turbo • Online</span>
+        <span>Shield Active • Real-Time</span>
       </div>
-    </nav>
+    </div>
+  </nav>
 
-    <!-- Editorial Hero Band (Matched to Screenshot Layout) -->
-    <header>
-      <h1>Voice-AI Scam Defense of VaniRakshak</h1>
-      <p class="subtitle">
-        Voice-AI brand reading like an editorial magazine. Off-white canvas, Waldenburg Light at weight 300, real-time protection against bank KYC expiry, digital arrest coercion, and utility scams.
-      </p>
+  <!-- Editorial Hero Section -->
+  <header class="hero-header">
+    <div class="hero-eyebrow">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+      </svg>
+      Autonomous Voice Threat &amp; Scam Intelligence
+    </div>
 
-      <!-- Action Pill Buttons (like 'Try free' / 'Talk to sales' in ElevenLabs) -->
-      <div class="hero-cta-row">
-        <button type="button" class="tab-btn active" id="tab-voice">
-          <span>Voice Guardian</span>
+    <h1 class="hero-title">
+      Real-Time Scam<br>
+      <span class="hero-title-italic">&amp; Voice Fraud Defense</span>
+    </h1>
+
+    <p class="subtitle">
+      Protect yourself and your loved ones from deceptive voice calls, digital arrest coercion, and financial fraud &mdash; grounded by autonomous real-time evidence verification.
+    </p>
+
+    <!-- Trust & Feature Badges -->
+    <div class="hero-capabilities">
+      <div class="capability-chip">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>Sub-Second Heuristics</span>
+      </div>
+      <div class="capability-chip">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+        <span>Live Web Grounding</span>
+      </div>
+      <div class="capability-chip">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+        <span>1-Minute Continuous Stream</span>
+      </div>
+    </div>
+
+    <!-- Segmented Mode Control -->
+    <div class="hero-cta-row">
+      <button type="button" class="tab-btn active" id="tab-voice">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+        <span id="hero-cta-voice">Voice Guardian</span>
+      </button>
+      <button type="button" class="tab-btn" id="tab-text">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span id="hero-cta-text">Text Fact Checker</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================================================================== -->
+  <!-- TAB 1: VOICE GUARDIAN (SPEECH STUDIO & AUDIO UPLOAD)                -->
+  <!-- ==================================================================== -->
+  <section id="section-voice" class="tab-content active">
+
+    <div class="section-marker">01 &mdash; Live Speech Recording &amp; Audio Upload</div>
+
+    <main class="glass-card">
+      <div class="voice-hero-controls">
+
+        <!-- Column A: Live Voice Recording Studio -->
+        <div class="record-column">
+          <div class="preset-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+            Live Voice Studio
+          </div>
+
+          <div class="mic-hud">
+            <button type="button" id="mic-btn" class="mic-circle-btn" title="Click to Record (Up to 1 Minute Audio)">
+              <span id="mic-icon" class="mic-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+              </span>
+            </button>
+            <div class="mic-status-wrapper">
+              <div id="mic-label" class="mic-label">Ready to Record</div>
+              <div id="mic-hint" class="mic-hint">Click mic to capture up to 1 minute of speech (60s max)</div>
+            </div>
+          </div>
+
+          <!-- Live Audio Visualizer Canvas -->
+          <canvas id="visualizer-canvas" class="visualizer-canvas" width="360" height="48"></canvas>
+
+          <!-- Timer & Progress Bar -->
+          <div class="timer-container">
+            <div class="timer-row">
+              <span id="timer-display" class="timer-display">00:00 / 01:00</span>
+              <span class="timer-badge">60s Limit</span>
+            </div>
+            <div class="record-progress-bar">
+              <div id="record-progress-fill" class="record-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Auto-Detect Checkbox -->
+          <label class="auto-detect-label">
+            <input type="checkbox" id="auto-detect-checkbox" checked>
+            <span>Auto-detect immediately when recording completes</span>
+          </label>
+        </div>
+
+        <!-- Divider -->
+        <div class="column-divider">
+          <span>OR</span>
+        </div>
+
+        <!-- Column B: Call Audio File Dropzone -->
+        <div class="upload-column">
+          <div class="preset-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            Intercepted Audio File
+          </div>
+
+          <div id="dropzone" class="dropzone">
+            <input type="file" id="audio-file-input" accept="audio/*,.wav,.mp3,.webm,.ogg,.m4a" class="file-input-hidden">
+            <div class="dropzone-content">
+              <div class="dropzone-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M12 12v9"></path><path d="m8 16 4-4 4 4"></path></svg>
+              </div>
+              <span class="dropzone-text"><strong>Click to browse</strong> or drag audio file</span>
+              <span class="dropzone-sub">WAV, MP3, WEBM, OGG, M4A</span>
+            </div>
+          </div>
+
+          <div id="selected-file-info" class="selected-file-info" style="display: none;">
+            <span id="file-name" class="file-name-text">filename.mp3</span>
+            <button type="button" id="clear-file-btn" class="clear-btn" title="Remove file">✕</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Audio Player Preview if loaded -->
+      <div id="audio-preview-wrapper" class="audio-preview-wrapper" style="display: none;">
+        <div class="preview-label">Selected Audio Stream:</div>
+        <audio id="audio-player" controls class="audio-player"></audio>
+      </div>
+
+      <!-- Submit Audio Button -->
+      <div class="action-row">
+        <button type="button" id="analyze-voice-btn" class="btn-primary" disabled>
+          <span id="voice-btn-text">Transcribe &amp; Analyze Audio</span>
+          <span id="voice-btn-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </span>
         </button>
-        <button type="button" class="tab-btn" id="tab-text">
-          <span>Text Fact Checker</span>
-        </button>
       </div>
-    </header>
+    </main>
 
-    <!-- ==================================================================== -->
-    <!-- TAB 1: VOICE GUARDIAN -->
-    <!-- ==================================================================== -->
-    <section id="section-voice" class="tab-content active">
-      
-      <!-- 02 — Live Mic & Audio Chunk Uploader -->
-      <div class="section-marker">01 — Live Recording & File Upload</div>
-      <main class="glass-card">
-        <div class="voice-hero-controls">
-          
-          <!-- Live Mic Recorder Column -->
-          <div class="record-column">
-            <div class="preset-title mb-2">Live Voice Recording</div>
-            
-            <div class="mic-hud">
-              <button type="button" id="mic-btn" class="mic-circle-btn" title="Click to Record (Up to 1 Minute Max)">
-                <span id="mic-icon" class="mic-icon">🎙️</span>
-              </button>
-              <div class="mic-status-wrapper">
-                <div id="mic-label" class="mic-label">Ready to Record</div>
-                <div id="mic-hint" class="mic-hint">Click mic to record up to 1 minute audio (60s max)</div>
-              </div>
+    <!-- Voice Loading Scanner -->
+    <div id="voice-loading-box" class="loading-box">
+      <div class="loading-radar"></div>
+      <div id="voice-loading-status" class="loading-status-text">Transcribing audio speech...</div>
+      <div id="voice-loading-detail" class="loading-subtext">Parsing multi-dialect acoustics and running scam heuristic analysis...</div>
+    </div>
+
+    <!-- Voice Analysis Results Box -->
+    <section id="voice-results-box" class="results-box">
+      <div class="section-marker">02 &mdash; Threat Assessment &amp; Ground-Truth Evidence</div>
+
+      <div class="glass-card">
+
+        <!-- Threat Status Hero -->
+        <div id="threat-hero" class="threat-hero safe">
+          <div class="threat-meta">
+            <div class="threat-label">Scam &amp; Threat Assessment</div>
+            <div id="threat-badge" class="threat-badge">
+              <span id="threat-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+              </span>
+              <span id="threat-text">NORMAL CONVERSATION</span>
             </div>
-
-            <!-- Waveform Canvas -->
-            <canvas id="visualizer-canvas" class="visualizer-canvas" width="360" height="44"></canvas>
-            
-            <!-- Timer & 1-Min Progress Bar -->
-            <div class="timer-container mt-2">
-              <div class="timer-row">
-                <span id="timer-display" class="timer-display">00:00 / 01:00</span>
-                <span class="timer-badge">1 Min Max</span>
-              </div>
-              <div class="record-progress-bar">
-                <div id="record-progress-fill" class="record-progress-fill" style="width: 0%;"></div>
-              </div>
-            </div>
-
-            <!-- Auto-Detect Checkbox -->
-            <label class="auto-detect-label mt-2">
-              <input type="checkbox" id="auto-detect-checkbox" checked>
-              <span>Auto-detect immediately when recording completes</span>
-            </label>
+            <div id="scam-type-tag" class="scam-type-tag">None (Safe Speech)</div>
           </div>
 
-          <!-- Divider -->
-          <div class="column-divider">
-            <span>OR</span>
+          <div class="threat-score-box">
+            <div class="score-caption">Fraud Risk Score</div>
+            <div id="threat-score" class="threat-score">0 / 100</div>
+            <div class="score-meter">
+              <div id="score-meter-fill" class="score-meter-fill" style="width: 0%;"></div>
+            </div>
           </div>
+        </div>
 
-          <!-- File Dropzone Column -->
-          <div class="upload-column">
-            <div class="preset-title mb-2">Upload Call Audio</div>
-            <div id="dropzone" class="dropzone">
-              <input type="file" id="audio-file-input" accept="audio/*,.wav,.mp3,.webm,.ogg,.m4a" class="file-input-hidden">
-              <div class="dropzone-content">
-                <span class="dropzone-icon">📁</span>
-                <span class="dropzone-text"><strong>Click to browse</strong> or drag & drop</span>
-                <span class="dropzone-sub">WAV, MP3, WEBM, OGG, M4A (Groq Cloud Accelerated)</span>
+        <!-- Emergency Action Alert Banner -->
+        <div id="emergency-advice-box" class="emergency-advice-box" style="display: none;">
+          <div class="advice-header">
+            <span class="advice-icon">⚠️</span>
+            <span class="advice-title">Emergency Defense Directive</span>
+          </div>
+          <p id="advice-text" class="advice-body"></p>
+        </div>
+
+        <!-- Transcribed Audio Chunk Card -->
+        <div class="info-section">
+          <div class="section-header-flex">
+            <div class="section-heading">Speech Transcript</div>
+            <div class="lang-pills">
+              <span id="lang-pill" class="lang-pill">English (en)</span>
+              <span id="latency-pill" class="latency-pill">Latency: ~1.1s</span>
+              <span id="duration-pill" class="duration-pill">Duration: 10.7s</span>
+            </div>
+          </div>
+          <div id="transcribed-text-box" class="transcribed-text-box"></div>
+
+          <!-- Speech Timeline & Segments -->
+          <div id="segments-section" class="mt-3" style="display: none;">
+            <div class="sub-label mb-2">Speech Timeline &amp; Segments:</div>
+            <div id="segments-list" class="segments-list"></div>
+          </div>
+        </div>
+
+        <!-- Red Flags Detected -->
+        <div id="red-flags-section" class="info-section" style="display: none;">
+          <div class="section-heading">Detected Threat Indicators &amp; Coercion Tactics</div>
+          <div id="red-flags-list" class="red-flags-list"></div>
+        </div>
+
+        <!-- Grounded Web Evidence -->
+        <div id="voice-fact-section" class="info-section" style="display: none;">
+          <div class="section-heading">Live Evidence Grounding</div>
+
+          <div id="voice-verdict-card" class="verdict-card">
+            <div class="verdict-row">
+              <div>
+                <span class="sub-label">Fact Verdict:</span>
+                <span id="voice-fact-verdict" class="verdict-pill">VERIFYING</span>
               </div>
+              <div id="voice-fact-confidence" class="confidence-pill">Confidence: 0%</div>
             </div>
-            <div id="selected-file-info" class="selected-file-info" style="display: none;">
-              <span id="file-name" class="file-name-text">filename.mp3</span>
-              <button type="button" id="clear-file-btn" class="clear-btn" title="Remove file">✕</button>
-            </div>
+            <p id="voice-fact-summary" class="fact-summary mt-2"></p>
+            <div id="voice-fact-reasoning" class="reason-box mt-2"></div>
           </div>
 
+          <!-- Authoritative Sources -->
+          <div class="mt-3">
+            <div class="sub-label mb-2">Authoritative Web Sources:</div>
+            <div id="voice-sources-container" class="source-list"></div>
+          </div>
         </div>
 
-        <!-- Audio Player Preview if loaded -->
-        <div id="audio-preview-wrapper" class="audio-preview-wrapper" style="display: none;">
-          <div class="preview-label">Selected Audio Stream:</div>
-          <audio id="audio-player" controls class="audio-player"></audio>
-        </div>
-
-        <!-- Submit Audio Button -->
-        <div class="action-row mt-4">
-          <button type="button" id="analyze-voice-btn" class="btn-primary" disabled>
-            <span id="voice-btn-text">Transcribe & Analyze Chunk</span>
-            <span id="voice-btn-icon">⚡</span>
-          </button>
-        </div>
-      </main>
-
-      <!-- Voice Loading Radar -->
-      <div id="voice-loading-box" class="loading-box">
-        <div class="loading-radar"></div>
-        <div id="voice-loading-status" class="loading-status-text">Transcribing with Groq Whisper Large v3 Turbo...</div>
-        <div id="voice-loading-detail" class="loading-subtext">Executing sub-second Cloud LPU speech recognition...</div>
       </div>
-
-      <!-- 03 — Voice Analysis Results Box -->
-      <section id="voice-results-box" class="results-box">
-        <div class="section-marker">02 — Threat Assessment & Live Grounding</div>
-        <div class="glass-card">
-          
-          <!-- Threat Status Hero -->
-          <div id="threat-hero" class="threat-hero safe">
-            <div class="threat-meta">
-              <div class="threat-label">Scam & Threat Assessment</div>
-              <div id="threat-badge" class="threat-badge">
-                <span id="threat-icon">🛡️</span>
-                <span id="threat-text">NORMAL CONVERSATION</span>
-              </div>
-              <div id="scam-type-tag" class="scam-type-tag">None (Safe Speech)</div>
-            </div>
-            <div class="threat-score-box">
-              <div class="score-caption">Fraud Risk Score</div>
-              <div id="threat-score" class="threat-score">0 / 100</div>
-              <div class="score-meter">
-                <div id="score-meter-fill" class="score-meter-fill" style="width: 0%;"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Emergency Action Alert Banner -->
-          <div id="emergency-advice-box" class="emergency-advice-box">
-            <div class="advice-header">
-              <span class="advice-icon">⚠️</span>
-              <span class="advice-title">VaniRakshak Defense Directive</span>
-            </div>
-            <p id="advice-text" class="advice-body"></p>
-          </div>
-
-          <!-- Transcribed Audio Chunk Card -->
-          <div class="info-section">
-            <div class="section-header-flex">
-              <div class="section-heading">Speech Recognition Transcript</div>
-              <div class="lang-pills">
-                <span id="lang-pill" class="lang-pill">English (en)</span>
-                <span id="latency-pill" class="latency-pill">Latency: ~1.1s</span>
-                <span id="duration-pill" class="duration-pill">Duration: 10.7s</span>
-              </div>
-            </div>
-            <div id="transcribed-text-box" class="transcribed-text-box"></div>
-            
-            <!-- Segment Breakdown for Extended Audio -->
-            <div id="segments-section" class="mt-3" style="display: none;">
-              <div class="sub-label mb-2">Speech Timeline & Segments:</div>
-              <div id="segments-list" class="segments-list"></div>
-            </div>
-          </div>
-
-          <!-- Red Flags Detected -->
-          <div id="red-flags-section" class="info-section" style="display: none;">
-            <div class="section-heading">Detected Threat Indicators & Psychological Coercion</div>
-            <div id="red-flags-list" class="red-flags-list"></div>
-          </div>
-
-          <!-- Crawl4AI Grounded Verification -->
-          <div id="voice-fact-section" class="info-section">
-            <div class="section-heading">Crawl4AI Live Web Grounding & Evidence</div>
-            
-            <div id="voice-verdict-card" class="verdict-card">
-              <div class="verdict-row">
-                <div>
-                  <span class="sub-label">Fact Verdict:</span>
-                  <span id="voice-fact-verdict" class="verdict-pill">VERIFYING</span>
-                </div>
-                <div id="voice-fact-confidence" class="confidence-pill">Confidence: 0%</div>
-              </div>
-              <p id="voice-fact-summary" class="fact-summary mt-2"></p>
-              <div id="voice-fact-reasoning" class="reason-box mt-2"></div>
-            </div>
-
-            <!-- Crawled Sources -->
-            <div class="mt-3">
-              <div class="sub-label mb-2">Authoritative Web Sources Scraped by Crawl4AI:</div>
-              <div id="voice-sources-container" class="source-list"></div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
     </section>
 
-    <!-- ==================================================================== -->
-    <!-- TAB 2: TEXT FACT CHECKER -->
-    <!-- ==================================================================== -->
-    <section id="section-text" class="tab-content">
-      <div class="section-marker">01 — Claim Verification</div>
-      <main class="glass-card">
-        
-        <!-- Preset Quick-Pills -->
-        <div class="preset-section">
-          <div class="preset-title mb-2">Quick Test Presets</div>
-          <div class="presets-row">
-            <button type="button" class="preset-btn" data-claim="Barcelona is currently the top team in LaLiga." data-urls="">
-              ⚽ Barcelona LaLiga Leader
-            </button>
-            <button type="button" class="preset-btn" data-claim="MRF stock is trading above ₹1,00,000 per share right now." data-urls="https://www.google.com/finance/quote/MRF:NSE, https://www.screener.in/company/MRF/">
-              🏎️ MRF Stock > ₹1,00,000
-            </button>
-            <button type="button" class="preset-btn" data-claim="Chandrayaan-3 successfully landed on the south pole of the Moon." data-urls="https://en.wikipedia.org/wiki/Chandrayaan-3">
-              🚀 Chandrayaan-3 Moon Landing
-            </button>
-            <button type="button" class="preset-btn" data-claim="Bitcoin reached an all-time high above $90,000." data-urls="https://coinmarketcap.com/currencies/bitcoin/">
-              🪙 Bitcoin Price
-            </button>
-            <button type="button" class="preset-btn" data-claim="Electricity bill unpaid warning message asking to call mobile number is a scam." data-urls="">
-              ⚡ Electricity Scam Advisory
-            </button>
-          </div>
-        </div>
+  </section>
 
-        <!-- Claim Input -->
-        <div class="form-group">
-          <label for="claim-input" class="form-label">
-            <span>Claim / Statement to Verify</span>
-            <span class="label-hint">What do you want to fact-check?</span>
-          </label>
-          <textarea 
-            id="claim-input" 
-            class="input-field" 
-            placeholder="e.g. Barcelona is currently leading LaLiga or MRF is trading above ₹1,00,000 per share..."
-            rows="3"
-          ></textarea>
-        </div>
+  <!-- ==================================================================== -->
+  <!-- TAB 2: DIRECT TEXT FACT CHECKER                                     -->
+  <!-- ==================================================================== -->
+  <section id="section-text" class="tab-content">
+    <div class="section-marker">01 &mdash; Claim Verification &amp; Evidence Lookup</div>
 
-        <!-- URL Input (Optional) -->
-        <div class="form-group">
-          <label for="url-input" class="form-label">
-            <span>Specific Target URL(s) to Scrape</span>
-            <span class="label-hint">Optional (comma separated, or leave blank for Crawl4AI live search discovery)</span>
-          </label>
-          <input 
-            type="text" 
-            id="url-input" 
-            class="input-field" 
-            placeholder="e.g. https://www.google.com/finance/quote/MRF:NSE, https://www.screener.in/company/MRF/"
-          />
-        </div>
+    <main class="glass-card">
 
-        <!-- Submit Button -->
-        <div class="action-row">
-          <button type="button" id="verify-text-btn" class="btn-primary">
-            <span id="text-btn-text">Detect & Verify Fact</span>
-            <span id="text-btn-icon">⚡</span>
+      <!-- Preset Quick-Pills -->
+      <div class="preset-section">
+        <div class="preset-title mb-2">Quick Test Presets</div>
+        <div class="presets-row">
+          <button type="button" class="preset-btn" data-claim="Barcelona is currently the top team in LaLiga." data-urls="">
+            <span>⚽</span> Barcelona LaLiga Leader
+          </button>
+          <button type="button" class="preset-btn" data-claim="MRF stock is trading above ₹1,00,000 per share right now." data-urls="https://www.google.com/finance/quote/MRF:NSE, https://www.screener.in/company/MRF/">
+            <span>📈</span> MRF Stock &gt; ₹1,00,000
+          </button>
+          <button type="button" class="preset-btn" data-claim="Chandrayaan-3 successfully landed on the south pole of the Moon." data-urls="https://en.wikipedia.org/wiki/Chandrayaan-3">
+            <span>🚀</span> Chandrayaan-3 Moon Landing
+          </button>
+          <button type="button" class="preset-btn" data-claim="Electricity bill unpaid warning message asking to call mobile number is a scam." data-urls="">
+            <span>⚡</span> Electricity Scam Advisory
           </button>
         </div>
-
-      </main>
-
-      <!-- Text Loading Box -->
-      <div id="text-loading-box" class="loading-box">
-        <div class="loading-radar"></div>
-        <div id="text-loading-status" class="loading-status-text">Launching Crawl4AI Playwright Browser...</div>
-        <div id="text-loading-detail" class="loading-subtext">Navigating to target URLs and extracting clean markdown content...</div>
       </div>
 
-      <!-- Text Results Section -->
-      <section id="text-results-box" class="results-box">
-        <div class="section-marker">02 — Fact Verification Evidence</div>
-        <div class="glass-card">
-          
-          <!-- Verdict Hero Banner -->
-          <div id="text-verdict-hero" class="verdict-hero">
-            <div>
-              <div class="preset-title" style="margin-bottom: 0.2rem;">Verification Verdict</div>
-              <div id="text-verdict-badge" class="verdict-badge">
-                <span id="text-verdict-icon"></span>
-                <span id="text-verdict-text">VERIFYING</span>
-              </div>
+      <!-- Claim Input -->
+      <div class="form-group">
+        <label for="claim-input" class="form-label">
+          <span>Claim / Statement to Verify</span>
+          <span class="label-hint">What do you want to verify against authoritative web sources?</span>
+        </label>
+        <textarea
+          id="claim-input"
+          class="input-field"
+          placeholder="e.g. Electricity bill unpaid warning asking to contact personal mobile number, or MRF stock trading above ₹1,00,000..."
+          rows="3"
+        ></textarea>
+      </div>
+
+      <!-- URL Input (Optional) -->
+      <div class="form-group">
+        <label for="url-input" class="form-label">
+          <span>Specific Target URL(s) to Scrape</span>
+          <span class="label-hint">Optional &mdash; comma separated, or leave blank for autonomous web discovery</span>
+        </label>
+        <input
+          type="text"
+          id="url-input"
+          class="input-field"
+          placeholder="e.g. https://en.wikipedia.org/wiki/Chandrayaan-3"
+        />
+      </div>
+
+      <!-- Submit Button -->
+      <div class="action-row">
+        <button type="button" id="verify-text-btn" class="btn-primary">
+          <span id="text-btn-text">Detect &amp; Verify Fact</span>
+          <span id="text-btn-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </span>
+        </button>
+      </div>
+
+    </main>
+
+    <!-- Text Loading Box -->
+    <div id="text-loading-box" class="loading-box">
+      <div class="loading-radar"></div>
+      <div id="text-loading-status" class="loading-status-text">Searching the web...</div>
+      <div id="text-loading-detail" class="loading-subtext">Navigating to authoritative sources and cross-referencing claims...</div>
+    </div>
+
+    <!-- Text Results Section -->
+    <section id="text-results-box" class="results-box">
+      <div class="section-marker">02 &mdash; Evidence Verification Report</div>
+
+      <div class="glass-card">
+
+        <!-- Verdict Hero Banner -->
+        <div id="text-verdict-hero" class="verdict-hero">
+          <div>
+            <div class="preset-title" style="margin-bottom: 0.2rem;">Verification Verdict</div>
+            <div id="text-verdict-badge" class="verdict-badge">
+              <span id="text-verdict-icon"></span>
+              <span id="text-verdict-text">VERIFYING</span>
             </div>
-            <div class="confidence-box">
-              <div class="preset-title" style="margin-bottom: 0.2rem;">Confidence</div>
-              <div id="text-confidence-val" class="confidence-val">0%</div>
-              <div class="confidence-bar">
-                <div id="text-confidence-fill" class="confidence-fill" style="width: 0%;"></div>
-              </div>
+          </div>
+          <div class="confidence-box">
+            <div class="preset-title" style="margin-bottom: 0.2rem;">Confidence</div>
+            <div id="text-confidence-val" class="confidence-val">0%</div>
+            <div class="confidence-bar">
+              <div id="text-confidence-fill" class="confidence-fill" style="width: 0%;"></div>
             </div>
           </div>
-
-          <!-- Factual Summary -->
-          <div class="info-section">
-            <div class="section-heading">Summary</div>
-            <p id="text-summary-content" class="summary-text"></p>
-          </div>
-
-          <!-- Evidence-Backed Reasoning -->
-          <div class="info-section">
-            <div class="section-heading">Evidence-Backed Analysis</div>
-            <div id="text-reasoning-content" class="reason-box"></div>
-          </div>
-
-          <!-- Key Facts Extracted -->
-          <div id="text-key-facts-section" class="info-section">
-            <div class="section-heading">Key Facts Extracted by Crawl4AI</div>
-            <div id="text-facts-container" class="facts-grid"></div>
-          </div>
-
-          <!-- Scraped Sources Drawer -->
-          <div class="info-section" style="margin-bottom: 0;">
-            <div class="section-heading">Sources Scraped by Crawl4AI</div>
-            <div id="text-sources-container" class="source-list"></div>
-          </div>
-
         </div>
-      </section>
+
+        <!-- Factual Summary -->
+        <div class="info-section">
+          <div class="section-heading">Summary</div>
+          <p id="text-summary-content" class="summary-text"></p>
+        </div>
+
+        <!-- Evidence-Backed Reasoning -->
+        <div class="info-section">
+          <div class="section-heading">Evidence-Backed Analysis</div>
+          <div id="text-reasoning-content" class="reason-box"></div>
+        </div>
+
+        <!-- Key Facts Extracted -->
+        <div id="text-key-facts-section" class="info-section">
+          <div class="section-heading">Key Facts Extracted</div>
+          <div id="text-facts-container" class="facts-grid"></div>
+        </div>
+
+        <!-- Scraped Sources Drawer -->
+        <div class="info-section" style="margin-bottom: 0;">
+          <div class="section-heading">Authoritative Sources</div>
+          <div id="text-sources-container" class="source-list"></div>
+        </div>
+
+      </div>
     </section>
 
-    <!-- Editorial Footer -->
-    <footer>
-      <strong>VaniRakshak</strong> — Voice Scam & Fact Shield. Powered by <strong>Groq Whisper Large v3 Turbo</strong>, <strong>Crawl4AI</strong>, and <strong>Google Gemini</strong>.
-    </footer>
-  </div>
+  </section>
 
-  <script src="/static/app.js"></script>
+  <!-- Editorial Footer -->
+  <footer>
+    <strong>VaniRakshak</strong> &mdash; Autonomous Speech Scam &amp; Threat Defense Shield. Built for real-time voice intelligence and evidence grounding.
+  </footer>
+
+</div>
+
+<script src="/static/app.js"></script>
 </body>
 </html>

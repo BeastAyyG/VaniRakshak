@@ -9,6 +9,47 @@
 // ==========================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+
+  // Modern SVG Icons for crisp, professional rendering
+  const SVG_ICONS = {
+    mic: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>`,
+    stop: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"></rect></svg>`,
+    spark: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`,
+    shield: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>`,
+    alert: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+    critical: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`,
+    spinner: `<div class="loading-radar" style="width: 14px; height: 14px; border-width: 2px; margin: 0; display: inline-block;"></div>`,
+    check: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+    cross: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+    question: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`
+  };
+
+  function drawIdleVisualizer() {
+    if (!visualizerCanvas) return;
+    const ctx = visualizerCanvas.getContext("2d");
+    const w = visualizerCanvas.width;
+    const h = visualizerCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+
+    const bars = 48;
+    const barWidth = 4;
+    const spacing = (w - (bars * barWidth)) / (bars - 1);
+    ctx.fillStyle = "#e2e0d8";
+
+    for (let i = 0; i < bars; i++) {
+      const norm = i / (bars - 1);
+      const wave = Math.sin(norm * Math.PI) * 0.7 + Math.sin(norm * Math.PI * 3) * 0.3;
+      const barH = Math.max(3, Math.abs(wave) * (h * 0.55));
+      const x = i * (barWidth + spacing);
+      const y = (h - barH) / 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, barWidth, barH, 2);
+      ctx.fill();
+    }
+  }
+
   // ------------------------------------------------------------------------
   // TAB NAVIGATION
   // ------------------------------------------------------------------------
@@ -303,7 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       mediaRecorder.start();
       micBtn.classList.add("recording");
-      micIcon.textContent = "⏹️";
+      micIcon.innerHTML = SVG_ICONS.stop;
       micLabel.textContent = "Recording Audio...";
       micHint.textContent = "Click stop anytime or auto-stops at 1 minute (60s max)";
 
@@ -340,7 +381,7 @@ document.addEventListener("DOMContentLoaded", () => {
       mediaRecorder.stop();
     }
     micBtn.classList.remove("recording");
-    micIcon.textContent = "🎙️";
+    micIcon.innerHTML = SVG_ICONS.mic;
     micLabel.textContent = "Audio Captured (1 Min Max)";
     micHint.textContent = "Ready to verify your audio";
   }
@@ -390,8 +431,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function cleanupVisualizer() {
     if (visualizerAnimId) cancelAnimationFrame(visualizerAnimId);
     if (audioContext && audioContext.state !== "closed") audioContext.close();
-    const ctx = visualizerCanvas.getContext("2d");
-    ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+    drawIdleVisualizer();
   }
 
   // ------------------------------------------------------------------------
@@ -438,14 +478,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isLoading) {
       analyzeVoiceBtn.disabled = true;
       voiceBtnText.textContent = "Transcribing & Grounding Evidence...";
-      voiceBtnIcon.innerHTML = `<span class="spinner"></span>`;
+      voiceBtnIcon.innerHTML = SVG_ICONS.spinner;
       voiceLoadingBox.style.display = "block";
       voiceResultsBox.style.display = "none";
       voiceLoadingBox.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
       analyzeVoiceBtn.disabled = false;
       voiceBtnText.textContent = "Transcribe & Analyze Chunk";
-      voiceBtnIcon.textContent = "⚡";
+      voiceBtnIcon.innerHTML = SVG_ICONS.spark;
       voiceLoadingBox.style.display = "none";
     }
   }
@@ -518,17 +558,17 @@ document.addEventListener("DOMContentLoaded", () => {
     threatHero.className = "threat-hero";
     if (level.includes("CRITICAL") || score >= 75) {
       threatHero.classList.add("critical");
-      threatIcon.textContent = "🚨";
+      threatIcon.innerHTML = SVG_ICONS.critical;
       threatText.textContent = "CRITICAL SCAM DETECTED";
       scoreMeterFill.style.backgroundColor = "#f43f5e";
     } else if (level.includes("SUSPICIOUS") || score >= 40) {
       threatHero.classList.add("suspicious");
-      threatIcon.textContent = "⚠️";
+      threatIcon.innerHTML = SVG_ICONS.alert;
       threatText.textContent = "SUSPICIOUS COERCION / CLAIM";
       scoreMeterFill.style.backgroundColor = "#f59e0b";
     } else {
       threatHero.classList.add("safe");
-      threatIcon.textContent = "🛡️";
+      threatIcon.innerHTML = SVG_ICONS.shield;
       threatText.textContent = "SAFE / NORMAL SPEECH";
       scoreMeterFill.style.backgroundColor = "#10b981";
     }
@@ -693,14 +733,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isLoading) {
       verifyTextBtn.disabled = true;
       textBtnText.textContent = "Searching & Verifying...";
-      textBtnIcon.innerHTML = `<span class="spinner"></span>`;
+      textBtnIcon.innerHTML = SVG_ICONS.spinner;
       textLoadingBox.style.display = "block";
       textResultsBox.style.display = "none";
       textLoadingBox.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
       verifyTextBtn.disabled = false;
       textBtnText.textContent = "Detect & Verify Fact";
-      textBtnIcon.textContent = "⚡";
+      textBtnIcon.innerHTML = SVG_ICONS.spark;
       textLoadingBox.style.display = "none";
     }
   }
@@ -727,20 +767,20 @@ document.addEventListener("DOMContentLoaded", () => {
     textVerdictHero.className = "verdict-hero";
     textVerdictBadge.className = "verdict-badge";
 
-    let icon = "❓";
+    let icon = SVG_ICONS.question;
     let statusClass = "unverifiable";
 
     if (verdict.includes("SUPPORTED") || verdict.includes("TRUE")) {
-      icon = "✅";
+      icon = SVG_ICONS.check;
       statusClass = "supported";
     } else if (verdict.includes("CONTRADICTED") || verdict.includes("FALSE") || verdict.includes("FRAUD")) {
-      icon = "❌";
+      icon = SVG_ICONS.cross;
       statusClass = "contradicted";
     }
 
     textVerdictHero.classList.add(statusClass);
     textVerdictBadge.classList.add(statusClass);
-    textVerdictIcon.textContent = icon;
+    textVerdictIcon.innerHTML = icon;
     textVerdictText.textContent = verdict;
 
     textConfidenceVal.textContent = `${confidence}%`;
