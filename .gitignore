@@ -67,3 +67,41 @@ next-env.d.ts
 # Local agent working notes & sessions
 .opencode/
 .workbuddy-ai/
+
+# -----------------------------------------------------------------------------
+# Merged from branch `ayush` — ASR stack additions
+# -----------------------------------------------------------------------------
+
+# Official Indic evaluation fixtures MUST stay tracked even though *.wav/*.mp3
+# are ignored above. Order matters: the negation has to come after the ignores.
+!test_audio/
+!test_audio/**
+!**/fact_app/static/samples/
+!**/fact_app/static/samples/**
+
+# ASR model weights & inference caches
+*.safetensors
+*.onnx
+openvino_models/
+hf_cache/
+.cache/
+whisper_models/
+
+# Temporary microphone / live-stream captures
+temp_audio/
+recordings/
+uploads/
+mic_*.wav
+mic_*.webm
+live_speech_*.wav
+live_speech_*.webm
+
+# Crawl4AI (web fact-grounding) — dependency is NOT vendored; see docs/
+.crawl4ai/
+crawl4ai_cache/
+crawl4ai_downloads/
+*.c4a
+
+# Local backups & scratch
+*.bak
+scratch/

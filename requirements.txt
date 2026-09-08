@@ -1,0 +1,29 @@
+# VaniRakshak — Core Speech-to-Text (ASR) & Verification Requirements
+
+# 1. Deep Learning & Audio Framework (CPU / CUDA auto-detected)
+torch>=2.2.0
+torchaudio>=2.2.0
+transformers>=4.40.0
+soundfile>=0.12.1
+scipy>=1.12.0
+
+# 2. Transliteration & Hinglish Normalization (Lightweight, pure-Python)
+indic-transliteration>=2.3.80
+
+# 3. Primary Cloud ASR Provider (Groq Whisper Large v3 Turbo ultra-fast cloud inference)
+groq>=0.9.0
+
+# 4. Fallback ASR Provider (Faster-Whisper int8 local CPU/GPU inference)
+faster-whisper>=1.0.0
+
+
+# 4. API Backend & Networking
+fastapi>=0.110.0
+uvicorn>=0.28.0
+pydantic>=2.6.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.0
+httpx>=0.27.0
+
+# 5. Automated Unit & Integration Testing
+pytest>=8.0.0
