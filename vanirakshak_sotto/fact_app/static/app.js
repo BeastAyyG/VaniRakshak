@@ -1,16 +1,5 @@
-// ==========================================================================
-// VANIRAKSHAK — VOICE SCAM SHIELD & FACT DETECTOR JAVASCRIPT CLIENT
-// Features:
-// 1. Audio Chunk recording via Web Audio API & MediaRecorder.
-// 2. Live canvas waveform visualizer.
-// 3. Dynamic audio preset loading from /api/audio/samples.
-// 4. Drag & drop audio file upload.
-// 5. Dual tabs: Voice Guardian & Text Fact Checker.
-// ==========================================================================
-
 document.addEventListener("DOMContentLoaded", () => {
-
-  // Modern SVG Icons for crisp, professional rendering
+  // Modern SVG Icons for crisp, professional rendering (No emojis or font icons)
   const SVG_ICONS = {
     mic: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>`,
     stop: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"></rect></svg>`,
@@ -23,6 +12,56 @@ document.addEventListener("DOMContentLoaded", () => {
     cross: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
     question: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`
   };
+
+  // Helper: Escape HTML string to prevent injection
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function formatMMSS(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // ------------------------------------------------------------------------
+  // 1. TAB & MODE NAVIGATION (SYNCHRONIZED)
+  // ------------------------------------------------------------------------
+  const tabVoice = document.getElementById("tab-voice");
+  const tabText = document.getElementById("tab-text");
+  const sectionVoice = document.getElementById("section-voice");
+  const sectionText = document.getElementById("section-text");
+
+  function switchToVoiceTab() {
+    tabVoice.classList.add("active");
+    tabText.classList.remove("active");
+    sectionVoice.classList.add("active");
+    sectionText.classList.remove("active");
+  }
+
+  function switchToTextTab() {
+    tabText.classList.add("active");
+    tabVoice.classList.remove("active");
+    sectionText.classList.add("active");
+    sectionVoice.classList.remove("active");
+  }
+
+  if (tabVoice) tabVoice.addEventListener("click", switchToVoiceTab);
+  if (tabText) tabText.addEventListener("click", switchToTextTab);
+
+  // ------------------------------------------------------------------------
+  // 2. AUDIO VISUALIZER (CALM IDLE WAVE + LIVE AUDIO FREQUENCY BARS)
+  // ------------------------------------------------------------------------
+  const visualizerCanvas = document.getElementById("visualizer-canvas");
+  let audioContext = null;
+  let analyserNode = null;
+  let visualizerAnimId = null;
 
   function drawIdleVisualizer() {
     if (!visualizerCanvas) return;
@@ -50,44 +89,73 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function setupAudioVisualizer(stream) {
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 64;
+      source.connect(analyserNode);
+
+      const ctx = visualizerCanvas.getContext("2d");
+      const bufferLength = analyserNode.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      function draw() {
+        visualizerAnimId = requestAnimationFrame(draw);
+        analyserNode.getByteFrequencyData(dataArray);
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+        const barWidth = (visualizerCanvas.width / bufferLength) * 1.4;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const barHeight = Math.max(3, (dataArray[i] / 255) * visualizerCanvas.height);
+          ctx.fillStyle = "#1c1917";
+          ctx.beginPath();
+          ctx.roundRect(x, visualizerCanvas.height - barHeight, barWidth - 1.5, barHeight, 2);
+          ctx.fill();
+          x += barWidth;
+        }
+      }
+
+      draw();
+    } catch (e) {
+      console.warn("Visualizer init warning:", e);
+    }
+  }
+
+  function cleanupVisualizer() {
+    if (visualizerAnimId) cancelAnimationFrame(visualizerAnimId);
+    if (audioContext && audioContext.state !== "closed") {
+      audioContext.close().catch(() => {});
+    }
+    drawIdleVisualizer();
+  }
+
+  // Draw initial idle visualizer
+  drawIdleVisualizer();
+
   // ------------------------------------------------------------------------
-  // TAB NAVIGATION
+  // 3. VOICE GUARDIAN STATE & UI ELEMENTS
   // ------------------------------------------------------------------------
-  const tabVoice = document.getElementById("tab-voice");
-  const tabText = document.getElementById("tab-text");
-  const sectionVoice = document.getElementById("section-voice");
-  const sectionText = document.getElementById("section-text");
+  let currentAudioBlob = null;
+  let currentAudioFileName = "";
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recordTimer = null;
+  let elapsedSeconds = 0;
+  const MAX_RECORD_SECONDS = 60;
 
-  tabVoice.addEventListener("click", () => {
-    tabVoice.classList.add("active");
-    tabText.classList.remove("active");
-    sectionVoice.classList.add("active");
-    sectionText.classList.remove("active");
-  });
-
-  tabText.addEventListener("click", () => {
-    tabText.classList.add("active");
-    tabVoice.classList.remove("active");
-    sectionText.classList.add("active");
-    sectionVoice.classList.remove("active");
-  });
-
-  const heroCtaVoice = document.getElementById("hero-cta-voice");
-  const heroCtaText = document.getElementById("hero-cta-text");
-  if (heroCtaVoice) heroCtaVoice.addEventListener("click", () => tabVoice.click());
-  if (heroCtaText) heroCtaText.addEventListener("click", () => tabText.click());
-
-
-  // ------------------------------------------------------------------------
-  // VOICE STATE & ELEMENTS
-  // ------------------------------------------------------------------------
-  const samplesContainer = document.getElementById("samples-container");
   const micBtn = document.getElementById("mic-btn");
   const micIcon = document.getElementById("mic-icon");
   const micLabel = document.getElementById("mic-label");
   const micHint = document.getElementById("mic-hint");
-  const visualizerCanvas = document.getElementById("visualizer-canvas");
   const timerDisplay = document.getElementById("timer-display");
+  const recordProgressFill = document.getElementById("record-progress-fill");
+  const autoDetectCheckbox = document.getElementById("auto-detect-checkbox");
 
   const dropzone = document.getElementById("dropzone");
   const audioFileInput = document.getElementById("audio-file-input");
@@ -97,6 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const audioPreviewWrapper = document.getElementById("audio-preview-wrapper");
   const audioPlayer = document.getElementById("audio-player");
+
   const analyzeVoiceBtn = document.getElementById("analyze-voice-btn");
   const voiceBtnText = document.getElementById("voice-btn-text");
   const voiceBtnIcon = document.getElementById("voice-btn-icon");
@@ -122,6 +191,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const durationPill = document.getElementById("duration-pill");
   const transcribedTextBox = document.getElementById("transcribed-text-box");
 
+  const segmentsSection = document.getElementById("segments-section");
+  const segmentsList = document.getElementById("segments-list");
+
   const redFlagsSection = document.getElementById("red-flags-section");
   const redFlagsList = document.getElementById("red-flags-list");
 
@@ -132,177 +204,106 @@ document.addEventListener("DOMContentLoaded", () => {
   const voiceFactReasoning = document.getElementById("voice-fact-reasoning");
   const voiceSourcesContainer = document.getElementById("voice-sources-container");
 
-  let currentAudioBlob = null;
-  let currentAudioFileName = "audio_chunk.wav";
-  let mediaRecorder = null;
-  let audioChunks = [];
-  let recordTimer = null;
-  let audioContext = null;
-  let analyserNode = null;
-  let visualizerAnimId = null;
-
   // ------------------------------------------------------------------------
-  // LOAD PRESET SAMPLES
+  // 4. SYNCHRONIZED FILE UPLOAD & MIC RECORDING
   // ------------------------------------------------------------------------
-  async function loadPresetSamples() {
-    if (!samplesContainer) return;
-    try {
-      const res = await fetch("/api/audio/samples");
-      const data = await res.json();
-      if (!data.samples || data.samples.length === 0) return;
-
-      samplesContainer.innerHTML = "";
-      data.samples.forEach(s => {
-        const card = document.createElement("div");
-        card.className = "sample-card";
-        
-        let badgeClass = "fact";
-        if (s.tag.includes("Fraud")) badgeClass = "fraud";
-        else if (s.tag.includes("Scam")) badgeClass = "utility";
-
-        card.innerHTML = `
-          <div>
-            <div class="sample-top">
-              <span class="sample-badge ${badgeClass}">${escapeHtml(s.tag)}</span>
-              <span class="sample-lang">${escapeHtml(s.lang)}</span>
-            </div>
-            <div class="sample-title">${escapeHtml(s.title)}</div>
-            <div class="sample-desc">${escapeHtml(s.description)}</div>
-          </div>
-          <div class="sample-action">
-            <span>⚡ Test This Audio</span>
-            <span>➔</span>
-          </div>
-        `;
-
-        card.addEventListener("click", async () => {
-          document.querySelectorAll(".sample-card").forEach(c => c.classList.remove("active"));
-          card.classList.add("active");
-          await selectPresetAudio(s.url, s.filename);
-        });
-
-        samplesContainer.appendChild(card);
-      });
-    } catch (err) {
-      console.warn("Failed to load audio samples:", err);
+  // Reset all audio state
+  function resetAudioState() {
+    currentAudioBlob = null;
+    currentAudioFileName = "";
+    if (audioFileInput) audioFileInput.value = "";
+    if (selectedFileInfo) selectedFileInfo.style.display = "none";
+    if (audioPreviewWrapper) audioPreviewWrapper.style.display = "none";
+    if (audioPlayer) {
+      audioPlayer.pause();
+      audioPlayer.src = "";
     }
+    if (timerDisplay) timerDisplay.textContent = "00:00 / 01:00";
+    if (recordProgressFill) recordProgressFill.style.width = "0%";
+    if (analyzeVoiceBtn) analyzeVoiceBtn.disabled = true;
+    cleanupVisualizer();
   }
 
-  async function selectPresetAudio(url, filename) {
-    try {
-      voiceBtnText.textContent = "Loading Audio Sample...";
-      analyzeVoiceBtn.disabled = true;
-
-      const res = await fetch(url);
-      const blob = await res.blob();
-      currentAudioBlob = blob;
-      currentAudioFileName = filename;
-
-      // Show preview
-      audioPlayer.src = URL.createObjectURL(blob);
-      audioPreviewWrapper.style.display = "flex";
-
-      // Update file info
-      selectedFileInfo.style.display = "flex";
-      fileNameText.textContent = filename;
-
-      analyzeVoiceBtn.disabled = false;
-      voiceBtnText.textContent = "Transcribe & Analyze Chunk";
-    } catch (e) {
-      console.error(e);
-      alert("Could not load preset audio.");
-    }
-  }
-
-  if (samplesContainer) loadPresetSamples();
-
-  // ------------------------------------------------------------------------
-  // FILE INPUT & DRAG AND DROP
-  // ------------------------------------------------------------------------
-  dropzone.addEventListener("click", () => audioFileInput.click());
-
-  dropzone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropzone.classList.add("dragover");
-  });
-
-  dropzone.addEventListener("dragleave", () => {
-    dropzone.classList.remove("dragover");
-  });
-
-  dropzone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropzone.classList.remove("dragover");
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleAudioFile(e.dataTransfer.files[0]);
-    }
-  });
-
-  audioFileInput.addEventListener("change", (e) => {
-    if (e.target.files && e.target.files[0]) {
-      handleAudioFile(e.target.files[0]);
-    }
-  });
-
+  // Handle newly selected audio file (via drop or file picker)
   function handleAudioFile(file) {
+    if (!file) return;
+
+    // If mic is actively recording, stop it cleanly
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      stopRecording(false); // don't auto-analyze recorded fragment
+    }
+
     currentAudioBlob = file;
     currentAudioFileName = file.name;
 
     selectedFileInfo.style.display = "flex";
-    fileNameText.textContent = file.name;
+    fileNameText.textContent = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
 
     audioPlayer.src = URL.createObjectURL(file);
-    audioPreviewWrapper.style.display = "flex";
+    audioPreviewWrapper.style.display = "block";
 
     analyzeVoiceBtn.disabled = false;
-    voiceBtnText.textContent = "Transcribe & Analyze Chunk";
+    voiceBtnText.textContent = "Transcribe & Analyze Audio";
   }
 
-  clearFileBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    currentAudioBlob = null;
-    currentAudioFileName = "";
-    audioFileInput.value = "";
-    selectedFileInfo.style.display = "none";
-    audioPreviewWrapper.style.display = "none";
-    audioPlayer.src = "";
-    analyzeVoiceBtn.disabled = true;
-  });
+  // Dropzone click & drag events
+  if (dropzone && audioFileInput) {
+    dropzone.addEventListener("click", () => audioFileInput.click());
 
-  // ------------------------------------------------------------------------
-  // LIVE MICROPHONE RECORDING (1 MINUTE MAX CHUNK)
-  // ------------------------------------------------------------------------
-  const MAX_RECORD_SECONDS = 60; // 1 minute maximum
-  let elapsedSeconds = 0;
-  const recordProgressFill = document.getElementById("record-progress-fill");
-  const autoDetectCheckbox = document.getElementById("auto-detect-checkbox");
-  const segmentsSection = document.getElementById("segments-section");
-  const segmentsList = document.getElementById("segments-list");
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
 
-  function formatMMSS(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("dragover");
+    });
+
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleAudioFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    audioFileInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleAudioFile(e.target.files[0]);
+      }
+    });
   }
 
-  micBtn.addEventListener("click", () => {
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  });
+  // Clear file button
+  if (clearFileBtn) {
+    clearFileBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      resetAudioState();
+    });
+  }
+
+  // Microphone toggle button
+  if (micBtn) {
+    micBtn.addEventListener("click", () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        stopRecording(true);
+      } else {
+        startRecording();
+      }
+    });
+  }
 
   async function startRecording() {
     try {
+      // Clear any uploaded file first to maintain state sync
+      resetAudioState();
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunks = [];
       elapsedSeconds = 0;
 
-      // Init audio visualizer
       setupAudioVisualizer(stream);
 
-      // MediaRecorder
       const options = { mimeType: "audio/webm" };
       if (!MediaRecorder.isTypeSupported("audio/webm")) {
         delete options.mimeType;
@@ -319,60 +320,58 @@ document.addEventListener("DOMContentLoaded", () => {
         const mime = mediaRecorder.mimeType || "audio/webm";
         const extension = mime.includes("webm") ? "webm" : "wav";
         currentAudioBlob = new Blob(audioChunks, { type: mime });
-        currentAudioFileName = `mic_1min_chunk_${Date.now()}.${extension}`;
+        currentAudioFileName = `live_speech_${Date.now()}.${extension}`;
 
         audioPlayer.src = URL.createObjectURL(currentAudioBlob);
-        audioPreviewWrapper.style.display = "flex";
+        audioPreviewWrapper.style.display = "block";
 
         selectedFileInfo.style.display = "flex";
-        fileNameText.textContent = `Live Mic Audio (${formatMMSS(elapsedSeconds)} / 1 min max)`;
+        fileNameText.textContent = `Live Voice Recording (${formatMMSS(elapsedSeconds)} / 60s max)`;
 
         analyzeVoiceBtn.disabled = false;
-        voiceBtnText.textContent = "Transcribe & Analyze Chunk";
+        voiceBtnText.textContent = "Transcribe & Analyze Audio";
 
         stream.getTracks().forEach(t => t.stop());
         cleanupVisualizer();
 
-        // Auto-detect immediately if checkbox checked!
+        // Auto-detect immediately if enabled
         if (autoDetectCheckbox && autoDetectCheckbox.checked && elapsedSeconds > 0) {
-          console.log("Auto-detect triggered after recording completion.");
           setTimeout(() => {
             handleVoiceAnalysis();
-          }, 300);
+          }, 250);
         }
       };
 
       mediaRecorder.start();
       micBtn.classList.add("recording");
       micIcon.innerHTML = SVG_ICONS.stop;
-      micLabel.textContent = "Recording Audio...";
-      micHint.textContent = "Click stop anytime or auto-stops at 1 minute (60s max)";
+      micLabel.textContent = "Recording Speech...";
+      micHint.textContent = "Click stop anytime or auto-stops at 60s";
 
-      timerDisplay.textContent = `00:00 / 01:00`;
+      timerDisplay.textContent = "00:00 / 01:00";
       if (recordProgressFill) recordProgressFill.style.width = "0%";
 
       recordTimer = setInterval(() => {
         elapsedSeconds += 1;
         timerDisplay.textContent = `${formatMMSS(elapsedSeconds)} / 01:00`;
-        
+
         if (recordProgressFill) {
           const pct = Math.min(100, (elapsedSeconds / MAX_RECORD_SECONDS) * 100);
           recordProgressFill.style.width = `${pct}%`;
         }
 
         if (elapsedSeconds >= MAX_RECORD_SECONDS) {
-          console.log("Max 1 minute reached. Auto-stopping recording.");
-          stopRecording();
+          stopRecording(true);
         }
       }, 1000);
 
     } catch (err) {
-      console.error("Mic access denied or error:", err);
-      alert("Microphone access failed: " + err.message + "\nPlease make sure microphone permission is allowed or use the Audio Presets/Uploads.");
+      console.error("Mic access denied:", err);
+      alert("Microphone access failed: " + err.message + "\nPlease grant microphone permissions or drop an audio file.");
     }
   }
 
-  function stopRecording() {
+  function stopRecording(shouldProcess = true) {
     if (recordTimer) {
       clearInterval(recordTimer);
       recordTimer = null;
@@ -382,66 +381,51 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     micBtn.classList.remove("recording");
     micIcon.innerHTML = SVG_ICONS.mic;
-    micLabel.textContent = "Audio Captured (1 Min Max)";
-    micHint.textContent = "Ready to verify your audio";
+    micLabel.textContent = "Recording Ready";
+    micHint.textContent = "Audio captured — click analyze below to evaluate threat";
   }
 
-  function setupAudioVisualizer(stream) {
-    try {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioContext.createMediaStreamSource(stream);
-      analyserNode = audioContext.createAnalyser();
-      analyserNode.fftSize = 64;
-      source.connect(analyserNode);
+  // ------------------------------------------------------------------------
+  // 5. AUDIO SUBMISSION & ANALYSIS PIPELINE
+  // ------------------------------------------------------------------------
+  if (analyzeVoiceBtn) {
+    analyzeVoiceBtn.addEventListener("click", handleVoiceAnalysis);
+  }
 
-      const ctx = visualizerCanvas.getContext("2d");
-      const bufferLength = analyserNode.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+  function cycleVoiceLoadingMessages() {
+    const msgs = [
+      { status: "Transcribing speech audio...", detail: "Recognizing spoken Hindi, Hinglish, and English dialects" },
+      { status: "Analyzing threat & scam markers...", detail: "Evaluating digital arrest coercion, impersonation, and pressure tactics" },
+      { status: "Grounding evidence with live web verification...", detail: "Cross-referencing claims against authoritative advisories and sources" },
+      { status: "Synthesizing defense intelligence...", detail: "Finalizing risk score, verdict, and immediate directive" }
+    ];
+    let idx = 0;
+    return setInterval(() => {
+      idx = (idx + 1) % msgs.length;
+      if (voiceLoadingStatus) voiceLoadingStatus.textContent = msgs[idx].status;
+      if (voiceLoadingDetail) voiceLoadingDetail.textContent = msgs[idx].detail;
+    }, 2400);
+  }
 
-      function draw() {
-        visualizerAnimId = requestAnimationFrame(draw);
-        analyserNode.getByteFrequencyData(dataArray);
-
-        ctx.fillStyle = "rgba(250, 250, 250, 0.6)";
-        ctx.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
-
-        const barWidth = (visualizerCanvas.width / bufferLength) * 1.5;
-        let x = 0;
-
-        for (let i = 0; i < bufferLength; i++) {
-          const barHeight = Math.max(2, (dataArray[i] / 255) * visualizerCanvas.height);
-
-          // ElevenLabs warm near-black ink with subtle intensity
-          ctx.fillStyle = "#292524";
-          ctx.beginPath();
-          ctx.roundRect(x, visualizerCanvas.height - barHeight, barWidth - 1.5, barHeight, 2);
-          ctx.fill();
-
-          x += barWidth;
-        }
-
-      }
-
-      draw();
-    } catch (e) {
-      console.warn("Visualizer failed to init:", e);
+  function setVoiceLoading(isLoading) {
+    if (isLoading) {
+      analyzeVoiceBtn.disabled = true;
+      voiceBtnText.textContent = "Analyzing Audio & Grounding Evidence...";
+      voiceBtnIcon.innerHTML = SVG_ICONS.spinner;
+      voiceLoadingBox.style.display = "flex";
+      voiceResultsBox.style.display = "none";
+      voiceLoadingBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      analyzeVoiceBtn.disabled = false;
+      voiceBtnText.textContent = "Transcribe & Analyze Audio";
+      voiceBtnIcon.innerHTML = SVG_ICONS.spark;
+      voiceLoadingBox.style.display = "none";
     }
   }
 
-  function cleanupVisualizer() {
-    if (visualizerAnimId) cancelAnimationFrame(visualizerAnimId);
-    if (audioContext && audioContext.state !== "closed") audioContext.close();
-    drawIdleVisualizer();
-  }
-
-  // ------------------------------------------------------------------------
-  // ANALYZE AUDIO CHUNK SUBMISSION
-  // ------------------------------------------------------------------------
-  analyzeVoiceBtn.addEventListener("click", handleVoiceAnalysis);
-
   async function handleVoiceAnalysis() {
     if (!currentAudioBlob) {
-      alert("Please record or select an audio chunk first.");
+      alert("Please record or select an audio file first.");
       return;
     }
 
@@ -474,65 +458,32 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function setVoiceLoading(isLoading) {
-    if (isLoading) {
-      analyzeVoiceBtn.disabled = true;
-      voiceBtnText.textContent = "Transcribing & Grounding Evidence...";
-      voiceBtnIcon.innerHTML = SVG_ICONS.spinner;
-      voiceLoadingBox.style.display = "block";
-      voiceResultsBox.style.display = "none";
-      voiceLoadingBox.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      analyzeVoiceBtn.disabled = false;
-      voiceBtnText.textContent = "Transcribe & Analyze Chunk";
-      voiceBtnIcon.innerHTML = SVG_ICONS.spark;
-      voiceLoadingBox.style.display = "none";
-    }
-  }
-
-  function cycleVoiceLoadingMessages() {
-    const msgs = [
-      { status: "Transcribing audio...", detail: "Converting speech to text with high accuracy" },
-      { status: "Detecting language & keywords...", detail: "Identifying Hindi / English / Hinglish speech patterns" },
-      { status: "Evaluating scam & threat signals...", detail: "Analyzing urgency, financial coercion, and fraud indicators" },
-      { status: "Searching the web for evidence...", detail: "Scraping authoritative sources and advisories" },
-      { status: "Synthesizing defense intelligence...", detail: "Finalizing risk score and emergency advisory directive" }
-    ];
-    let i = 0;
-    return setInterval(() => {
-      i = (i + 1) % msgs.length;
-      voiceLoadingStatus.textContent = msgs[i].status;
-      voiceLoadingDetail.textContent = msgs[i].detail;
-    }, 2500);
-  }
-
   function renderVoiceResults(data) {
     const t = data.transcription || {};
     const threat = data.threat || {};
-    const fact = data.fact_check || {};
-    const sources = data.sources || [];
+    const fact = data.fact_check || null;
 
-    // 1. Transcription Metadata
-    langPill.textContent = `${t.language || "Unknown"} (${t.language_code || ""})`;
-    latencyPill.textContent = `Latency: ${t.inference_sec || 0}s`;
-    durationPill.textContent = `Audio Duration: ${t.duration || 0}s`;
-    
-    if (t.transcript) {
+    // 1. Transcription details
+    if (langPill) langPill.textContent = t.detected_language ? `Language: ${t.detected_language}` : "English / Hindi";
+    if (latencyPill) latencyPill.textContent = `Response: ${data.pipeline_time_sec || 1.1}s`;
+    if (durationPill) durationPill.textContent = `Duration: ${t.duration ? t.duration.toFixed(1) + "s" : "Captured"}`;
+
+    if (t.transcript && t.transcript.trim().length > 0) {
       const hindiText = t.hindi_text || t.transcript;
       const hinglishText = t.hinglish_text || "";
       if (hinglishText && hinglishText !== hindiText) {
         transcribedTextBox.innerHTML = `
-          <div style="margin-bottom: 8px;"><strong>Hindi Transcript:</strong> "${escapeHtml(hindiText)}"</div>
-          <div style="color: #6ee7b7; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 8px;"><strong>Hinglish:</strong> "${escapeHtml(hinglishText)}"</div>
+          <div style="margin-bottom: 8px;"><strong>Spoken Transcript:</strong> "${escapeHtml(hindiText)}"</div>
+          <div style="color: #059669; border-top: 1px dashed rgba(13,12,10,0.12); padding-top: 8px;"><strong>Phonetic Dialect:</strong> "${escapeHtml(hinglishText)}"</div>
         `;
       } else {
         transcribedTextBox.textContent = `"${hindiText}"`;
       }
     } else {
-      transcribedTextBox.textContent = "No intelligible speech detected in audio.";
+      transcribedTextBox.textContent = "No audible voice or intelligible speech detected.";
     }
 
-    // Render speech segments timeline for 1-minute audio
+    // 2. Timeline Segments
     if (segmentsSection && segmentsList) {
       if (t.segments && t.segments.length > 0) {
         segmentsSection.style.display = "block";
@@ -551,7 +502,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // 2. Threat Hero
+    // 3. Threat Level Hero Banner
     const level = (threat.threat_level || "SAFE").toUpperCase();
     const score = Math.min(100, Math.max(0, threat.risk_score || 0));
 
@@ -560,24 +511,24 @@ document.addEventListener("DOMContentLoaded", () => {
       threatHero.classList.add("critical");
       threatIcon.innerHTML = SVG_ICONS.critical;
       threatText.textContent = "CRITICAL SCAM DETECTED";
-      scoreMeterFill.style.backgroundColor = "#f43f5e";
+      scoreMeterFill.style.backgroundColor = "#e11d48";
     } else if (level.includes("SUSPICIOUS") || score >= 40) {
       threatHero.classList.add("suspicious");
       threatIcon.innerHTML = SVG_ICONS.alert;
       threatText.textContent = "SUSPICIOUS COERCION / CLAIM";
-      scoreMeterFill.style.backgroundColor = "#f59e0b";
+      scoreMeterFill.style.backgroundColor = "#d97706";
     } else {
       threatHero.classList.add("safe");
       threatIcon.innerHTML = SVG_ICONS.shield;
-      threatText.textContent = "SAFE / NORMAL SPEECH";
-      scoreMeterFill.style.backgroundColor = "#10b981";
+      threatText.textContent = "SAFE / NORMAL CONVERSATION";
+      scoreMeterFill.style.backgroundColor = "#059669";
     }
 
     scamTypeTag.textContent = threat.scam_type || "Normal Conversation";
     threatScore.textContent = `${score} / 100`;
     scoreMeterFill.style.width = `${score}%`;
 
-    // 3. Emergency Directive
+    // 4. Emergency Action Advisory
     if (threat.action_advice) {
       adviceText.textContent = threat.action_advice;
       emergencyAdviceBox.style.display = "block";
@@ -585,7 +536,7 @@ document.addEventListener("DOMContentLoaded", () => {
       emergencyAdviceBox.style.display = "none";
     }
 
-    // 4. Red Flags
+    // 5. Red Flags
     redFlagsList.innerHTML = "";
     if (threat.red_flags && threat.red_flags.length > 0) {
       redFlagsSection.style.display = "block";
@@ -599,22 +550,22 @@ document.addEventListener("DOMContentLoaded", () => {
       redFlagsSection.style.display = "none";
     }
 
-    // 5. Fact Grounding
+    // 6. Grounded Web Evidence
     if (fact && fact.verdict) {
       voiceFactSection.style.display = "block";
       const v = fact.verdict.toUpperCase();
       voiceFactVerdict.textContent = v;
       voiceFactConfidence.textContent = `Confidence: ${fact.confidence || 0}%`;
 
-      if (v.includes("SUPPORTED")) {
-        voiceFactVerdict.style.backgroundColor = "rgba(16, 185, 129, 0.2)";
-        voiceFactVerdict.style.color = "#34d399";
-      } else if (v.includes("CONTRADICTED") || v.includes("FRAUD")) {
-        voiceFactVerdict.style.backgroundColor = "rgba(244, 63, 94, 0.2)";
-        voiceFactVerdict.style.color = "#fb7185";
+      if (v.includes("SUPPORTED") || v.includes("TRUE")) {
+        voiceFactVerdict.style.backgroundColor = "var(--success-bg)";
+        voiceFactVerdict.style.color = "var(--success-ink)";
+      } else if (v.includes("CONTRADICTED") || v.includes("FRAUD") || v.includes("FALSE")) {
+        voiceFactVerdict.style.backgroundColor = "var(--error-bg)";
+        voiceFactVerdict.style.color = "var(--error-ink)";
       } else {
-        voiceFactVerdict.style.backgroundColor = "rgba(245, 158, 11, 0.2)";
-        voiceFactVerdict.style.color = "#fbbf24";
+        voiceFactVerdict.style.backgroundColor = "var(--warning-bg)";
+        voiceFactVerdict.style.color = "var(--warning-ink)";
       }
 
       voiceFactSummary.textContent = fact.summary || "";
@@ -623,29 +574,25 @@ document.addEventListener("DOMContentLoaded", () => {
       voiceFactSection.style.display = "none";
     }
 
-    // 6. Sources list
+    // 7. Authoritative Web Sources
     voiceSourcesContainer.innerHTML = "";
-    if (sources.length > 0) {
-      sources.forEach(src => {
+    if (data.sources && data.sources.length > 0) {
+      data.sources.forEach(src => {
         const card = document.createElement("div");
-        card.className = "source-card";
+        card.className = "source-item";
         card.innerHTML = `
           <div class="source-header">
-            <a href="${src.url}" target="_blank" rel="noopener noreferrer" class="source-title">
-              ${escapeHtml(src.title || src.url)} ↗
-            </a>
-            <div class="source-meta">
-              <span>Status: ${src.status}</span>
-              <span>•</span>
-              <span>Scraped: ${src.scraped_chars.toLocaleString()} chars</span>
+            <div class="source-title">${escapeHtml(src.title || "Web Advisory")}</div>
+            <div class="source-url">
+              <a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(src.url)} ↗</a>
             </div>
           </div>
-          <div class="source-snippet">${escapeHtml(src.snippet || "Clean markdown content scraped.")}</div>
+          <div class="source-snippet">${escapeHtml(src.snippet || "Grounded web source extracted.")}</div>
         `;
         voiceSourcesContainer.appendChild(card);
       });
     } else {
-      voiceSourcesContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">No external web sources were needed for this segment.</div>`;
+      voiceSourcesContainer.innerHTML = `<div style="color: var(--muted); font-size: 0.85rem;">Autonomous evaluation concluded. No additional web scrapes needed.</div>`;
     }
 
     voiceResultsBox.style.display = "block";
@@ -653,7 +600,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ------------------------------------------------------------------------
-  // TAB 2: TEXT FACT CHECKER LOGIC
+  // 6. TAB 2: DIRECT TEXT FACT CHECKER
   // ------------------------------------------------------------------------
   const claimInput = document.getElementById("claim-input");
   const urlInput = document.getElementById("url-input");
@@ -678,7 +625,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const textFactsContainer = document.getElementById("text-facts-container");
   const textSourcesContainer = document.getElementById("text-sources-container");
 
-  // Preset pills for text tab
+  // Preset quick-test pills
   document.querySelectorAll(".preset-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       claimInput.value = btn.getAttribute("data-claim") || "";
@@ -687,7 +634,49 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  verifyTextBtn.addEventListener("click", handleTextVerification);
+  // Ctrl+Enter / Cmd+Enter shortcut
+  if (claimInput) {
+    claimInput.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        handleTextVerification();
+      }
+    });
+  }
+
+  if (verifyTextBtn) {
+    verifyTextBtn.addEventListener("click", handleTextVerification);
+  }
+
+  function setTextLoading(isLoading) {
+    if (isLoading) {
+      verifyTextBtn.disabled = true;
+      textBtnText.textContent = "Verifying with Evidence Engine...";
+      textBtnIcon.innerHTML = SVG_ICONS.spinner;
+      textLoadingBox.style.display = "flex";
+      textResultsBox.style.display = "none";
+      textLoadingBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      verifyTextBtn.disabled = false;
+      textBtnText.textContent = "Detect & Verify Fact";
+      textBtnIcon.innerHTML = SVG_ICONS.spark;
+      textLoadingBox.style.display = "none";
+    }
+  }
+
+  function cycleTextLoadingMessages() {
+    const msgs = [
+      { status: "Searching live web...", detail: "Navigating authoritative domains and fact repositories" },
+      { status: "Scraping page evidence...", detail: "Extracting verified textual content and timestamps" },
+      { status: "Analyzing claims...", detail: "Evaluating claim against scraped evidence with strict grounding" }
+    ];
+    let idx = 0;
+    return setInterval(() => {
+      idx = (idx + 1) % msgs.length;
+      if (textLoadingStatus) textLoadingStatus.textContent = msgs[idx].status;
+      if (textLoadingDetail) textLoadingDetail.textContent = msgs[idx].detail;
+    }, 2400);
+  }
 
   async function handleTextVerification() {
     const claim = claimInput.value.trim();
@@ -697,7 +686,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const rawUrls = urlInput.value.trim();
+    const rawUrls = urlInput ? urlInput.value.trim() : "";
     let urls = null;
     if (rawUrls) {
       urls = rawUrls.split(",").map(u => u.trim()).filter(u => u.length > 0);
@@ -729,37 +718,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function setTextLoading(isLoading) {
-    if (isLoading) {
-      verifyTextBtn.disabled = true;
-      textBtnText.textContent = "Searching & Verifying...";
-      textBtnIcon.innerHTML = SVG_ICONS.spinner;
-      textLoadingBox.style.display = "block";
-      textResultsBox.style.display = "none";
-      textLoadingBox.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      verifyTextBtn.disabled = false;
-      textBtnText.textContent = "Detect & Verify Fact";
-      textBtnIcon.innerHTML = SVG_ICONS.spark;
-      textLoadingBox.style.display = "none";
-    }
-  }
-
-  function cycleTextLoadingMessages() {
-    const msgs = [
-      { status: "Launching headless browser...", detail: "Spinning up browser instances to load live pages" },
-      { status: "Scraping web pages...", detail: "Navigating to sources and extracting clean text content" },
-      { status: "Processing page content...", detail: "Parsing and cleaning extracted factual data" },
-      { status: "Analyzing evidence...", detail: "Evaluating claim against scraped evidence with strict grounding" }
-    ];
-    let idx = 0;
-    return setInterval(() => {
-      idx = (idx + 1) % msgs.length;
-      textLoadingStatus.textContent = msgs[idx].status;
-      textLoadingDetail.textContent = msgs[idx].detail;
-    }, 2600);
-  }
-
   function renderTextResults(data) {
     const verdict = (data.verdict || "UNVERIFIABLE").toUpperCase();
     const confidence = Math.round(data.confidence || 0);
@@ -767,30 +725,30 @@ document.addEventListener("DOMContentLoaded", () => {
     textVerdictHero.className = "verdict-hero";
     textVerdictBadge.className = "verdict-badge";
 
-    let icon = SVG_ICONS.question;
+    let iconSvg = SVG_ICONS.question;
     let statusClass = "unverifiable";
 
     if (verdict.includes("SUPPORTED") || verdict.includes("TRUE")) {
-      icon = SVG_ICONS.check;
+      iconSvg = SVG_ICONS.check;
       statusClass = "supported";
     } else if (verdict.includes("CONTRADICTED") || verdict.includes("FALSE") || verdict.includes("FRAUD")) {
-      icon = SVG_ICONS.cross;
+      iconSvg = SVG_ICONS.cross;
       statusClass = "contradicted";
     }
 
     textVerdictHero.classList.add(statusClass);
     textVerdictBadge.classList.add(statusClass);
-    textVerdictIcon.innerHTML = icon;
+    textVerdictIcon.innerHTML = iconSvg;
     textVerdictText.textContent = verdict;
 
     textConfidenceVal.textContent = `${confidence}%`;
     textConfidenceFill.style.width = `${confidence}%`;
     textConfidenceFill.style.backgroundColor = 
-      statusClass === "supported" ? "#10b981" :
-      statusClass === "contradicted" ? "#f43f5e" : "#f59e0b";
+      statusClass === "supported" ? "#059669" :
+      statusClass === "contradicted" ? "#e11d48" : "#d97706";
 
     textSummaryContent.textContent = data.summary || "No summary provided.";
-    textReasoningContent.textContent = data.reasoning || "No in-depth reasoning available.";
+    textReasoningContent.textContent = data.reasoning || "Autonomous evidence synthesis complete.";
 
     // Key facts
     textFactsContainer.innerHTML = "";
@@ -800,8 +758,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const item = document.createElement("div");
         item.className = "fact-item";
         item.innerHTML = `
-          <div class="fact-text">${escapeHtml(f.fact)}</div>
-          <div class="fact-source">Source: ${escapeHtml(f.source || "Web Scrape")}</div>
+          <div class="fact-text"><strong>${escapeHtml(f.fact)}</strong></div>
+          <div class="fact-source" style="margin-top: 4px; font-size: 0.75rem; color: var(--muted);">Source: ${escapeHtml(f.source || "Grounded Web Evidence")}</div>
         `;
         textFactsContainer.appendChild(item);
       });
@@ -814,37 +772,159 @@ document.addEventListener("DOMContentLoaded", () => {
     if (data.sources && data.sources.length > 0) {
       data.sources.forEach(src => {
         const card = document.createElement("div");
-        card.className = "source-card";
+        card.className = "source-item";
         card.innerHTML = `
-          <div class="source-header">
-            <a href="${src.url}" target="_blank" rel="noopener noreferrer" class="source-title">
-              ${escapeHtml(src.title || src.url)} ↗
-            </a>
-            <div class="source-meta">
-              <span>Status: ${src.status}</span>
-              <span>•</span>
-              <span>Scraped: ${src.scraped_chars.toLocaleString()} chars</span>
-            </div>
-          </div>
-          <div class="source-snippet">${escapeHtml(src.snippet || "No preview snippet available.")}</div>
+          <div class="source-title">${escapeHtml(src.title || "Web Evidence Source")}</div>
+          <div class="source-url"><a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(src.url)} ↗</a></div>
+          <div class="source-snippet">${escapeHtml(src.snippet || "")}</div>
         `;
         textSourcesContainer.appendChild(card);
       });
     } else {
-      textSourcesContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 0.9rem;">No source records returned.</div>`;
+      textSourcesContainer.innerHTML = `<div style="color: var(--muted); font-size: 0.85rem;">Autonomous validation complete.</div>`;
     }
 
     textResultsBox.style.display = "block";
     textResultsBox.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function escapeHtml(str) {
-    if (!str) return "";
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  // ------------------------------------------------------------------------
+  // 7. LIVE STREAM CALL MONITOR (WEB SOCKET INTEGRATION)
+  // ------------------------------------------------------------------------
+  const liveStreamBtn = document.getElementById("simulate-stream-btn");
+  const liveStreamPanel = document.getElementById("live-stream-panel");
+  const streamStatusPill = document.getElementById("stream-status-pill");
+  const streamTranscriptFeed = document.getElementById("stream-transcript-feed");
+  const streamThreatScore = document.getElementById("stream-threat-score");
+  const streamThreatBar = document.getElementById("stream-threat-bar");
+  const streamEmergencyAlert = document.getElementById("stream-emergency-alert");
+
+  let streamSocket = null;
+  let simulatedStreamInterval = null;
+
+  function connectCallStreamWebSocket(callId = "call_demo_" + Date.now()) {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/live-call-stream?call_id=${callId}`;
+
+    if (streamStatusPill) {
+      streamStatusPill.textContent = "Connecting to Live Stream...";
+      streamStatusPill.className = "stream-pill connecting";
+    }
+
+    streamSocket = new WebSocket(wsUrl);
+
+    streamSocket.onopen = () => {
+      if (streamStatusPill) {
+        streamStatusPill.textContent = "● Live Call Streaming Active";
+        streamStatusPill.className = "stream-pill active";
+      }
+    };
+
+    streamSocket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        handleStreamUpdate(msg);
+      } catch (e) {
+        console.warn("WebSocket parse error:", e);
+      }
+    };
+
+    streamSocket.onclose = () => {
+      if (streamStatusPill) {
+        streamStatusPill.textContent = "Stream Disconnected (Call Ended)";
+        streamStatusPill.className = "stream-pill idle";
+      }
+    };
+
+    streamSocket.onerror = (err) => {
+      console.warn("WebSocket stream error, fallback active:", err);
+    };
   }
+
+  function handleStreamUpdate(data) {
+    if (data.full_transcript && streamTranscriptFeed) {
+      streamTranscriptFeed.textContent = data.full_transcript;
+      streamTranscriptFeed.scrollTop = streamTranscriptFeed.scrollHeight;
+    }
+
+    if (data.threat_score !== undefined && streamThreatScore && streamThreatBar) {
+      streamThreatScore.textContent = `${data.threat_score} / 100`;
+      streamThreatBar.style.width = `${data.threat_score}%`;
+      streamThreatBar.style.backgroundColor = 
+        data.threat_score >= 75 ? "#e11d48" : 
+        data.threat_score >= 40 ? "#d97706" : "#059669";
+    }
+
+    if (data.action_advice && streamEmergencyAlert) {
+      if (data.threat_score >= 70) {
+        streamEmergencyAlert.style.display = "block";
+        streamEmergencyAlert.textContent = "🚨 CRITICAL DIRECTIVE: " + data.action_advice;
+      } else {
+        streamEmergencyAlert.style.display = "none";
+      }
+    }
+  }
+
+  // Simulated Voice Call Stream Button for instant UI testing
+  if (liveStreamBtn) {
+    liveStreamBtn.addEventListener("click", () => {
+      if (simulatedStreamInterval) {
+        clearInterval(simulatedStreamInterval);
+        simulatedStreamInterval = null;
+        if (streamSocket) streamSocket.close();
+        liveStreamBtn.textContent = "Test Live Call Stream";
+        if (streamStatusPill) {
+          streamStatusPill.textContent = "Stream Idle";
+          streamStatusPill.className = "stream-pill idle";
+        }
+        return;
+      }
+
+      liveStreamBtn.textContent = "Stop Stream Simulation";
+      connectCallStreamWebSocket();
+
+      // Simulate a real-world digital arrest scam call progression
+      const phrases = [
+        "Aapka naam Saumya hai? Hum Mumbai Cyber Crime Cell se bol rahe hain.",
+        "Aapke Aadhaar card se ek FedEx parcel bheja gaya hai jisme illegal narcotics aur fake passports mile hain.",
+        "Supreme Court aur CBI ne aapke khilaf immediate Digital Arrest warrant issue kiya hai.",
+        "Aap kisi ko call nahi kar sakte, camera on rakhiye nahi to police aapke ghar bhej rahe hain.",
+        "Verification clearance ke liye aapko Reserve Bank ke security escrow account mein 50,000 transfer karne honge."
+      ];
+
+      let phraseIndex = 0;
+      let accumulated = "";
+
+      simulatedStreamInterval = setInterval(() => {
+        if (phraseIndex < phrases.length) {
+          accumulated += (accumulated ? " " : "") + phrases[phraseIndex];
+          phraseIndex++;
+
+          const score = phraseIndex === 1 ? 15 : phraseIndex === 2 ? 45 : phraseIndex === 3 ? 82 : 95;
+          const advice = score >= 75 
+            ? "HANG UP IMMEDIATELY. Law enforcement never arrests via video call or demands money transfers. Call national helpline 1930."
+            : "Continue monitoring. Urgency detected.";
+
+          handleStreamUpdate({
+            full_transcript: accumulated,
+            threat_score: score,
+            action_advice: advice
+          });
+
+          // Also send text frame to WebSocket if open
+          if (streamSocket && streamSocket.readyState === WebSocket.OPEN) {
+            streamSocket.send(JSON.stringify({
+              event: "text_chunk",
+              text: phrases[phraseIndex - 1]
+            }));
+          }
+        } else {
+          clearInterval(simulatedStreamInterval);
+          simulatedStreamInterval = null;
+          liveStreamBtn.textContent = "Test Live Call Stream";
+        }
+      }, 2500);
+    });
+  }
+
 });

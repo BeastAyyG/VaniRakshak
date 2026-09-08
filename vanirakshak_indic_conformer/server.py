@@ -37,7 +37,7 @@ for p in env_paths:
         load_dotenv(p)
         break
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -566,3 +566,211 @@ async def verify_claim(req: FactCheckRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8084, reload=False)
+
+
+# ==============================================================================
+# LIVE STREAM VOICE CALL RECORDING ENGINE (Main App Integration)
+# Protocols: WebSocket (/ws/live-call-stream) & Chunked REST (/api/stream/call-chunk)
+# ==============================================================================
+
+class LiveCallSession:
+    """Represents an active incoming phone call audio stream from the main app."""
+    def __init__(self, call_id: str, caller: str = "Unknown"):
+        self.call_id = call_id
+        self.caller = caller
+        self.started_at = time.time()
+        self.last_activity = time.time()
+        self.audio_buffer = bytearray()
+        self.transcript_segments = []
+        self.full_transcript = ""
+        self.threat_score = 0
+        self.threat_level = "SAFE"
+        self.scam_type = "Normal Conversation"
+        self.action_advice = "Call stream active. Monitoring audio in real time."
+        self.red_flags = []
+        self.is_completed = False
+
+    def to_dict(self):
+        return {
+            "call_id": self.call_id,
+            "caller": self.caller,
+            "duration_sec": round(time.time() - self.started_at, 1),
+            "full_transcript": self.full_transcript,
+            "threat_score": self.threat_score,
+            "threat_level": self.threat_level,
+            "scam_type": self.scam_type,
+            "action_advice": self.action_advice,
+            "red_flags": self.red_flags,
+            "is_completed": self.is_completed
+        }
+
+active_call_sessions: dict[str, LiveCallSession] = {}
+
+
+@app.get("/api/stream/calls")
+async def list_active_calls():
+    """List all currently monitored and recent live call streams."""
+    return {
+        "active_calls": [s.to_dict() for s in active_call_sessions.values()]
+    }
+
+
+@app.websocket("/ws/live-call-stream")
+async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Query(None)):
+    """
+    Bidirectional Real-Time Audio Streaming for Mobile/VoIP Main App.
+    Accepts raw binary PCM/WebM chunks or JSON control events.
+    Pushes instantaneous threat scores, transcripts, and emergency directives.
+    """
+    await websocket.accept()
+    if not call_id:
+        call_id = f"call_{int(time.time())}"
+
+    if call_id not in active_call_sessions:
+        active_call_sessions[call_id] = LiveCallSession(call_id=call_id)
+    session = active_call_sessions[call_id]
+
+    logger.info(f"[LiveStream] WebSocket connected for call_id: {call_id}")
+    client = get_gemini_client()
+
+    try:
+        # Send initial session handshake
+        await websocket.send_json({
+            "event": "stream_connected",
+            "call_id": call_id,
+            "status": "ready",
+            **session.to_dict()
+        })
+
+        while True:
+            message = await websocket.receive()
+            session.last_activity = time.time()
+
+            # A) Binary audio chunk streamed from mobile app
+            if "bytes" in message and message["bytes"]:
+                raw_chunk = message["bytes"]
+                session.audio_buffer.extend(raw_chunk)
+
+                # Evaluate buffer periodically (e.g. every 32KB ~ 1-2s audio)
+                if len(session.audio_buffer) >= 32000:
+                    chunk_to_process = bytes(session.audio_buffer)
+                    session.audio_buffer.clear()
+                    try:
+                        res = transcribe_with_indic_conformer(chunk_to_process)
+                        new_text = (res.get("transcript") or "").strip()
+                        if new_text:
+                            session.transcript_segments.append(new_text)
+                            session.full_transcript = " ".join(session.transcript_segments)
+
+                            # Re-evaluate threat matrix
+                            threat = evaluate_threat_and_scam(session.full_transcript, client)
+                            session.threat_score = threat.get("risk_score", 0)
+                            session.threat_level = threat.get("threat_level", "SAFE")
+                            session.scam_type = threat.get("scam_type", "Normal Conversation")
+                            session.action_advice = threat.get("action_advice", "")
+                            session.red_flags = threat.get("red_flags", [])
+
+                            await websocket.send_json({
+                                "event": "stream_update",
+                                "call_id": call_id,
+                                "incremental_text": new_text,
+                                **session.to_dict()
+                            })
+                    except Exception as e:
+                        logger.warn(f"[LiveStream] Buffer transcription warning: {e}")
+
+            # B) Text / JSON control frames
+            elif "text" in message and message["text"]:
+                try:
+                    payload = json.loads(message["text"])
+                    event_type = payload.get("event")
+
+                    if event_type == "text_chunk":
+                        # Simulated or client-transcribed text chunk
+                        chunk_text = payload.get("text", "").strip()
+                        if chunk_text:
+                            session.transcript_segments.append(chunk_text)
+                            session.full_transcript = " ".join(session.transcript_segments)
+
+                            threat = evaluate_threat_and_scam(session.full_transcript, client)
+                            session.threat_score = threat.get("risk_score", 0)
+                            session.threat_level = threat.get("threat_level", "SAFE")
+                            session.scam_type = threat.get("scam_type", "Normal Conversation")
+                            session.action_advice = threat.get("action_advice", "")
+                            session.red_flags = threat.get("red_flags", [])
+
+                            await websocket.send_json({
+                                "event": "stream_update",
+                                "call_id": call_id,
+                                "incremental_text": chunk_text,
+                                **session.to_dict()
+                            })
+
+                    elif event_type == "end_call":
+                        session.is_completed = True
+                        await websocket.send_json({
+                            "event": "call_completed",
+                            "call_id": call_id,
+                            **session.to_dict()
+                        })
+                        break
+
+                    elif event_type == "ping":
+                        await websocket.send_json({"event": "pong", "time": time.time()})
+
+                except json.JSONDecodeError:
+                    pass
+
+    except WebSocketDisconnect:
+        logger.info(f"[LiveStream] Client disconnected from call: {call_id}")
+    except Exception as exc:
+        logger.error(f"[LiveStream] Error in WebSocket stream: {exc}", exc_info=True)
+    finally:
+        session.is_completed = True
+
+
+@app.post("/api/stream/call-chunk")
+async def ingest_call_chunk(
+    call_id: str = Form(...),
+    chunk_index: int = Form(0),
+    is_final: bool = Form(False),
+    file: UploadFile = File(...)
+):
+    """
+    REST Ingestion Endpoint for mobile devices streaming audio in sequential HTTP chunks.
+    """
+    if call_id not in active_call_sessions:
+        active_call_sessions[call_id] = LiveCallSession(call_id=call_id)
+    session = active_call_sessions[call_id]
+
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio chunk.")
+
+    client = get_gemini_client()
+    try:
+        res = transcribe_with_indic_conformer(audio_bytes)
+        new_text = (res.get("transcript") or "").strip()
+        if new_text:
+            session.transcript_segments.append(new_text)
+            session.full_transcript = " ".join(session.transcript_segments)
+
+            threat = evaluate_threat_and_scam(session.full_transcript, client)
+            session.threat_score = threat.get("risk_score", 0)
+            session.threat_level = threat.get("threat_level", "SAFE")
+            session.scam_type = threat.get("scam_type", "Normal Conversation")
+            session.action_advice = threat.get("action_advice", "")
+            session.red_flags = threat.get("red_flags", [])
+
+        if is_final:
+            session.is_completed = True
+
+        return {
+            "status": "success",
+            "chunk_index": chunk_index,
+            "incremental_text": new_text,
+            **session.to_dict()
+        }
+    except Exception as e:
+        logger.error(f"Error processing call chunk for {call_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
