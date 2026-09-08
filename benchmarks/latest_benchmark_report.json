@@ -1,6 +1,6 @@
 {
-  "timestamp_iso": "2026-09-07T23:25:58Z",
-  "total_benchmark_duration_sec": 16.83,
+  "timestamp_iso": "2026-09-08T02:39:38Z",
+  "total_benchmark_duration_sec": 9.94,
   "all_passed": false,
   "checks": [
     {
@@ -8,11 +8,11 @@
       "passed": false
     },
     {
-      "check": "Latency SLA p95 < 200 ms (p95=23.98)",
+      "check": "Latency SLA p95 < 200 ms (p95=10.20)",
       "passed": true
     },
     {
-      "check": "Telephony robustness (4/6 conditions below uninformative minDCF)",
+      "check": "Telephony robustness (2/6 conditions uninformative: AMR-WB (VoLTE), GSM-EFR (2G))",
       "passed": false
     },
     {
@@ -39,10 +39,10 @@
     "calibrated": false
   },
   "latency_sla": {
-    "p50_ms": 21.736449998570606,
-    "p95_ms": 23.983439999210532,
-    "p99_ms": 24.505802003768608,
-    "mean_ms": 18.415182499811635,
+    "p50_ms": 9.349399999337038,
+    "p95_ms": 10.203460000047926,
+    "p99_ms": 10.847514003835384,
+    "mean_ms": 9.343323499888356,
     "sla_threshold_p95_ms": 200.0,
     "compliant": true
   },

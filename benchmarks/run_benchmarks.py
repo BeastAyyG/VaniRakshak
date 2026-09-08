@@ -293,10 +293,14 @@ def run_all_benchmarks() -> dict:
         )
         checks.append((msg, False))
     checks.append((f"Latency SLA p95 < 200 ms (p95={p95:.2f})", p95 < 200.0))
-    msg = (
-        f"Telephony robustness ({n_codec_pass}/{len(m3)} conditions "
-        f"below uninformative minDCF)"
+    failed_codecs = [cname for cname, r in m3.items() if not r["passed"]]
+    msg = "Telephony robustness ("
+    msg += (
+        "all conditions informative"
+        if not failed_codecs
+        else f"{len(failed_codecs)}/{len(m3)} conditions uninformative: {', '.join(failed_codecs)}"
     )
+    msg += ")"
     checks.append((msg, n_codec_pass == len(m3)))
     if n_demo_total:
         msg = (
