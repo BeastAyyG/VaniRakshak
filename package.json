@@ -1,0 +1,19 @@
+{
+  "name": "vanirakshak",
+  "version": "2.2.0",
+  "description": "VaniRakshak — Voice Scam Shield & Live Fact Grounding",
+  "scripts": {
+    "dev": "crawl4ai\\.venv\\Scripts\\python.exe vanirakshak_indic_conformer/run_indic_server.py",
+    "start": "crawl4ai\\.venv\\Scripts\\python.exe vanirakshak_indic_conformer/run_indic_server.py",
+    "sotto": "crawl4ai\\.venv\\Scripts\\python.exe vanirakshak_sotto/run_sotto_server.py"
+  },
+  "keywords": [
+    "voice-ai",
+    "scam-shield",
+    "groq",
+    "whisper",
+    "fastapi"
+  ],
+  "author": "Ayush Agnihotri",
+  "license": "ISC"
+}
