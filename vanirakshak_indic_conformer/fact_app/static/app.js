@@ -342,7 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
     micBtn.classList.remove("recording");
     micIcon.textContent = "🎙️";
     micLabel.textContent = "Audio Captured (1 Min Max)";
-    micHint.textContent = "Ready to verify with Whisper + Crawl4AI";
+    micHint.textContent = "Ready to verify your audio";
   }
 
   function setupAudioVisualizer(stream) {
@@ -452,11 +452,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function cycleVoiceLoadingMessages() {
     const msgs = [
-      { status: "Transcribing with Faster-Whisper...", detail: "Running local int8 CPU inference on 4-second audio chunk" },
-      { status: "Detecting Audio Language & Keywords...", detail: "Identifying Hindi / English / Hinglish speech patterns" },
-      { status: "Evaluating Scam & Threat Matrix...", detail: "Analyzing psychological urgency, financial coercion, and fraud signals" },
-      { status: "Crawl4AI Live Web Grounding...", detail: "Scraping authoritative sources & advisories via Playwright Chromium" },
-      { status: "Synthesizing Defense Intelligence...", detail: "Finalizing risk score and emergency advisory directive" }
+      { status: "Transcribing audio...", detail: "Converting speech to text with high accuracy" },
+      { status: "Detecting language & keywords...", detail: "Identifying Hindi / English / Hinglish speech patterns" },
+      { status: "Evaluating scam & threat signals...", detail: "Analyzing urgency, financial coercion, and fraud indicators" },
+      { status: "Searching the web for evidence...", detail: "Scraping authoritative sources and advisories" },
+      { status: "Synthesizing defense intelligence...", detail: "Finalizing risk score and emergency advisory directive" }
     ];
     let i = 0;
     return setInterval(() => {
@@ -474,7 +474,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 1. Transcription Metadata
     langPill.textContent = `${t.language || "Unknown"} (${t.language_code || ""})`;
-    latencyPill.textContent = `IndicConformer Latency: ${t.inference_sec || 0}s`;
+    latencyPill.textContent = `Latency: ${t.inference_sec || 0}s`;
     durationPill.textContent = `Audio Duration: ${t.duration || 0}s`;
     
     if (t.transcript) {
@@ -692,7 +692,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function setTextLoading(isLoading) {
     if (isLoading) {
       verifyTextBtn.disabled = true;
-      textBtnText.textContent = "Crawl4AI Scraping & Verifying...";
+      textBtnText.textContent = "Searching & Verifying...";
       textBtnIcon.innerHTML = `<span class="spinner"></span>`;
       textLoadingBox.style.display = "block";
       textResultsBox.style.display = "none";
@@ -707,10 +707,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function cycleTextLoadingMessages() {
     const msgs = [
-      { status: "Launching Crawl4AI Headless Chromium...", detail: "Spinning up Playwright browser instances without third-party APIs" },
-      { status: "Scraping Target Web Pages...", detail: "Navigating directly to live web pages and extracting clean markdown content" },
-      { status: "Processing Page Content & Metadata...", detail: "Parsing DOM, cleaning boilerplate, and extracting factual data" },
-      { status: "Fact-Checking with Gemini...", detail: "Evaluating claim against scraped evidence with strict reality-grounding" }
+      { status: "Launching headless browser...", detail: "Spinning up browser instances to load live pages" },
+      { status: "Scraping web pages...", detail: "Navigating to sources and extracting clean text content" },
+      { status: "Processing page content...", detail: "Parsing and cleaning extracted factual data" },
+      { status: "Analyzing evidence...", detail: "Evaluating claim against scraped evidence with strict grounding" }
     ];
     let idx = 0;
     return setInterval(() => {

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <title>VaniRakshak (वाणी रक्षक) — Voice Scam Shield & Fact Grounding</title>
+  <title>VaniRakshak (à¤µà¤¾à¤£à¥€ à¤°à¤•à¥à¤·à¤•) â€” Voice Scam Shield & Fact Grounding</title>
   <meta name="description" content="State-of-the-art Voice Scam Shield & Real-time Fact Detector combining Groq Cloud Whisper Large v3 Turbo, Gemini Threat Matrix, and Crawl4AI live web grounding.">
   
   <!-- Google Fonts: Newsreader (Waldenburg editorial serif substitute), Playfair & Inter -->
@@ -17,99 +17,114 @@
   
   <link rel="stylesheet" href="/static/styles.css?v=2026_elevenlabs_monochrome_v2">
 <style id="elevenlabs-inlined-styles">
-/* Global Safety Resets - Zero Default Browser Blue */
-a, a:visited, a:hover, a:active {
-  color: inherit !important;
-  text-decoration: none !important;
-}
-input[type="checkbox"], input[type="radio"] {
-  accent-color: #1c1917 !important;
-}
-*:focus-visible {
-  outline: 2px solid #1c1917 !important;
-  outline-offset: 2px !important;
-}
-
-/* Global Safety Resets - Zero Default Browser Blue */
-a, a:visited, a:hover, a:active {
-  color: inherit !important;
-  text-decoration: none !important;
-}
-input[type="checkbox"], input[type="radio"] {
-  accent-color: #1c1917 !important;
-}
-*:focus-visible {
-  outline: 2px solid #1c1917 !important;
-  outline-offset: 2px !important;
-}
-
 /* ==========================================================================
-   VANIRAKSHAK — ELEVENLABS EDITORIAL PRINT DESIGN
-   Aesthetic: Quietly Editorial Print Magazine (Inspired by ElevenLabs)
-   Canvas: Warm Off-White Paper (#f8f8f6), Deep Ink (#0c0a09 / #1c1917)
-   Typography: High-Contrast Serif (Newsreader / Playfair) + Inter Editorial Body
-   CTAs: Near-black ink pill primary, hairline outline pill secondary
-   ZERO BLUE / CYAN TINTS — PURE MONOCHROME WITH WARM EDITORIAL ACCENTS
+   VANIRAKSHAK â€” PREMIUM MINIMALIST UI
+   Skill: Mobile App Design Standards (awesome-skills/mobile-app-design)
+   Principles: Atomic Design, 4px grid, 44px touch targets, type scale,
+                micro-animations, WCAG 4.5:1 contrast, visual hierarchy
+   Palette: Warm Off-White #f8f8f6, Deep Ink #0c0a09, Muted #73726d
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   DESIGN TOKENS (Atoms: Variables)
+   -------------------------------------------------------------------------- */
 :root {
-  /* Warm Paper & Ink Palette */
-  --canvas: #f8f8f6;
-  --canvas-soft: #fcfcfb;
-  --surface-card: #ffffff;
-  --surface-strong: #f1f0eb;
-  
-  --ink: #0c0a09;
-  --ink-secondary: #1c1917;
-  --body: #4a4a47;
-  --body-strong: #1c1917;
-  --muted: #73726d;
-  --muted-soft: #a5a49e;
-  
-  /* Hairlines & Borders */
-  --hairline: #e6e5e0;
-  --hairline-soft: #f0efea;
+  /* Color â€” Warm Ink Palette (frozen) */
+  --canvas:          #f8f8f6;
+  --canvas-soft:     #fcfcfb;
+  --surface-card:    #ffffff;
+  --surface-strong:  #f1f0eb;
+
+  --ink:             #0c0a09;
+  --ink-secondary:   #1c1917;
+  --body:            #4a4a47;
+  --body-strong:     #1c1917;
+  --muted:           #73726d;
+  --muted-soft:      #a5a49e;
+
+  --hairline:        #e6e5e0;
+  --hairline-soft:   #f0efea;
   --hairline-strong: #d2d1cb;
-  
-  /* Primary Action */
-  --primary: #1c1917;
-  --primary-active: #000000;
-  --on-primary: #ffffff;
-  
-  /* Semantic (Soft, Muted, Never Neon) */
-  --semantic-success: #15803d;
-  --semantic-success-bg: #f2f8f4;
-  --semantic-success-border: #cde8d5;
 
-  --semantic-error: #b91c1c;
-  --semantic-error-bg: #fdf3f3;
-  --semantic-error-border: #f9d2d2;
+  --primary:         #1c1917;
+  --primary-hover:   #000000;
+  --on-primary:      #ffffff;
 
-  --semantic-warning: #b45309;
-  --semantic-warning-bg: #fef8ed;
-  --semantic-warning-border: #fce3b8;
+  /* Semantic */
+  --success:         #166534;
+  --success-bg:      #f0fdf4;
+  --success-border:  #bbf7d0;
+  --error:           #991b1b;
+  --error-bg:        #fef2f2;
+  --error-border:    #fecaca;
+  --warning:         #92400e;
+  --warning-bg:      #fffbeb;
+  --warning-border:  #fde68a;
+
+  /* Legacy aliases (for JS references) */
+  --semantic-success:        var(--success);
+  --semantic-success-bg:     var(--success-bg);
+  --semantic-success-border: var(--success-border);
+  --semantic-error:          var(--error);
+  --semantic-error-bg:       var(--error-bg);
+  --semantic-error-border:   var(--error-border);
+  --semantic-warning:        var(--warning);
+  --semantic-warning-bg:     var(--warning-bg);
+  --semantic-warning-border: var(--warning-border);
 
   /* Typography */
-  --font-display: 'Newsreader', 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Newsreader', 'Playfair Display', Georgia, serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
 
-  /* Shapes */
-  --rounded-xs: 4px;
-  --rounded-sm: 6px;
-  --rounded-md: 8px;
-  --rounded-lg: 12px;
-  --rounded-xl: 16px;
-  --rounded-pill: 9999px;
+  /* Type Scale (4pt base) */
+  --text-xs:   0.6875rem; /* 11px */
+  --text-sm:   0.8125rem; /* 13px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-md:   1.0625rem; /* 17px */
+  --text-lg:   1.125rem;  /* 18px */
+  --text-xl:   1.25rem;   /* 20px */
+  --text-2xl:  1.5rem;    /* 24px */
+  --text-3xl:  2rem;      /* 32px */
+
+  /* Spacing (4px grid) */
+  --space-1:   0.25rem;  /* 4px  */
+  --space-2:   0.5rem;   /* 8px  */
+  --space-3:   0.75rem;  /* 12px */
+  --space-4:   1rem;     /* 16px */
+  --space-5:   1.25rem;  /* 20px */
+  --space-6:   1.5rem;   /* 24px */
+  --space-8:   2rem;     /* 32px */
+  --space-10:  2.5rem;   /* 40px */
+  --space-12:  3rem;     /* 48px */
+  --space-16:  4rem;     /* 64px */
+  --space-24:  6rem;     /* 96px */
+
+  /* Radii */
+  --radius-xs:   3px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  20px;
+  --radius-pill: 9999px;
 
   /* Elevation */
-  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px -2px rgba(0, 0, 0, 0.02);
-  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.02), 0 8px 24px -4px rgba(0, 0, 0, 0.03);
-  --shadow-hover: 0 4px 20px -2px rgba(0, 0, 0, 0.06);
+  --shadow-xs:    0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.04), 0 4px 12px -2px rgba(0,0,0,0.03);
+  --shadow-md:    0 2px 8px rgba(0,0,0,0.05), 0 8px 24px -4px rgba(0,0,0,0.04);
+  --shadow-lg:    0 4px 20px -2px rgba(0,0,0,0.08);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.04);
 
-  --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Motion */
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  --duration:  200ms;
+  --transition: all var(--duration) var(--ease-out);
 }
 
+/* --------------------------------------------------------------------------
+   RESET + BASE (Atoms: Foundation)
+   -------------------------------------------------------------------------- */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -118,252 +133,241 @@ input[type="checkbox"], input[type="radio"] {
 
 html {
   background-color: var(--canvas);
+  scroll-behavior: smooth;
 }
 
 body {
   font-family: var(--font-body);
+  font-size: var(--text-base);
   background-color: var(--canvas);
   color: var(--ink);
   min-height: 100vh;
-  line-height: 1.55;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Page Container */
+/* Prevent any blue leakage */
+a, a:visited, a:hover, a:active {
+  color: inherit;
+  text-decoration: none;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   LAYOUT
+   -------------------------------------------------------------------------- */
 .container {
-  max-width: 1020px;
+  max-width: 1040px;
   margin: 0 auto;
-  padding: 3rem 1.75rem 6rem;
+  padding: var(--space-8) var(--space-6) var(--space-24);
 }
 
-/* Editorial Top Navigation */
+@media (max-width: 768px) {
+  .container {
+    padding: var(--space-6) var(--space-4) var(--space-16);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   NAVIGATION (Organism: Top Bar)
+   -------------------------------------------------------------------------- */
 .top-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 2rem;
+  padding-bottom: var(--space-6);
+  margin-bottom: var(--space-12);
   border-bottom: 1px solid var(--hairline);
-  margin-bottom: 3.5rem;
 }
 
 .nav-brand {
   display: flex;
   align-items: baseline;
-  gap: 0.85rem;
-  text-decoration: none;
-  color: var(--ink);
+  gap: var(--space-3);
+  cursor: pointer;
 }
 
 .brand-name {
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: 1.45rem;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: var(--ink);
+  line-height: 1;
+}
+
+.brand-devanagari {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 300;
+  color: var(--muted);
+  letter-spacing: 0;
 }
 
 .brand-tag {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  display: none; /* hidden â€” cleaner without it */
 }
 
+/* Status Pill */
 .nav-status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 6px 14px;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
   background-color: var(--surface-card);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-pill);
-  font-size: 0.76rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--ink-secondary);
-  box-shadow: var(--shadow-subtle);
+  color: var(--muted);
+  box-shadow: var(--shadow-xs);
+  letter-spacing: 0.01em;
 }
 
 .pulse-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: var(--semantic-success);
+  background-color: var(--success);
+  flex-shrink: 0;
+  animation: pulseGlow 2.4s ease-in-out infinite;
 }
 
-/* Hero Section */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(22, 101, 52, 0.4); }
+  50%       { opacity: 0.8; box-shadow: 0 0 0 4px rgba(22, 101, 52, 0); }
+}
+
+/* --------------------------------------------------------------------------
+   HERO SECTION (Organism: Header)
+   -------------------------------------------------------------------------- */
 header {
-  text-align: left;
-  margin-bottom: 3.5rem;
-  max-width: 820px;
-}
-
-.section-eyebrow {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-12);
+  max-width: 860px;
 }
 
 h1 {
   font-family: var(--font-display);
-  font-size: clamp(2.6rem, 5.5vw, 4.2rem);
+  font-size: clamp(2.4rem, 5.5vw, 4rem);
   font-weight: 400;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
   color: var(--ink);
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--space-5);
 }
 
-.h1-eng {
+.h1-sub {
   display: block;
-  font-size: clamp(1.8rem, 3.8vw, 2.7rem);
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 3vw, 2rem);
   font-weight: 300;
   color: var(--muted);
-  letter-spacing: -0.02em;
-  margin-top: 0.35rem;
+  letter-spacing: -0.01em;
+  margin-top: var(--space-2);
 }
 
 .subtitle {
-  font-size: 1.1rem;
+  font-size: var(--text-md);
   color: var(--body);
   font-weight: 400;
-  line-height: 1.6;
-  max-width: 720px;
-  margin-bottom: 2rem;
+  line-height: 1.65;
+  max-width: 640px;
+  margin-bottom: 0;
 }
 
-.subtitle strong {
-  color: var(--ink-secondary);
-  font-weight: 500;
-}
-
-/* Action Pills Row (like 'Try free' / 'Talk to sales') */
+/* --------------------------------------------------------------------------
+   TAB SWITCHER (Molecule: Segmented Control)
+   Inspired by mobile app segmented controls
+   -------------------------------------------------------------------------- */
 .hero-cta-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 2.5rem;
+  gap: var(--space-2);
+  margin-top: var(--space-8);
+  margin-bottom: var(--space-12);
   flex-wrap: wrap;
 }
 
-.btn-pill-primary {
+.hero-cta-row .tab-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px; /* Touch target: 44px min */
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid var(--hairline-strong);
+  background-color: var(--surface-card);
+  color: var(--muted);
+  outline: none;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-xs);
+}
+
+.hero-cta-row .tab-btn:hover {
+  border-color: var(--ink-secondary);
+  color: var(--ink);
+  background-color: var(--surface-card);
+}
+
+.hero-cta-row .tab-btn.active {
   background-color: var(--primary);
   color: var(--on-primary);
-  border: 1px solid var(--primary);
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.92rem;
-  font-weight: 500;
-  padding: 10px 22px;
-  cursor: pointer;
-  transition: var(--transition);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
-.btn-pill-primary:hover {
-  background-color: var(--primary-active);
-  transform: translateY(-1px);
+.hero-cta-row .tab-btn.active:hover {
+  background-color: var(--primary-hover);
 }
 
-.btn-pill-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--surface-card);
-  color: var(--ink);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.92rem;
-  font-weight: 500;
-  padding: 10px 22px;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.btn-pill-secondary:hover {
-  border-color: var(--ink);
-}
-
-/* Nav Tabs Switcher */
-.nav-tabs-wrapper {
-  margin-bottom: 2.5rem;
-  border-top: 1px solid var(--hairline-soft);
-  padding-top: 2rem;
-}
-
-.nav-tabs {
-  display: inline-flex;
-  background-color: var(--surface-strong);
-  padding: 4px;
-  border-radius: var(--rounded-pill);
-  border: 1px solid var(--hairline);
-}
-
-.tab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 8px 22px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  font-weight: 500;
-  border-radius: var(--rounded-pill);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.tab-btn:hover {
-  color: var(--ink);
-}
-
-.tab-btn.active {
-  background-color: var(--surface-card);
-  color: var(--ink);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
-.tab-icon {
-  font-size: 0.95rem;
-}
-
-/* Tab Content Visibility */
+/* --------------------------------------------------------------------------
+   TAB CONTENT
+   -------------------------------------------------------------------------- */
 .tab-content {
   display: none;
 }
 
 .tab-content.active {
   display: block;
-  animation: fadeIn 0.2s ease forwards;
+  animation: slideUp 0.22s var(--ease-out) both;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Editorial Section Header */
+/* --------------------------------------------------------------------------
+   SECTION MARKER (Atom: Eyebrow Label)
+   -------------------------------------------------------------------------- */
 .section-marker {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 1.25rem;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-soft);
+  margin-bottom: var(--space-4);
 }
 
 .section-marker::after {
@@ -373,376 +377,294 @@ h1 {
   background-color: var(--hairline);
 }
 
-/* Pure Surface Cards */
+/* --------------------------------------------------------------------------
+   CARDS (Molecule: Surface Card)
+   -------------------------------------------------------------------------- */
 .glass-card, .surface-card {
   background-color: var(--surface-card);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-xl);
-  padding: 2.25rem;
-  box-shadow: var(--shadow-card);
-  margin-bottom: 2.5rem;
-  transition: var(--transition);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-8);
+  transition: border-color var(--duration) var(--ease-out),
+              box-shadow var(--duration) var(--ease-out);
 }
 
 .glass-card:hover {
   border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-md);
 }
 
-.card-header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--hairline-soft);
+@media (max-width: 600px) {
+  .glass-card, .surface-card {
+    padding: var(--space-5);
+  }
 }
 
+/* Card sub-title atom */
 .preset-title {
-  font-size: 1.15rem;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: 600;
   color: var(--ink);
   letter-spacing: -0.01em;
 }
 
-.section-desc {
-  font-size: 0.88rem;
-  color: var(--muted);
-  margin-top: 0.2rem;
-}
-
-.badge-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  background-color: var(--surface-strong);
-  border-radius: var(--rounded-pill);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* Audio Preset Samples Grid */
-.samples-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 1rem;
-}
-
-.sample-card {
-  background-color: var(--canvas-soft);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
-  padding: 1.25rem;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 1rem;
-  transition: var(--transition);
-}
-
-.sample-card:hover {
-  background-color: var(--surface-card);
-  border-color: var(--hairline-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
-}
-
-.sample-card.active {
-  background-color: var(--surface-card);
-  border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink);
-}
-
-.sample-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.sample-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: var(--rounded-pill);
-  background-color: var(--surface-strong);
-  color: var(--muted);
-}
-
-.sample-badge.fraud {
-  background-color: var(--semantic-error-bg);
-  color: var(--semantic-error);
-  border: 1px solid var(--semantic-error-border);
-}
-
-.sample-badge.utility {
-  background-color: var(--semantic-warning-bg);
-  color: var(--semantic-warning);
-  border: 1px solid var(--semantic-warning-border);
-}
-
-.sample-badge.fact {
-  background-color: var(--semantic-success-bg);
-  color: var(--semantic-success);
-  border: 1px solid var(--semantic-success-border);
-}
-
-.sample-lang {
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-
-.sample-title {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--ink);
-  margin-bottom: 0.35rem;
-}
-
-.sample-desc {
-  font-size: 0.82rem;
-  color: var(--body);
-  line-height: 1.45;
-}
-
-.sample-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--muted);
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--hairline-soft);
-  transition: var(--transition);
-}
-
-.sample-card:hover .sample-action {
-  color: var(--ink);
-}
-
-.sample-skeleton {
-  padding: 2.5rem;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.9rem;
-  grid-column: 1 / -1;
-}
-
-/* Voice Controls & Columns */
+/* --------------------------------------------------------------------------
+   VOICE CONTROLS LAYOUT (Organism: Split Panel)
+   -------------------------------------------------------------------------- */
 .voice-hero-controls {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 2.5rem;
+  gap: var(--space-8);
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-6);
 }
 
 @media (max-width: 800px) {
   .voice-hero-controls {
     grid-template-columns: 1fr;
-    gap: 1.75rem;
+    gap: var(--space-6);
   }
 }
 
 .column-divider {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
+}
+
+.column-divider::before,
+.column-divider::after {
+  content: "";
+  width: 1px;
+  height: 40px;
+  background: var(--hairline);
 }
 
 .column-divider span {
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted-soft);
   letter-spacing: 0.1em;
+  padding: var(--space-1) var(--space-2);
   background-color: var(--surface-card);
-  padding: 6px 12px;
-  border-radius: var(--rounded-pill);
+  border-radius: var(--radius-pill);
   border: 1px solid var(--hairline);
 }
 
-/* Microphone HUD */
+@media (max-width: 800px) {
+  .column-divider { flex-direction: row; }
+  .column-divider::before,
+  .column-divider::after {
+    width: 40px;
+    height: 1px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   MICROPHONE BUTTON (Atom: Action Button â€” Recording State)
+   44px+ touch target, animated recording ring
+   -------------------------------------------------------------------------- */
 .mic-hud {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  margin-bottom: 1rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 .mic-circle-btn {
-  width: 54px;
-  height: 54px;
-  border-radius: var(--rounded-pill);
-  border: 1px solid var(--hairline-strong);
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1.5px solid var(--hairline-strong);
   background-color: var(--surface-card);
   color: var(--ink);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
+  font-size: 1.5rem;
   transition: var(--transition);
-  box-shadow: var(--shadow-subtle);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
 }
 
 .mic-circle-btn:hover {
   border-color: var(--ink);
-  transform: scale(1.02);
+  transform: scale(1.04);
+  box-shadow: var(--shadow-md);
+}
+
+.mic-circle-btn:active {
+  transform: scale(0.97);
 }
 
 .mic-circle-btn.recording {
-  background-color: var(--semantic-error);
-  color: #ffffff;
-  border-color: var(--semantic-error);
-  animation: micPulse 1.8s infinite;
+  background-color: var(--error);
+  color: #fff;
+  border-color: var(--error);
+  animation: micRipple 1.8s ease-in-out infinite;
 }
 
-@keyframes micPulse {
-  0% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.35); }
-  70% { box-shadow: 0 0 0 12px rgba(185, 28, 28, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0); }
+@keyframes micRipple {
+  0%   { box-shadow: 0 0 0 0   rgba(153, 27, 27, 0.4); }
+  60%  { box-shadow: 0 0 0 14px rgba(153, 27, 27, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(153, 27, 27, 0); }
 }
 
-.mic-status-wrapper {
-  flex: 1;
-}
+.mic-status-wrapper { flex: 1; min-width: 0; }
 
 .mic-label {
-  font-size: 0.98rem;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--ink);
+  line-height: 1.3;
 }
 
 .mic-hint {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
 }
 
+/* Waveform Canvas */
 .visualizer-canvas {
   width: 100%;
-  height: 44px;
-  border-radius: var(--rounded-sm);
+  height: 40px;
+  border-radius: var(--radius-sm);
   background-color: var(--canvas-soft);
   border: 1px solid var(--hairline);
   display: block;
+  margin-top: var(--space-3);
 }
 
-/* Timer & Progress */
-.timer-container {
-  margin-top: 0.75rem;
-}
+/* --------------------------------------------------------------------------
+   TIMER (Molecule: Progress Indicator)
+   -------------------------------------------------------------------------- */
+.timer-container { margin-top: var(--space-3); }
 
 .timer-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   color: var(--muted);
-  margin-bottom: 0.35rem;
+  margin-bottom: var(--space-1);
 }
 
 .timer-display {
   font-family: var(--font-mono);
   font-weight: 500;
+  font-size: var(--text-sm);
   color: var(--ink);
+  letter-spacing: 0.03em;
 }
 
 .timer-badge {
-  font-size: 0.7rem;
-  padding: 2px 6px;
+  font-size: var(--text-xs);
+  padding: 2px 7px;
   background-color: var(--surface-strong);
-  border-radius: var(--rounded-xs);
+  border-radius: var(--radius-xs);
   color: var(--muted);
+  font-weight: 500;
 }
 
 .record-progress-bar {
   width: 100%;
   height: 3px;
   background-color: var(--hairline);
-  border-radius: var(--rounded-pill);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 
 .record-progress-fill {
   height: 100%;
   background-color: var(--primary);
-  border-radius: var(--rounded-pill);
-  transition: width 0.3s linear;
+  border-radius: var(--radius-pill);
+  transition: width 0.4s linear;
 }
 
+/* Auto-detect checkbox */
 .auto-detect-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
   color: var(--muted);
   cursor: pointer;
+  margin-top: var(--space-3);
+  user-select: none;
 }
 
-.auto-detect-label input[type="checkbox"] {
-  accent-color: var(--primary);
-}
+.auto-detect-label:hover { color: var(--ink); }
 
-/* File Dropzone */
+/* --------------------------------------------------------------------------
+   DROPZONE (Molecule: File Upload Area)
+   -------------------------------------------------------------------------- */
 .dropzone {
-  border: 1px dashed var(--hairline-strong);
+  border: 1.5px dashed var(--hairline-strong);
   background-color: var(--canvas-soft);
-  border-radius: var(--rounded-lg);
-  padding: 1.75rem 1.25rem;
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-6);
   text-align: center;
   cursor: pointer;
   transition: var(--transition);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dropzone:hover, .dropzone.dragover {
   background-color: var(--surface-card);
   border-color: var(--ink);
+  border-style: solid;
 }
 
-.file-input-hidden {
-  display: none;
-}
+.file-input-hidden { display: none; }
 
 .dropzone-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-2);
 }
 
 .dropzone-icon {
-  font-size: 1.5rem;
-  margin-bottom: 0.2rem;
-  color: var(--muted);
+  font-size: 1.75rem;
+  margin-bottom: var(--space-1);
+  opacity: 0.5;
 }
 
 .dropzone-text {
-  font-size: 0.9rem;
-  color: var(--ink);
+  font-size: var(--text-sm);
+  color: var(--body-strong);
+  line-height: 1.4;
 }
 
 .dropzone-sub {
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   color: var(--muted);
+  letter-spacing: 0.01em;
 }
 
+/* Selected file chip */
 .selected-file-info {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.75rem;
-  padding: 8px 14px;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-4);
   background-color: var(--surface-strong);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-pill);
-  font-size: 0.82rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  gap: var(--space-2);
 }
 
 .file-name-text {
@@ -751,579 +673,768 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .clear-btn {
   background: transparent;
   border: none;
-  color: var(--muted);
-  font-size: 0.85rem;
+  color: var(--muted-soft);
+  font-size: var(--text-sm);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 2px var(--space-1);
+  flex-shrink: 0;
+  transition: color var(--duration) var(--ease-out);
+  line-height: 1;
 }
 
-.clear-btn:hover {
-  color: var(--semantic-error);
-}
+.clear-btn:hover { color: var(--error); }
 
-/* Audio Preview Wrapper */
+/* --------------------------------------------------------------------------
+   AUDIO PREVIEW (Molecule)
+   -------------------------------------------------------------------------- */
 .audio-preview-wrapper {
-  margin-top: 1.5rem;
-  padding: 1rem 1.25rem;
+  margin-top: var(--space-5);
+  padding: var(--space-4) var(--space-5);
   background-color: var(--canvas-soft);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .preview-label {
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.audio-player {
-  width: 100%;
-  height: 38px;
-}
+.audio-player { width: 100%; height: 36px; }
 
-/* Primary Action Button */
+/* --------------------------------------------------------------------------
+   PRIMARY ACTION BUTTON (Atom: CTA Button)
+   48px height â€” exceeds 44px touch target requirement
+   -------------------------------------------------------------------------- */
 .action-row {
   display: flex;
   justify-content: center;
-  margin-top: 1.75rem;
+  margin-top: var(--space-6);
 }
 
 .btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
+  gap: var(--space-2);
   background-color: var(--primary);
   color: var(--on-primary);
-  border: 1px solid var(--primary);
-  border-radius: var(--rounded-pill);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-pill);
   font-family: var(--font-body);
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
   font-weight: 500;
-  padding: 12px 32px;
-  min-height: 44px;
+  padding: 0 var(--space-8);
+  min-height: 48px;
+  letter-spacing: 0.01em;
   cursor: pointer;
   transition: var(--transition);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: var(--primary-active);
+  background-color: var(--primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn-primary:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
-/* Loading State Box */
-.loading-box {
-  display: none;
-  text-align: center;
-  padding: 3.5rem 2rem;
-  background-color: var(--surface-card);
-  border: 1px solid var(--hairline);
-  border-radius: var(--rounded-xl);
-  box-shadow: var(--shadow-card);
-  margin-bottom: 2.5rem;
+/* --------------------------------------------------------------------------
+   SPINNER (Atom)
+   -------------------------------------------------------------------------- */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
 
-.loading-box.active {
-  display: block;
-  animation: fadeIn 0.25s ease;
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --------------------------------------------------------------------------
+   LOADING STATE (Organism)
+   -------------------------------------------------------------------------- */
+.loading-box {
+  display: none;
+  padding: var(--space-16) var(--space-8);
+  background-color: var(--surface-card);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-8);
+  text-align: center;
 }
 
 .loading-radar {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 2px solid var(--hairline-strong);
   border-top-color: var(--primary);
-  margin: 0 auto 1.25rem;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  margin: 0 auto var(--space-5);
+  animation: spin 0.9s linear infinite;
 }
 
 .loading-status-text {
-  font-size: 1.05rem;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--ink);
-  margin-bottom: 0.35rem;
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.01em;
+  transition: var(--transition);
 }
 
 .loading-subtext {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--muted);
+  line-height: 1.5;
+  max-width: 400px;
+  margin: 0 auto;
+  transition: var(--transition);
 }
 
-/* Results Section */
+/* --------------------------------------------------------------------------
+   RESULTS BOX
+   -------------------------------------------------------------------------- */
 .results-box {
   display: none;
 }
 
 .results-box.active {
   display: block;
-  animation: fadeIn 0.25s ease;
+  animation: slideUp 0.25s var(--ease-out) both;
 }
 
-/* Threat Hero Banner */
+/* --------------------------------------------------------------------------
+   THREAT HERO BANNER (Organism: Status Banner)
+   -------------------------------------------------------------------------- */
 .threat-hero {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.75rem 2rem;
-  border-radius: var(--rounded-lg);
-  margin-bottom: 2rem;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
   background-color: var(--canvas-soft);
   border: 1px solid var(--hairline);
   transition: var(--transition);
 }
 
 .threat-hero.safe {
-  background-color: var(--semantic-success-bg);
-  border-color: var(--semantic-success-border);
+  background-color: var(--success-bg);
+  border-color: var(--success-border);
 }
-
 .threat-hero.warning {
-  background-color: var(--semantic-warning-bg);
-  border-color: var(--semantic-warning-border);
+  background-color: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.threat-hero.danger {
+  background-color: var(--error-bg);
+  border-color: var(--error-border);
 }
 
-.threat-hero.danger {
-  background-color: var(--semantic-error-bg);
-  border-color: var(--semantic-error-border);
-}
+.threat-meta { flex: 1; min-width: 0; }
 
 .threat-label {
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  margin-bottom: 0.35rem;
+  margin-bottom: var(--space-1);
 }
 
 .threat-badge {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.4rem;
+  gap: var(--space-2);
+  font-size: 1.3rem;
   font-weight: 600;
   color: var(--ink);
-  margin-bottom: 0.35rem;
+  margin-bottom: var(--space-1);
+  letter-spacing: -0.01em;
 }
 
 .scam-type-tag {
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   color: var(--body);
 }
 
 .threat-score-box {
   text-align: right;
-  min-width: 140px;
+  flex-shrink: 0;
+  min-width: 130px;
 }
 
 .score-caption {
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--space-2);
 }
 
 .threat-score {
   font-family: var(--font-mono);
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: var(--ink);
-  margin-bottom: 0.4rem;
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.02em;
 }
 
 .score-meter {
   width: 100%;
-  height: 5px;
+  height: 4px;
   background-color: var(--hairline);
-  border-radius: var(--rounded-pill);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 
 .score-meter-fill {
   height: 100%;
   background-color: var(--primary);
-  border-radius: var(--rounded-pill);
-  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: var(--radius-pill);
+  transition: width 0.75s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Emergency Advice Banner */
+/* --------------------------------------------------------------------------
+   EMERGENCY ADVICE BANNER (Organism: Alert)
+   -------------------------------------------------------------------------- */
 .emergency-advice-box {
-  padding: 1.25rem 1.75rem;
-  background-color: var(--semantic-warning-bg);
-  border: 1px solid var(--semantic-warning-border);
-  border-radius: var(--rounded-lg);
-  margin-bottom: 2rem;
+  padding: var(--space-4) var(--space-6);
+  background-color: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
 }
 
 .advice-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .advice-title {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--semantic-warning);
-  letter-spacing: 0.06em;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--warning);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .advice-body {
-  font-size: 0.92rem;
+  font-size: var(--text-base);
   color: var(--body-strong);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
-/* Content Info Sections */
+/* --------------------------------------------------------------------------
+   INFO SECTIONS (Molecule: Content Block)
+   -------------------------------------------------------------------------- */
 .info-section {
-  padding-top: 1.75rem;
+  padding-top: var(--space-6);
   border-top: 1px solid var(--hairline-soft);
-  margin-bottom: 1.75rem;
+  margin-bottom: var(--space-6);
 }
 
 .section-header-flex {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.85rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
   flex-wrap: wrap;
 }
 
 .section-heading {
-  font-family: var(--font-body);
-  font-size: 0.98rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ink);
   letter-spacing: -0.01em;
 }
 
+/* Metadata pills */
 .lang-pills {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .lang-pill, .latency-pill, .duration-pill {
-  padding: 3px 10px;
-  border-radius: var(--rounded-pill);
-  font-size: 0.74rem;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
   font-weight: 500;
   background-color: var(--surface-strong);
   color: var(--muted);
   border: 1px solid var(--hairline);
+  white-space: nowrap;
 }
 
+/* Transcription box */
 .transcribed-text-box {
-  padding: 1.5rem;
+  padding: var(--space-5) var(--space-6);
   background-color: var(--canvas-soft);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
-  font-size: 1.05rem;
-  line-height: 1.65;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-md);
+  line-height: 1.7;
   color: var(--ink);
+  font-style: italic;
 }
 
-/* Segments Breakdown */
+/* Sub label */
 .sub-label {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
+/* --------------------------------------------------------------------------
+   SEGMENTS TIMELINE (Molecule)
+   -------------------------------------------------------------------------- */
 .segments-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .segment-item {
   display: flex;
   align-items: baseline;
-  gap: 0.85rem;
-  padding: 9px 14px;
-  background-color: var(--surface-card);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--canvas-soft);
   border: 1px solid var(--hairline-soft);
-  border-radius: var(--rounded-md);
-  font-size: 0.88rem;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
 }
 
 .segment-time {
   font-family: var(--font-mono);
-  font-size: 0.74rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   background-color: var(--surface-strong);
-  padding: 2px 6px;
-  border-radius: var(--rounded-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.segment-text {
-  color: var(--ink);
-}
+.segment-text { color: var(--ink); }
 
-/* Red Flags */
+/* --------------------------------------------------------------------------
+   RED FLAGS (Molecule: Error List)
+   -------------------------------------------------------------------------- */
 .red-flags-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .red-flag-item {
-  padding: 10px 14px;
-  background-color: var(--semantic-error-bg);
-  border: 1px solid var(--semantic-error-border);
-  border-radius: var(--rounded-md);
-  font-size: 0.88rem;
-  color: var(--semantic-error);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--error);
+  line-height: 1.4;
 }
 
-/* Crawl4AI Verification Card */
+/* --------------------------------------------------------------------------
+   VERDICT CARD (Molecule)
+   -------------------------------------------------------------------------- */
 .verdict-card {
-  padding: 1.5rem;
+  padding: var(--space-5) var(--space-6);
   background-color: var(--canvas-soft);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-lg);
+  border-radius: var(--radius-lg);
 }
 
 .verdict-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .verdict-pill {
-  padding: 4px 12px;
-  border-radius: var(--rounded-pill);
-  font-size: 0.76rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background-color: var(--surface-strong);
   color: var(--ink);
-  margin-left: 0.5rem;
+  margin-left: var(--space-2);
 }
 
 .confidence-pill {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--muted);
 }
 
 .fact-summary {
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .reason-box {
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
   color: var(--body);
   background-color: var(--surface-card);
-  padding: 12px 16px;
-  border-radius: var(--rounded-md);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
   border: 1px solid var(--hairline-soft);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
-/* Sources List */
+/* --------------------------------------------------------------------------
+   SOURCES (Molecule: Link List)
+   -------------------------------------------------------------------------- */
 .source-list {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: var(--space-2);
 }
 
 .source-card {
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   background-color: var(--surface-card);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-md);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-1);
+  transition: border-color var(--duration) var(--ease-out);
 }
 
+.source-card:hover { border-color: var(--hairline-strong); }
+
 .source-link {
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--primary);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-1);
 }
 
-.source-link:hover {
-  text-decoration: underline;
-}
+.source-link:hover { text-decoration: underline; }
 
 .source-snippet {
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-/* Text Tab Form */
-.form-group {
-  margin-bottom: 1.5rem;
-}
+/* --------------------------------------------------------------------------
+   TEXT FACT CHECKER FORM (Organism)
+   -------------------------------------------------------------------------- */
+.form-group { margin-bottom: var(--space-5); }
 
 .form-label {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-size: 0.88rem;
-  font-weight: 500;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.form-label > span:first-child {
+  font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--ink);
+  letter-spacing: -0.005em;
 }
 
 .label-hint {
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   font-weight: 400;
   color: var(--muted);
+  text-align: right;
+  flex-shrink: 0;
 }
 
+/* Inputs â€” 48px height for text input (touch target) */
 .input-field {
   width: 100%;
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   background-color: var(--canvas-soft);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--rounded-md);
+  border-radius: var(--radius-md);
   font-family: var(--font-body);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink);
   transition: var(--transition);
+  box-shadow: var(--shadow-inset);
+  line-height: 1.5;
 }
 
 .input-field:focus {
   outline: none;
   background-color: var(--surface-card);
   border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink);
+  box-shadow: 0 0 0 2px rgba(28, 25, 23, 0.08), var(--shadow-inset);
 }
+
+.input-field::placeholder { color: var(--muted-soft); }
+
+textarea.input-field { resize: vertical; min-height: 96px; }
+
+/* Preset Pills */
+.preset-section { margin-bottom: var(--space-5); }
 
 .presets-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+  margin-top: var(--space-3);
 }
 
 .preset-btn {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 34px;
+  padding: 0 var(--space-3);
   background-color: var(--surface-card);
   border: 1px solid var(--hairline);
-  border-radius: var(--rounded-pill);
-  font-size: 0.8rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--body);
   cursor: pointer;
   transition: var(--transition);
+  white-space: nowrap;
 }
 
 .preset-btn:hover {
-  border-color: var(--ink);
+  border-color: var(--ink-secondary);
   color: var(--ink);
+  background-color: var(--surface-strong);
 }
 
-/* Footer */
-footer {
-  text-align: left;
-  padding: 3rem 0 2rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  border-top: 1px solid var(--hairline);
-  margin-top: 4rem;
-}
-
-footer strong {
-  color: var(--ink-secondary);
-  font-weight: 500;
-}
-
-/* Utilities */
-.mt-2 { margin-top: 0.5rem; }
-.mt-3 { margin-top: 0.75rem; }
-.mt-4 { margin-top: 1rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-4 { margin-bottom: 1rem; }
-
-
-/* Hero CTA Pill Buttons (ElevenLabs Style: pure black active pill, hairline outline inactive pill) */
-.hero-cta-row {
+/* --------------------------------------------------------------------------
+   VERDICT HERO (Organism: Text Fact Results)
+   -------------------------------------------------------------------------- */
+.verdict-hero {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 1.75rem;
-  margin-bottom: 3.5rem;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-8);
+  background-color: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
   flex-wrap: wrap;
 }
 
-.hero-cta-row .tab-btn {
-  display: inline-flex;
+.verdict-badge {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 10px 22px;
-  border-radius: var(--rounded-pill);
-  font-family: var(--font-body);
-  font-size: 0.92rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: var(--transition);
-  border: 1px solid var(--hairline-strong);
-  background-color: var(--surface-card);
+  gap: var(--space-2);
+  font-size: 1.25rem;
+  font-weight: 600;
   color: var(--ink);
-  outline: none;
+  margin-top: var(--space-2);
+  letter-spacing: -0.01em;
 }
 
-.hero-cta-row .tab-btn:hover {
-  border-color: var(--ink);
+.confidence-box { text-align: right; }
+
+.confidence-val {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 600;
   color: var(--ink);
+  margin: var(--space-2) 0;
+  letter-spacing: -0.02em;
 }
 
-.hero-cta-row .tab-btn.active {
+.confidence-bar {
+  width: 100px;
+  height: 4px;
+  background-color: var(--hairline);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
   background-color: var(--primary);
-  color: var(--on-primary);
-  border-color: var(--primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-pill);
+  transition: width 0.75s var(--ease-out);
 }
 
-.hero-cta-row .tab-btn.active:hover {
-  background-color: var(--primary-active);
+.summary-text {
+  font-size: var(--text-base);
+  color: var(--ink);
+  line-height: 1.65;
 }
 
+/* Facts Grid */
+.facts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* --------------------------------------------------------------------------
+   FOOTER (Organism)
+   -------------------------------------------------------------------------- */
+footer {
+  text-align: center;
+  padding: var(--space-8) 0 var(--space-6);
+  font-size: var(--text-xs);
+  color: var(--muted-soft);
+  border-top: 1px solid var(--hairline-soft);
+  margin-top: var(--space-16);
+  letter-spacing: 0.02em;
+}
+
+footer strong {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   UTILITY CLASSES
+   -------------------------------------------------------------------------- */
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
+
+/* Sample card styles (preserved for JS compatibility) */
+.samples-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.sample-card {
+  background-color: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  transition: var(--transition);
+}
+
+.sample-card:hover {
+  background-color: var(--surface-card);
+  border-color: var(--hairline-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.sample-card.active {
+  background-color: var(--surface-card);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.sample-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-strong);
+  color: var(--muted);
+}
+
+.sample-badge.fraud  { background-color: var(--error-bg);   color: var(--error);   border: 1px solid var(--error-border);   }
+.sample-badge.utility{ background-color: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+.sample-badge.fact   { background-color: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+
+.sample-title { font-size: var(--text-base); font-weight: 500; color: var(--ink); }
+.sample-desc  { font-size: var(--text-xs); color: var(--body); line-height: 1.45; }
+.sample-lang  { font-size: var(--text-xs); color: var(--muted); }
+
+.sample-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline-soft);
+  transition: color var(--duration) var(--ease-out);
+}
+
+.sample-card:hover .sample-action { color: var(--ink); }
+.sample-skeleton { padding: var(--space-8); text-align: center; color: var(--muted); font-size: var(--text-sm); grid-column: 1 / -1; }
+
+/* Legacy class aliases */
+.section-eyebrow { font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-4); display: inline-block; }
+.badge-tag { display: inline-flex; align-items: center; padding: 3px 10px; background-color: var(--surface-strong); border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: 600; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+.h1-eng { display: block; font-family: var(--font-display); font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 300; color: var(--muted); letter-spacing: -0.01em; margin-top: var(--space-2); }
+.card-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--hairline-soft); }
+.section-desc { font-size: var(--text-sm); color: var(--muted); margin-top: 2px; }
+.nav-tabs-wrapper { margin-bottom: var(--space-8); border-top: 1px solid var(--hairline-soft); padding-top: var(--space-8); }
+.nav-tabs { display: inline-flex; background-color: var(--surface-strong); padding: 3px; border-radius: var(--radius-pill); border: 1px solid var(--hairline); }
+.tab-btn { display: inline-flex; align-items: center; gap: var(--space-2); padding: 7px var(--space-5); border: none; background: transparent; color: var(--muted); font-family: var(--font-body); font-size: var(--text-sm); font-weight: 500; border-radius: var(--radius-pill); cursor: pointer; transition: var(--transition); }
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { background-color: var(--surface-card); color: var(--ink); box-shadow: var(--shadow-xs); }
 </style>
 </head>
 <body>
@@ -1334,19 +1445,21 @@ footer strong {
     <nav class="top-nav">
       <a href="/" class="nav-brand">
         <span class="brand-name">VaniRakshak</span>
-        <span class="brand-tag">Voice Defense</span>
+        <span class="brand-devanagari">वाणी रक्षक</span>
       </a>
       <div class="nav-status-badge">
         <span class="pulse-dot"></span>
-        <span>Groq Whisper Large v3 Turbo • Online</span>
+        <span>Protection &bull; Active</span>
       </div>
     </nav>
 
     <!-- Editorial Hero Band (Matched to Screenshot Layout) -->
     <header>
-      <h1>Voice-AI Scam Defense of VaniRakshak</h1>
+      <h1>Real-Time Scam
+        <span class="h1-sub">&amp; Fraud Defense</span>
+      </h1>
       <p class="subtitle">
-        Voice-AI brand reading like an editorial magazine. Off-white canvas, Waldenburg Light at weight 300, real-time protection against bank KYC expiry, digital arrest coercion, and utility scams.
+        Protect yourself and your loved ones from voice scams, digital arrest coercion, and financial fraud &mdash; with live evidence grounding.
       </p>
 
       <!-- Action Pill Buttons (like 'Try free' / 'Talk to sales' in ElevenLabs) -->
@@ -1365,8 +1478,8 @@ footer strong {
     <!-- ==================================================================== -->
     <section id="section-voice" class="tab-content active">
       
-      <!-- 02 — Live Mic & Audio Chunk Uploader -->
-      <div class="section-marker">01 — Live Recording & File Upload</div>
+      <!-- 02 â€” Live Mic & Audio Chunk Uploader -->
+      <div class="section-marker">01 â€” Live Recording & File Upload</div>
       <main class="glass-card">
         <div class="voice-hero-controls">
           
@@ -1376,7 +1489,7 @@ footer strong {
             
             <div class="mic-hud">
               <button type="button" id="mic-btn" class="mic-circle-btn" title="Click to Record (Up to 1 Minute Max)">
-                <span id="mic-icon" class="mic-icon">🎙️</span>
+                <span id="mic-icon" class="mic-icon">ðŸŽ™ï¸</span>
               </button>
               <div class="mic-status-wrapper">
                 <div id="mic-label" class="mic-label">Ready to Record</div>
@@ -1416,14 +1529,14 @@ footer strong {
             <div id="dropzone" class="dropzone">
               <input type="file" id="audio-file-input" accept="audio/*,.wav,.mp3,.webm,.ogg,.m4a" class="file-input-hidden">
               <div class="dropzone-content">
-                <span class="dropzone-icon">📁</span>
+                <span class="dropzone-icon">ðŸ“</span>
                 <span class="dropzone-text"><strong>Click to browse</strong> or drag & drop</span>
-                <span class="dropzone-sub">WAV, MP3, WEBM, OGG, M4A (Groq Cloud Accelerated)</span>
+                <span class="dropzone-sub">Supports WAV, MP3, WEBM, OGG, M4A</span>
               </div>
             </div>
             <div id="selected-file-info" class="selected-file-info" style="display: none;">
               <span id="file-name" class="file-name-text">filename.mp3</span>
-              <button type="button" id="clear-file-btn" class="clear-btn" title="Remove file">✕</button>
+              <button type="button" id="clear-file-btn" class="clear-btn" title="Remove file">âœ•</button>
             </div>
           </div>
 
@@ -1439,7 +1552,7 @@ footer strong {
         <div class="action-row mt-4">
           <button type="button" id="analyze-voice-btn" class="btn-primary" disabled>
             <span id="voice-btn-text">Transcribe & Analyze Chunk</span>
-            <span id="voice-btn-icon">⚡</span>
+            <span id="voice-btn-icon">âš¡</span>
           </button>
         </div>
       </main>
@@ -1447,13 +1560,13 @@ footer strong {
       <!-- Voice Loading Radar -->
       <div id="voice-loading-box" class="loading-box">
         <div class="loading-radar"></div>
-        <div id="voice-loading-status" class="loading-status-text">Transcribing with Groq Whisper Large v3 Turbo...</div>
-        <div id="voice-loading-detail" class="loading-subtext">Executing sub-second Cloud LPU speech recognition...</div>
+        <div id="voice-loading-status" class="loading-status-text">Transcribing audio...</div>
+        <div id="voice-loading-detail" class="loading-subtext">Converting speech to text with high accuracy...</div>
       </div>
 
-      <!-- 03 — Voice Analysis Results Box -->
+      <!-- 03 â€” Voice Analysis Results Box -->
       <section id="voice-results-box" class="results-box">
-        <div class="section-marker">02 — Threat Assessment & Live Grounding</div>
+        <div class="section-marker">02 â€” Threat Assessment & Live Grounding</div>
         <div class="glass-card">
           
           <!-- Threat Status Hero -->
@@ -1461,7 +1574,7 @@ footer strong {
             <div class="threat-meta">
               <div class="threat-label">Scam & Threat Assessment</div>
               <div id="threat-badge" class="threat-badge">
-                <span id="threat-icon">🛡️</span>
+                <span id="threat-icon">ðŸ›¡ï¸</span>
                 <span id="threat-text">NORMAL CONVERSATION</span>
               </div>
               <div id="scam-type-tag" class="scam-type-tag">None (Safe Speech)</div>
@@ -1478,7 +1591,7 @@ footer strong {
           <!-- Emergency Action Alert Banner -->
           <div id="emergency-advice-box" class="emergency-advice-box">
             <div class="advice-header">
-              <span class="advice-icon">⚠️</span>
+              <span class="advice-icon">âš ï¸</span>
               <span class="advice-title">VaniRakshak Defense Directive</span>
             </div>
             <p id="advice-text" class="advice-body"></p>
@@ -1511,7 +1624,7 @@ footer strong {
 
           <!-- Crawl4AI Grounded Verification -->
           <div id="voice-fact-section" class="info-section">
-            <div class="section-heading">Crawl4AI Live Web Grounding & Evidence</div>
+            <div class="section-heading">Live Web Grounding & Evidence</div>
             
             <div id="voice-verdict-card" class="verdict-card">
               <div class="verdict-row">
@@ -1527,7 +1640,7 @@ footer strong {
 
             <!-- Crawled Sources -->
             <div class="mt-3">
-              <div class="sub-label mb-2">Authoritative Web Sources Scraped by Crawl4AI:</div>
+              <div class="sub-label mb-2">Authoritative Web Sources:</div>
               <div id="voice-sources-container" class="source-list"></div>
             </div>
           </div>
@@ -1541,7 +1654,7 @@ footer strong {
     <!-- TAB 2: TEXT FACT CHECKER -->
     <!-- ==================================================================== -->
     <section id="section-text" class="tab-content">
-      <div class="section-marker">01 — Claim Verification</div>
+      <div class="section-marker">01 â€” Claim Verification</div>
       <main class="glass-card">
         
         <!-- Preset Quick-Pills -->
@@ -1549,19 +1662,19 @@ footer strong {
           <div class="preset-title mb-2">Quick Test Presets</div>
           <div class="presets-row">
             <button type="button" class="preset-btn" data-claim="Barcelona is currently the top team in LaLiga." data-urls="">
-              ⚽ Barcelona LaLiga Leader
+              âš½ Barcelona LaLiga Leader
             </button>
-            <button type="button" class="preset-btn" data-claim="MRF stock is trading above ₹1,00,000 per share right now." data-urls="https://www.google.com/finance/quote/MRF:NSE, https://www.screener.in/company/MRF/">
-              🏎️ MRF Stock > ₹1,00,000
+            <button type="button" class="preset-btn" data-claim="MRF stock is trading above â‚¹1,00,000 per share right now." data-urls="https://www.google.com/finance/quote/MRF:NSE, https://www.screener.in/company/MRF/">
+              ðŸŽï¸ MRF Stock > â‚¹1,00,000
             </button>
             <button type="button" class="preset-btn" data-claim="Chandrayaan-3 successfully landed on the south pole of the Moon." data-urls="https://en.wikipedia.org/wiki/Chandrayaan-3">
-              🚀 Chandrayaan-3 Moon Landing
+              ðŸš€ Chandrayaan-3 Moon Landing
             </button>
             <button type="button" class="preset-btn" data-claim="Bitcoin reached an all-time high above $90,000." data-urls="https://coinmarketcap.com/currencies/bitcoin/">
-              🪙 Bitcoin Price
+              ðŸª™ Bitcoin Price
             </button>
             <button type="button" class="preset-btn" data-claim="Electricity bill unpaid warning message asking to call mobile number is a scam." data-urls="">
-              ⚡ Electricity Scam Advisory
+              âš¡ Electricity Scam Advisory
             </button>
           </div>
         </div>
@@ -1575,7 +1688,7 @@ footer strong {
           <textarea 
             id="claim-input" 
             class="input-field" 
-            placeholder="e.g. Barcelona is currently leading LaLiga or MRF is trading above ₹1,00,000 per share..."
+            placeholder="e.g. Barcelona is currently leading LaLiga or MRF is trading above â‚¹1,00,000 per share..."
             rows="3"
           ></textarea>
         </div>
@@ -1584,7 +1697,7 @@ footer strong {
         <div class="form-group">
           <label for="url-input" class="form-label">
             <span>Specific Target URL(s) to Scrape</span>
-            <span class="label-hint">Optional (comma separated, or leave blank for Crawl4AI live search discovery)</span>
+            <span class="label-hint">Optional â€” comma separated, or leave blank for live web discovery</span>
           </label>
           <input 
             type="text" 
@@ -1598,7 +1711,7 @@ footer strong {
         <div class="action-row">
           <button type="button" id="verify-text-btn" class="btn-primary">
             <span id="text-btn-text">Detect & Verify Fact</span>
-            <span id="text-btn-icon">⚡</span>
+            <span id="text-btn-icon">âš¡</span>
           </button>
         </div>
 
@@ -1607,13 +1720,13 @@ footer strong {
       <!-- Text Loading Box -->
       <div id="text-loading-box" class="loading-box">
         <div class="loading-radar"></div>
-        <div id="text-loading-status" class="loading-status-text">Launching Crawl4AI Playwright Browser...</div>
-        <div id="text-loading-detail" class="loading-subtext">Navigating to target URLs and extracting clean markdown content...</div>
+        <div id="text-loading-status" class="loading-status-text">Searching the web...</div>
+        <div id="text-loading-detail" class="loading-subtext">Navigating to sources and extracting content...</div>
       </div>
 
       <!-- Text Results Section -->
       <section id="text-results-box" class="results-box">
-        <div class="section-marker">02 — Fact Verification Evidence</div>
+        <div class="section-marker">02 â€” Fact Verification Evidence</div>
         <div class="glass-card">
           
           <!-- Verdict Hero Banner -->
@@ -1648,13 +1761,13 @@ footer strong {
 
           <!-- Key Facts Extracted -->
           <div id="text-key-facts-section" class="info-section">
-            <div class="section-heading">Key Facts Extracted by Crawl4AI</div>
+            <div class="section-heading">Key Facts Extracted</div>
             <div id="text-facts-container" class="facts-grid"></div>
           </div>
 
           <!-- Scraped Sources Drawer -->
           <div class="info-section" style="margin-bottom: 0;">
-            <div class="section-heading">Sources Scraped by Crawl4AI</div>
+            <div class="section-heading">Sources</div>
             <div id="text-sources-container" class="source-list"></div>
           </div>
 
@@ -1664,7 +1777,7 @@ footer strong {
 
     <!-- Editorial Footer -->
     <footer>
-      <strong>VaniRakshak</strong> — Voice Scam & Fact Shield. Powered by <strong>Groq Whisper Large v3 Turbo</strong>, <strong>Crawl4AI</strong>, and <strong>Google Gemini</strong>.
+      <strong>VaniRakshak</strong> â€” Voice Scam & Fact Shield. Protecting you with real-time speech analysis and live web evidence.
     </footer>
   </div>
 
