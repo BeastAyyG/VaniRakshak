@@ -1,20 +1,174 @@
 {
   "split": "train",
-  "count": 2,
+  "count": 42,
   "files": [
     {
-      "id": "demo_03_partial_splice.wav",
-      "path": "data\\demo\\demo_03_partial_splice.wav",
-      "label": "spoof",
-      "is_clone": false,
-      "is_spliced": true
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part20.wav",
+      "speaker_id": "speaker2"
     },
     {
-      "id": "demo_02_full_clone.wav",
-      "path": "data\\demo\\demo_02_full_clone.wav",
-      "label": "spoof",
-      "is_clone": true,
-      "is_spliced": false
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part18.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part14.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part06.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "anchor_speaker_std/modi_023.wav",
+      "speaker_id": "anchor"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part10.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part21.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part04.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part24.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part11.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part26.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part16.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part07.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "anchor_speaker_std/modi_028.wav",
+      "speaker_id": "anchor"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part31.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part33.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part05.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part19.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part35.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "anchor_speaker_std/modi_029.wav",
+      "speaker_id": "anchor"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part03.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part13.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part27.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part02.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part28.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part25.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part23.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part15.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part17.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part36.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part12.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part30.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part09.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part08.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part34.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "anchor_speaker_std/modi_030.wav",
+      "speaker_id": "anchor"
+    },
+    {
+      "filepath": "anchor_speaker_std/modi_025.wav",
+      "speaker_id": "anchor"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part22.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part32.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "anchor_speaker_std/modi_024.wav",
+      "speaker_id": "anchor"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part29.wav",
+      "speaker_id": "speaker2"
+    },
+    {
+      "filepath": "other_speakers_std/I Tried Fixing My Face by _Looksmaxxing__6_280_part01.wav",
+      "speaker_id": "speaker2"
     }
   ]
 }
