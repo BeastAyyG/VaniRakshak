@@ -11,7 +11,7 @@ ml/
 ├── dataset.py            # ForensicAudioDataset with G.711 / AMR-WB / GSM-EFR augmentations
 ├── train.py              # End-to-end training and checkpoint saving
 ├── evaluate.py           # Comprehensive ASVspoof-5 and telephony benchmark runner
-├── extract_features.py   # Batch 768-dim WavLM & 192-dim ECAPA vector extraction
+├── extract_features.py   # Batch 40-dim MFCC extraction; single-file WavLM (768) / ECAPA (192) mode
 ├── checkpoints/          # Model weights & calibrated thresholds.json
 └── requirements.txt      # PyTorch, NumPy, SciPy dependencies
 ```
@@ -25,19 +25,22 @@ python benchmarks/run_benchmarks.py
 ```
 
 ### 2. ML Evaluation & Threshold Calibration
-Evaluates anti-spoofing performance and writes calibrated operating thresholds:
+Evaluates a trained checkpoint against the test split:
 ```bash
-python ml/evaluate.py
+python ml/evaluate.py --checkpoint ml/checkpoints/best_model.pt
 ```
+Without `--checkpoint`, this runs the synthetic-stub benchmark battery instead and does not touch the trained weights.
 
 ### 3. Model Training
 ```bash
-python ml/train.py --epochs 5 --batch-size 16
+python ml/train.py --epochs 50 --batch-size 32
 ```
 
 ## Evaluated Metrics
 
-- **minDCF**: Minimum normalized detection cost function under ASVspoof 5 parameters ($C_{\text{miss}}=1, C_{\text{fa}}=1, P_{\text{target}}=0.05$).
+- **minDCF**: Minimum normalized detection cost function under ASVspoof 5 parameters ($C_{\text{miss}}=1, C_{\text{fa}}=1, P_{\text{target}}=0.05$). Measured: `0.0000`.
 - **actDCF**: Actual detection cost at theoretical Bayes threshold $\tau_{\text{Bayes}} = -\ln \beta \approx -0.644$.
-- **CLLR**: Log-likelihood ratio cost measuring probabilistic calibration.
-- **EER**: Equal Error Rate operating point ($P_{\text{miss}} = P_{\text{fa}}$).
+- **CLLR**: Log-likelihood ratio cost measuring probabilistic calibration. Measured: `0.0049`.
+- **EER**: Equal Error Rate operating point ($P_{\text{miss}} = P_{\text{fa}}$). Measured: `0.00%`.
+
+Measured on the current 11-clip test split (2026-09-08): accuracy `100.00%` (11/11). That corpus is one target speaker (8 recordings) against one non-target speaker (45 chunks of a single recording); target clips score LLR ≈ +6.0 against ≈ −5.5 for non-target, a gap of ~11 nats. `make_splits.py` holds out whole recordings for the target speaker, but the non-target speaker has only one recording session, so a session-disjoint split is impossible there and a contiguous block is held out instead. These figures therefore measure separation of two unrelated recordings, not anti-spoofing generalisation.
