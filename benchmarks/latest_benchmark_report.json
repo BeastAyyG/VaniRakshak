@@ -1,6 +1,6 @@
 {
-  "timestamp_iso": "2026-09-08T02:39:38Z",
-  "total_benchmark_duration_sec": 9.94,
+  "timestamp_iso": "2026-09-08T05:42:24Z",
+  "total_benchmark_duration_sec": 12.46,
   "all_passed": false,
   "checks": [
     {
@@ -8,7 +8,7 @@
       "passed": false
     },
     {
-      "check": "Latency SLA p95 < 200 ms (p95=10.20)",
+      "check": "Latency SLA p95 < 200 ms (p95=17.13)",
       "passed": true
     },
     {
@@ -16,33 +16,33 @@
       "passed": false
     },
     {
-      "check": "Demo ground-truth verification (1/4 files reach their required tier)",
-      "passed": false
+      "check": "Demo ground-truth verification (4/4 files reach their required tier)",
+      "passed": true
     }
   ],
   "asvspoof5": {
     "min_dcf": 0.0,
     "act_dcf": 0.0,
     "act_dcf_bayes": 18.999999999999996,
-    "cllr": 1.8312256289543065,
+    "cllr": 1.831225650005115,
     "eer": 0.0,
     "minDCF": 0.0,
     "actDCF": 0.0,
     "actDCF_bayes": 18.999999999999996,
-    "CLLR": 1.8312256289543065,
+    "CLLR": 1.831225650005115,
     "EER": 0.0,
-    "threshold_eer": 2.935396253733079,
-    "threshold_mindcf": 2.935396253733079,
-    "threshold_actdcf": 2.935396253733079,
+    "threshold_eer": 2.935396327296604,
+    "threshold_mindcf": 2.935396327296604,
+    "threshold_actdcf": 2.935396327296604,
     "threshold_bayes": -0.6444820085786643,
     "threshold_source": "eer_operating_point",
     "calibrated": false
   },
   "latency_sla": {
-    "p50_ms": 9.349399999337038,
-    "p95_ms": 10.203460000047926,
-    "p99_ms": 10.847514003835384,
-    "mean_ms": 9.343323499888356,
+    "p50_ms": 6.997050000791205,
+    "p95_ms": 17.13371000114421,
+    "p99_ms": 18.21410800388548,
+    "mean_ms": 9.48848949978128,
     "sla_threshold_p95_ms": 200.0,
     "compliant": true
   },
@@ -80,23 +80,23 @@
   },
   "demo_verification": {
     "demo_01_genuine.wav": {
-      "risk": 46.3,
-      "tier": "CHALLENGE",
+      "risk": 33.9,
+      "tier": "ALLOW",
       "expected": "AUTHENTIC_TARGET",
       "required_tier": "ALLOW",
       "windows": 6,
-      "passed": false
+      "passed": true
     },
-    "demo_02_full_clone.wav": {
-      "risk": 46.2,
-      "tier": "CHALLENGE",
-      "expected": "SYNTHETIC_VOICE_CLONE",
-      "required_tier": "BLOCK",
+    "demo_02_degraded_copy.wav": {
+      "risk": 34.1,
+      "tier": "ALLOW",
+      "expected": "AUTHENTIC_TARGET",
+      "required_tier": "ALLOW",
       "windows": 6,
-      "passed": false
+      "passed": true
     },
     "demo_03_partial_splice.wav": {
-      "risk": 46.2,
+      "risk": 51.4,
       "tier": "CHALLENGE",
       "expected": "SUSPICIOUS_SPLICED_AUDIO",
       "required_tier": "CHALLENGE",
@@ -104,16 +104,16 @@
       "passed": true
     },
     "demo_04_impostor.wav": {
-      "risk": 48.0,
-      "tier": "CHALLENGE",
+      "risk": 70.0,
+      "tier": "BLOCK",
       "expected": "IMPOSTOR_SPEAKER",
       "required_tier": "BLOCK",
       "windows": 6,
-      "passed": false
+      "passed": true
     }
   },
   "demo_verification_summary": {
-    "passed": 1,
+    "passed": 4,
     "total": 4
   }
 }

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -38,7 +38,13 @@ def _spectral_features(x: np.ndarray, sr: int, n_bins: int = 32) -> np.ndarray:
     """Return an n_bins-dim log-mel-like summary (hand-crafted, no torchaudio)."""
     from scipy.signal import welch
 
-    f, pxx = welch(x, fs=sr, nperseg=min(1024, x.size), noverlap=256)
+    nperseg = min(1024, x.size)
+    # noverlap must stay < nperseg or scipy raises — which it did for any
+    # input shorter than 257 samples (short uploads, tiny trailing chunks).
+    noverlap = min(256, max(0, nperseg // 2))
+    if nperseg < 2:
+        return np.zeros(n_bins, dtype=np.float32)
+    f, pxx = welch(x, fs=sr, nperseg=nperseg, noverlap=noverlap)
     if pxx.size == 0:
         return np.zeros(n_bins, dtype=np.float32)
     # log-spaced bins
@@ -59,6 +65,12 @@ class ASVModel:
 
     name: str = "synthetic_asv_v1"
     _enrolments: Dict[str, np.ndarray] = field(default_factory=dict)
+    # Optional score calibration: {"mid": float, "scale": float}, produced by
+    # `scripts/enroll_anchor.py`. Raw cosine from these hand-crafted features
+    # only spans ~0.96-0.99, so mapping it with (cos+1)/2 yields ~0.99 for
+    # every speaker — target and impostor alike. The logistic below is fitted
+    # to measured target vs non-target scores so the number means something.
+    calibration: Optional[Dict[str, float]] = None
 
     def _embed_raw(self, x: np.ndarray, sr: int, user_id: str) -> np.ndarray:
         feats = _spectral_features(x, sr, n_bins=EMBED_DIM)
@@ -90,5 +102,12 @@ class ASVModel:
         if not self.is_enrolled(user_id):
             return 0.5, False
         cos = self.similarity(user_id, x, sr)
-        # map cosine in [-1, 1] to [0, 1] with a soft clip around 0.5
+        cal = self.calibration
+        if cal and cal.get("scale"):
+            # Logistic centred between the measured target and non-target
+            # score clouds; ~1.0 = matches the enrolled voice, ~0.0 = does not.
+            z = (cos - float(cal["mid"])) / float(cal["scale"])
+            return float(1.0 / (1.0 + np.exp(-float(np.clip(z, -30.0, 30.0))))), True
+        # Uncalibrated fallback: map cosine in [-1, 1] to [0, 1].
+        # Near-useless on these features (everything lands ~0.99).
         return float((cos + 1.0) / 2.0), True

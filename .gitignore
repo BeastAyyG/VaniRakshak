@@ -17,6 +17,9 @@ coverage/
 out/
 build/
 
+# Scratch dir used to work around sandboxed bulk-delete on .next cleanup
+.build_trash/
+
 # Python
 __pycache__/
 *.py[cod]

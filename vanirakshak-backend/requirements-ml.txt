@@ -1,0 +1,24 @@
+# VaniRakshak — OPTIONAL heavy ML stack for the enrolled-voice identity check.
+#
+# The forensic service runs WITHOUT this file: vanirakshak-backend/requirements.txt
+# is enough for the whole REST + WebSocket surface, and the identity endpoint
+# degrades to {"available": false, "reason": ...} instead of failing.
+#
+# Install this only to enable `POST /v1/verify-speaker` and the
+# `target_speaker` block in `/api/v1/analyze/audio`, which run the trained
+# ml/checkpoints/best_model.pt target-speaker model.
+#
+#   pip install -r requirements-ml.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# Honest scope: this model answers "is this the enrolled voice?" — it was
+# trained on one target speaker vs one non-target speaker with ZERO cloned
+# audio, so it is NOT a clone/synthetic detector. See ml/README.md.
+
+# --- inference runtime ------------------------------------------------------
+torch>=2.1
+torchaudio>=2.1
+
+# --- feature extraction (must match ml/extract_features.py) -----------------
+librosa>=0.10
+soundfile>=0.12

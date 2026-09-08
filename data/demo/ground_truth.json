@@ -1,44 +1,56 @@
 {
   "dataset_name": "VaniRakshak Demo Benchmark Suite",
   "sample_rate": 16000,
+  "enrolled_target": "narendra_modi",
+  "rebuilt_at": "2026-09-08T05:37:17Z",
+  "provenance_note": "Rebuilt by scripts/build_demo_suite.py from real recordings. The target clips are held out of anchor enrolment. demo_02 is a signal-degraded copy, NOT a neural voice clone.",
   "files": {
     "demo_01_genuine.wav": {
       "label": "genuine",
-      "target_speaker": "Narendra Modi",
-      "is_clone": false,
+      "target_speaker": "narendra_modi",
+      "is_real_clone": false,
       "is_spliced": false,
-      "expected_verdict": "AUTHENTIC_TARGET",
-      "expected_tier": "ALLOW"
+      "provenance": "Target speaker, held out of enrolment",
+      "duration_sec": 10.0,
+      "sha256": "2b9be4a210e9b495c49aaa60070034d4a5fe79c636bb22541f6432d06c311563",
+      "expected_verdict": "AUTHENTIC_TARGET"
     },
-    "demo_02_full_clone.wav": {
-      "label": "spoof",
-      "target_speaker": "Narendra Modi (Cloned)",
-      "is_clone": true,
+    "demo_02_degraded_copy.wav": {
+      "label": "degraded_copy",
+      "target_speaker": "narendra_modi",
+      "is_real_clone": false,
       "is_spliced": false,
-      "expected_verdict": "SYNTHETIC_VOICE_CLONE",
-      "expected_tier": "BLOCK"
+      "provenance": "tanh saturation + 6% resample of the target voice",
+      "duration_sec": 10.0,
+      "sha256": "2be607d2c63c68b5ae2cc22144beb4dfa9fa92544cdeadec9c0b8d683a41ae6a",
+      "expected_verdict": "AUTHENTIC_TARGET",
+      "expectation_note": "Signal-degraded copy of the target voice, NOT a neural voice clone. AUTHENTIC_TARGET is correct because the speaker is still the target. This file does not exercise the countermeasure (CM) path: the shipped CM detector is a stub and has never seen synthetic audio."
     },
     "demo_03_partial_splice.wav": {
       "label": "spliced",
-      "target_speaker": "Narendra Modi",
-      "is_clone": false,
+      "target_speaker": "narendra_modi",
+      "is_real_clone": false,
       "is_spliced": true,
+      "provenance": "Target / non-target spliced at 4.0s and 8.0s",
+      "duration_sec": 10.0,
+      "sha256": "d547eb6e567a9fdb1036c76787eecb310ce482964d7b5c7b3d10b49a867a0d89",
+      "expected_verdict": "SUSPICIOUS_SPLICED_AUDIO",
       "splice_regions_sec": [
         [
           4.0,
           8.0
         ]
-      ],
-      "expected_verdict": "SUSPICIOUS_SPLICED_AUDIO",
-      "expected_tier": "CHALLENGE"
+      ]
     },
     "demo_04_impostor.wav": {
       "label": "impostor",
-      "target_speaker": "Impostor (Different Speaker)",
-      "is_clone": false,
+      "target_speaker": "non-target speaker",
+      "is_real_clone": false,
       "is_spliced": false,
-      "expected_verdict": "IMPOSTOR_SPEAKER",
-      "expected_tier": "BLOCK"
+      "provenance": "Different, unenrolled speaker",
+      "duration_sec": 10.0,
+      "sha256": "43f7a7cea97007facd332395aae01c08794d78ccea21d51076596c4a4a4cd54a",
+      "expected_verdict": "IMPOSTOR_SPEAKER"
     }
   }
 }

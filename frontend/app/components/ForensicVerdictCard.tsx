@@ -28,6 +28,19 @@ export interface ForensicReportData {
     zero_retention_verified: boolean;
     timestamp: string;
   };
+  /**
+   * Real (non-stub) signal from the trained ml/ model: an IDENTITY check
+   * ("is this the enrolled voice?"). Deliberately kept separate from
+   * `verdict` — it is NOT a clone/synthetic decision.
+   */
+  target_speaker?: {
+    available: boolean;
+    label: string;
+    is_target: boolean;
+    prob_target?: number | null;
+    llr?: number | null;
+    reason?: string | null;
+  } | null;
 }
 
 interface ForensicVerdictCardProps {
@@ -222,6 +235,58 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
               </div>
             </div>
           </div>
+
+          {/* Enrolled-voice identity check — the trained ml/ model.
+              Reported separately from the risk tier on purpose: it answers
+              "is this the enrolled speaker?", never "is this a clone?". */}
+          {report.target_speaker && (
+            <div className="mt-3 rounded-md border border-white/[0.06] bg-[#121212] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {report.target_speaker.available ? (
+                    report.target_speaker.is_target ? (
+                      <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <UserX className="h-4 w-4 text-rose-400 shrink-0" />
+                    )
+                  ) : (
+                    <Cpu className="h-4 w-4 text-[#888888] shrink-0" />
+                  )}
+                  <div>
+                    <span className="text-[#a1a1a1]">Enrolled-voice identity check: </span>
+                    <span
+                      className={`font-mono font-medium ${
+                        !report.target_speaker.available
+                          ? "text-[#888888]"
+                          : report.target_speaker.is_target
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {report.target_speaker.available
+                        ? report.target_speaker.is_target
+                          ? "MATCH — enrolled voice"
+                          : "NO MATCH — not the enrolled voice"
+                        : "UNAVAILABLE"}
+                    </span>
+                  </div>
+                </div>
+
+                {report.target_speaker.available && report.target_speaker.prob_target !== null && report.target_speaker.prob_target !== undefined && (
+                  <div className="font-mono text-[10.5px] text-[#888888]">
+                    P(target)=<span className="text-[#a1a1a1]">{(report.target_speaker.prob_target * 100).toFixed(1)}%</span>
+                    {" · "}LLR=<span className="text-[#a1a1a1]">{report.target_speaker.llr?.toFixed(3)}</span>
+                  </div>
+                )}
+              </div>
+
+              <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#666666]">
+                {report.target_speaker.available
+                  ? "Identity check only — trained on one enrolled speaker with no cloned audio, so it cannot certify that audio is genuine."
+                  : (report.target_speaker.reason || "Trained identity model not loaded.")}
+              </p>
+            </div>
+          )}
 
           {/* Autonomous Pre-Transaction Interlock Ribbon */}
           <div className="mt-4 rounded-md border border-white/[0.06] bg-[#121212] p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">

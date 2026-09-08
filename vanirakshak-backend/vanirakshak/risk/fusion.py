@@ -93,6 +93,22 @@ class RiskFusionEngine:
                 risk = self._ema
         risk = float(max(0.0, min(100.0, risk)))
         tier = to_tier(risk, self.risk_cfg)
+
+        # Deterministic impostor override — see RiskConfig.impostor_block_below.
+        # A caller whose voice is decisively NOT the enrolled speaker must engage
+        # the interlock even if the weighted fusion lands short of BLOCK. Only
+        # applies when an anchor actually produced the score: an unenrolled ASV
+        # returns the neutral 0.5, which is never below the threshold.
+        cutoff = getattr(self.risk_cfg, "impostor_block_below", 0.0)
+        if cutoff > 0.0 and window.asv_score < cutoff:
+            # Raise the score to the BLOCK line as well, so the reported risk and
+            # the reported tier agree. A tier of BLOCK at risk 67 would contradict
+            # the published thresholds and make the dashboard unreadable.
+            floor = float(self.risk_cfg.challenge_threshold)
+            risk = max(risk, floor)
+            self._ema = max(self._ema if self._ema is not None else risk, floor)
+            tier = "BLOCK"
+
         return RiskDecision(
             risk=round(risk, 2),
             p_spoof=round(p, 4),

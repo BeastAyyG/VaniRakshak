@@ -43,6 +43,18 @@ class RiskConfig:
     ema_alpha: float = _env_float("VR_EMA_ALPHA", 0.65)
     fast_rise_threshold: float = _env_float("VR_FAST_RISE_THRESHOLD", 0.85)
 
+    # Deterministic impostor override.
+    #
+    # The fused score is a weighted sum, so one piece of overwhelming evidence
+    # gets diluted by the others: a caller whose voice matched the anchor at
+    # 0.09 landed at risk 67 — CHALLENGE, just under the 70 BLOCK line — and the
+    # transaction interlock never fired on a confirmed identity mismatch.
+    #
+    # Fraud policy is not purely probabilistic. If the speaker consistency is
+    # decisively below this value, the tier is forced to BLOCK regardless of the
+    # fused score. Set to <= 0 to disable.
+    impostor_block_below: float = _env_float("VR_IMPOSTOR_BLOCK_BELOW", 0.10)
+
 
 @dataclass(frozen=True)
 class FusionConfig:

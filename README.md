@@ -161,7 +161,25 @@ The wire format between the two halves is documented in **[docs/PROTOCOL.md](doc
 
 ## Getting started
 
-Run the backend and the dashboard in two terminals.
+**One command** (boots the venv, backend and dashboard together):
+
+```bash
+npm run dev:all     # = node scripts/dev.js
+```
+
+Then open **http://localhost:3001**.
+
+Verify the whole vertical slice is wired up:
+
+```bash
+python scripts/integration_check.py           # 13 checks, boots the app in-process
+python scripts/integration_check.py --live    # or against a running server
+```
+
+Full integration status, fixed defects and honest limitations:
+[`INTEGRATION_REPORT.md`](INTEGRATION_REPORT.md).
+
+Or run the two halves in separate terminals:
 
 **Backend** (port 8000):
 

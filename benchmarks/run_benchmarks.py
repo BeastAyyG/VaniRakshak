@@ -50,6 +50,7 @@ from vanirakshak.data.augment import (
     add_noise,
 )
 from vanirakshak.data.synthetic import synthetic_speech, synthetic_spoofed
+from vanirakshak.anchor import load_anchor
 from vanirakshak.detectors.pipeline import DetectionPipeline
 from vanirakshak.session import CallSession, SessionContext
 
@@ -119,9 +120,24 @@ def run_all_benchmarks() -> dict:
     pipe = DetectionPipeline()
     rng = np.random.default_rng(42)
 
+    # Load the enrolled target speaker into the SAME pipeline the sessions below
+    # will use, and claim that identity on every session. Without this the ASV
+    # returns a constant 0.5, the system under test cannot do speaker
+    # verification at all, and these numbers describe nothing the dashboard can
+    # actually produce. One pipeline, passed explicitly to every CallSession.
+    anchor = load_anchor(pipe)
+    anchor_id = anchor.get("user_id") or ""
+
     print("\n" + "=" * 72)
     print("           VANIRAKSHAK UNIFIED FORENSIC BENCHMARK SUITE")
     print("=" * 72)
+    if anchor.get("enrolled"):
+        print(f"  Anchor: {anchor_id} ({anchor.get('source_clips')} clips, "
+              f"calibrated={anchor.get('calibrated')})")
+    else:
+        print(f"  Anchor: NOT ENROLLED — {anchor.get('error')}")
+        print("           Run `python scripts/enroll_anchor.py` first. Speaker-dependent")
+        print("           results below are meaningless without it.")
 
     # -------------------------------------------------------------------------
     # Benchmark 1: ASVspoof 5 Challenge Metrics
@@ -158,7 +174,11 @@ def run_all_benchmarks() -> dict:
     # Benchmark 2: CPU Streaming Latency SLA
     # -------------------------------------------------------------------------
     print("\n[BENCHMARK 2/4] Measuring End-to-End Latency Profile (200 windows)...")
-    sess = CallSession("bench-latency", SessionContext(caller_id="+91-BENCH", claimed_identity="bench_anchor"))
+    sess = CallSession(
+        "bench-latency",
+        SessionContext(caller_id="+91-BENCH", claimed_identity="bench_anchor"),
+        pipeline=pipe,
+    )
     sess.enrol("bench_anchor", synthetic_speech(4.0, sr=sr), sr)
     hop = int(sr * 1.0)
     latencies = []
@@ -244,7 +264,13 @@ def run_all_benchmarks() -> dict:
                 raw = w.readframes(w.getnframes())
                 pcm = np.frombuffer(raw, dtype=np.int16)
 
-            dsess = CallSession(f"bench-{fname}", SessionContext(caller_id="+91-DEMO"))
+            dsess = CallSession(
+                f"bench-{fname}",
+                # claimed_identity is what makes this target-conditioned: the ASV
+                # only scores against an anchor if a speaker is actually claimed.
+                SessionContext(caller_id="+91-DEMO", claimed_identity=anchor_id),
+                pipeline=pipe,
+            )
             hop_samples = dsess.buffer.hop_samples
             dsess.push_chunk(pcm[:dsess.buffer.window_samples])
             idx = dsess.buffer.window_samples

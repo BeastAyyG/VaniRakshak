@@ -3,19 +3,37 @@
 import React from "react";
 import { ShieldCheck, ShieldAlert, AlertTriangle, UserX, Play, CheckCircle2 } from "lucide-react";
 
+export type Verdict =
+  | "AUTHENTIC_TARGET"
+  | "SYNTHETIC_VOICE_CLONE"
+  | "SUSPICIOUS_SPLICED_AUDIO"
+  | "IMPOSTOR_SPEAKER";
+
 export interface BenchmarkItem {
   id: string;
   title: string;
   subtitle: string;
   fileName: string;
   audioUrl: string;
-  expectedVerdict: "AUTHENTIC_TARGET" | "SYNTHETIC_VOICE_CLONE" | "SUSPICIOUS_SPLICED_AUDIO" | "IMPOSTOR_SPEAKER";
+  /** Ground-truth label from data provenance. `null` = no honest ground truth. */
+  expectedVerdict: Verdict | null;
+  /** What the shipped pipeline actually returned when these were measured. */
+  measuredVerdict: Verdict;
+  measuredRisk: number;
+  measuredSpeakerSim: number;
   badge: string;
   color: "emerald" | "rose" | "amber" | "purple";
   description: string;
   keyDetails: string[];
+  /** Shown verbatim in the UI; anything a reader could otherwise over-read. */
+  caveat?: string;
 }
 
+/**
+ * Every number below was measured by `python scripts/measure_demos.py` against
+ * the shipped pipeline, not estimated. Clips are rebuilt by
+ * `scripts/build_demo_suite.py` from audio held out of anchor enrolment.
+ */
 export const BENCHMARKS: BenchmarkItem[] = [
   {
     id: "demo_01",
@@ -24,34 +42,60 @@ export const BENCHMARKS: BenchmarkItem[] = [
     fileName: "demo_01_genuine.wav",
     audioUrl: "/demo/demo_01_genuine.wav",
     expectedVerdict: "AUTHENTIC_TARGET",
+    measuredVerdict: "AUTHENTIC_TARGET",
+    measuredRisk: 33.9,
+    measuredSpeakerSim: 0.7282,
     badge: "BENCHMARK 1 • BONA FIDE",
     color: "emerald",
-    description: "Unaltered reference speech recording from the enrolled speaker anchor with natural physiological vocal tract tremor.",
-    keyDetails: ["Natural vocal tract micro-tremor", "High anchor similarity (0.72)", "Zero vocoder phase jumps"],
+    description:
+      "Real speech from the enrolled target speaker, held out of anchor enrolment so the embedding has never seen these clips.",
+    keyDetails: [
+      "Speaker similarity 0.73 vs anchor",
+      "Risk 33.9/100 — ALLOW band",
+      "Held out of enrolment (3 clips)",
+    ],
   },
   {
     id: "demo_02",
-    title: "Neural vocoder clone.",
-    subtitle: "Target voice impersonation",
-    fileName: "demo_02_full_clone.wav",
-    audioUrl: "/demo/demo_02_full_clone.wav",
-    expectedVerdict: "SYNTHETIC_VOICE_CLONE",
-    badge: "BENCHMARK 2 • AI CLONE",
+    title: "Degraded copy of target.",
+    subtitle: "Signal distortion, not a clone",
+    fileName: "demo_02_degraded_copy.wav",
+    audioUrl: "/demo/demo_02_degraded_copy.wav",
+    expectedVerdict: "AUTHENTIC_TARGET",
+    measuredVerdict: "AUTHENTIC_TARGET",
+    measuredRisk: 34.1,
+    measuredSpeakerSim: 0.7026,
+    badge: "BENCHMARK 2 • DEGRADED",
     color: "rose",
-    description: "Synthetic voice clone mimicking the target voice, characterized by high-band vocoder spectral flattening and collapsed latent variance.",
-    keyDetails: ["High-band flatness > 0.70", "Target identity mimicked (0.67)", "Collapsed latent entropy"],
+    description:
+      "The same target speech put through tanh saturation and a 6% resample. The voice is still the target's, so 'authentic' is the correct answer — this is a distortion, not an identity attack.",
+    keyDetails: [
+      "tanh saturation + 6% resample",
+      "Speaker similarity 0.70 vs anchor",
+      "Risk 34.1/100 — ALLOW band",
+    ],
+    caveat:
+      "Not a neural voice clone. The shipped countermeasure (CM) detector is a stub that has never seen synthetic audio, so this file does NOT test clone detection.",
   },
   {
     id: "demo_03",
     title: "Partial splice injection.",
-    subtitle: "Genuine / synthetic composite",
+    subtitle: "Target / non-target composite",
     fileName: "demo_03_partial_splice.wav",
     audioUrl: "/demo/demo_03_partial_splice.wav",
     expectedVerdict: "SUSPICIOUS_SPLICED_AUDIO",
+    measuredVerdict: "SUSPICIOUS_SPLICED_AUDIO",
+    measuredRisk: 51.4,
+    measuredSpeakerSim: 0.5584,
     badge: "BENCHMARK 3 • SPLICED",
     color: "amber",
-    description: "Authentic recording spliced with synthetic speech insertion; reveals localized vocoder phase discontinuity at 7.4 seconds.",
-    keyDetails: ["Phase discontinuity at 7.4s", "Segment risk variance spike", "Dual acoustic signature"],
+    description:
+      "Target speech with a different speaker spliced in at 4.0s; the target voice returns at 8.0s. Produces a mid-band risk and a depressed similarity score.",
+    keyDetails: [
+      "Splice boundaries at 4.0s and 8.0s",
+      "Speaker similarity 0.56 — partial mismatch",
+      "Risk 51.4/100 — CHALLENGE band",
+    ],
   },
   {
     id: "demo_04",
@@ -60,10 +104,20 @@ export const BENCHMARKS: BenchmarkItem[] = [
     fileName: "demo_04_impostor.wav",
     audioUrl: "/demo/demo_04_impostor.wav",
     expectedVerdict: "IMPOSTOR_SPEAKER",
+    measuredVerdict: "IMPOSTOR_SPEAKER",
+    measuredRisk: 67.0,
+    measuredSpeakerSim: 0.0903,
     badge: "BENCHMARK 4 • IMPOSTOR",
     color: "purple",
-    description: "Unenrolled natural speaker attempting to claim the target identity; rejected by ECAPA-TDNN biometric cosine verification.",
-    keyDetails: ["Negative cosine similarity (-0.04)", "Biometric mismatch rejected", "Zero-retention logged"],
+    description:
+      "A genuinely different, unenrolled speaker. Similarity collapses to 0.09 against the anchor and risk rises into the CHALLENGE band.",
+    keyDetails: [
+      "Speaker similarity 0.09 vs anchor",
+      "Risk 67.0/100 — CHALLENGE band",
+      "Zero-retention audit logged",
+    ],
+    caveat:
+      "Similarity comes from the numpy Welch-PSD speaker stub with a fitted logistic calibration, not ECAPA-TDNN. The trained model is not loaded in this environment.",
   },
 ];
 
@@ -87,7 +141,7 @@ export default function DemoQuickSelector({ selectedId, onSelect, isAnalyzing }:
             Pre-configured evaluation files.
           </h3>
           <p className="mt-0.5 text-xs text-[#888888]">
-            One-click evaluation files covering bona fide, neural vocoder clone, splice tampering, and biometric impostor vectors.
+            One-click evaluation files covering bona fide, signal-degraded copy, splice tampering, and impostor vectors. Figures shown are measured, not estimated.
           </p>
         </div>
         <span className="self-start sm:self-auto rounded-full border border-white/[0.08] bg-[#171717] px-3 py-1 font-mono text-[11px] text-[#a1a1a1]">
@@ -162,6 +216,12 @@ export default function DemoQuickSelector({ selectedId, onSelect, isAnalyzing }:
                 <p className="text-xs leading-relaxed text-[#a1a1a1] mt-2.5">
                   {item.description}
                 </p>
+
+                {item.caveat && (
+                  <p className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/[0.06] px-2 py-1.5 text-[10.5px] leading-relaxed text-amber-300/90">
+                    {item.caveat}
+                  </p>
+                )}
 
                 <div className="mt-3 space-y-1 border-t border-white/[0.06] pt-2.5 font-mono text-[10.5px] text-[#888888]">
                   {item.keyDetails.map((detail, idx) => (

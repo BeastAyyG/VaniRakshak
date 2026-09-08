@@ -5,6 +5,8 @@
   "description": "VaniRakshak — Target-Conditioned Recorded-Audio Forensic System",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "dev:all": "node scripts/dev.js",
+    "integration:check": "python scripts/integration_check.py",
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
     "start": "npm --prefix frontend run start"

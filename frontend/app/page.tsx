@@ -19,6 +19,11 @@ import ForensicVerdictCard, { ForensicReportData } from "./components/ForensicVe
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000/ws/stream";
 
+// Used only if /api/v1/health has not reported an enrolled anchor yet (or the
+// backend is unreachable). Prefer the health response so the client never
+// claims an identity the server has no vector for.
+const CLAIMED_IDENTITY_FALLBACK = "narendra_modi";
+
 type EventLog = {
   id: number;
   time: string;
@@ -31,6 +36,13 @@ export default function Home() {
   // Backend health & system state
   const [backendOnline, setBackendOnline] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<string>("CPU (Host Execution)");
+  // Enrolled target speaker, read from GET /api/v1/health -> anchor.user_id.
+  // Claiming it is what makes an analysis target-conditioned: with an empty
+  // identity the backend's ASV returns a flat 0.5 and the speaker-similarity
+  // half of the system does nothing. Kept in a ref too, because the WebSocket
+  // handshake runs inside a closure that would otherwise capture the initial "".
+  const [claimedIdentity, setClaimedIdentity] = useState<string>("");
+  const claimedIdentityRef = useRef<string>("");
 
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -78,6 +90,12 @@ export default function Home() {
           if (data.hardware?.device_name) {
             setDeviceInfo(data.hardware.device_name);
           }
+          if (data.anchor?.user_id) {
+            claimedIdentityRef.current = data.anchor.user_id;
+            setClaimedIdentity(data.anchor.user_id);
+          } else if (data.anchor?.error) {
+            addEvent(`No enrolled anchor: ${data.anchor.error}`, "warning");
+          }
           addEvent(`Forensic engine online: ${data.models?.wavlm_model || "WavLM Base+"}`, "info");
         }
       } catch {
@@ -113,6 +131,9 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append("file", file, fileName);
+      // Target-conditioned analysis: score against the enrolled anchor speaker.
+      // Without this the backend cannot run the ASV path at all.
+      formData.append("claimed_identity", claimedIdentityRef.current || CLAIMED_IDENTITY_FALLBACK);
 
       const res = await fetch(`${BACKEND_URL}/api/v1/analyze/audio`, {
         method: "POST",
@@ -228,7 +249,7 @@ export default function Home() {
               session_id: sessionId,
               sample_rate: 16000,
               caller_id: "+91-STREAM-MIC",
-              claimed_identity: "",
+              claimed_identity: claimedIdentityRef.current || CLAIMED_IDENTITY_FALLBACK,
               transaction_value_inr: 0,
               origin_country: "IN",
               prior_fraud_score: 0,
@@ -552,9 +573,20 @@ export default function Home() {
                 <span>{deviceInfo}</span>
               </div>
 
-              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 font-mono text-xs text-emerald-400">
+              {/* Enrolled anchor, as reported by the backend — not a hard-coded string. */}
+              <div
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs ${
+                  claimedIdentity
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                    : "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                }`}
+              >
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Anchor: Narendra Modi</span>
+                <span>
+                  {claimedIdentity
+                    ? `Anchor: ${claimedIdentity.replace(/_/g, " ")}`
+                    : "Anchor: not enrolled"}
+                </span>
               </div>
 
               <button

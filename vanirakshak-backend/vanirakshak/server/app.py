@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
+import os
 import time
 import uuid
 import wave
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -30,6 +33,7 @@ from ..session import CallSession, SessionContext
 from ..privacy.audit import AuditLog
 from ..alerts import AlertDispatcher, build_alert_payload
 from ..detectors.pipeline import DetectionPipeline
+from ..anchor import load_anchor
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +52,13 @@ SESSIONS: Dict[str, CallSession] = {}
 AUDIT = AuditLog(max_events=10_000)
 ALERTS = AlertDispatcher()
 PIPELINE = DetectionPipeline()
+
+# Enrolled target speaker ("anchor"), loaded once at import time.
+# Without this, `asv_consistency` is a hard-coded 0.5 for every call and the
+# target-conditioned half of the system does nothing. The loader lives in
+# `vanirakshak/anchor.py` so the benchmark harness loads the same vector into
+# the same pipeline and the two report comparable numbers.
+ANCHOR_STATE: Dict[str, object] = load_anchor(PIPELINE)
 
 # Browser dashboard runs on a different origin (localhost:3001 by default).
 # Origins are configurable via VR_CORS_ORIGINS (comma-separated).
@@ -158,6 +169,11 @@ class AnalyzeResponse(BaseModel):
     detected_boundary_timestamps: List[float] = Field(default_factory=list)
     dpdp_compliance: Optional[dict] = None
 
+    # Real (non-stub) signal: the trained ml/ target-speaker model, served as
+    # an honest IDENTITY check — "is this the enrolled voice?" — never as a
+    # clone/synthetic verdict. None when the checkpoint or torch is absent.
+    target_speaker: Optional[dict] = None
+
 
 class SessionStartRequest(BaseModel):
     caller_id: str = "+91-0000000000"
@@ -192,6 +208,13 @@ def health() -> dict:
             "wavlm_model": "AASIST / ECAPA Forensic Pipeline",
             "vad_enabled": True,
             "zero_retention": True,
+        },
+        "anchor": {
+            "user_id": ANCHOR_STATE.get("user_id"),
+            "enrolled": bool(ANCHOR_STATE.get("enrolled")),
+            "calibrated": bool(ANCHOR_STATE.get("calibrated")),
+            "source_clips": ANCHOR_STATE.get("source_clips", 0),
+            "error": ANCHOR_STATE.get("error"),
         },
     }
 
@@ -317,12 +340,44 @@ async def analyze(
 
     boundary_timestamps = [w["start_sec"] for w in windows if w["acoustic_anomaly_score"] >= 0.65]
 
-    # Map tier to forensic verdict recognized by frontend
-    if last.tier == "BLOCK" or last.risk >= 70:
-        if mean_speaker_sim < 0.40:
-            verdict = "IMPOSTOR_SPEAKER"
+    # ---- real (non-stub) identity check via the trained ml/ model ----------
+    # Honest scope: this answers "is this the enrolled target voice?", NOT
+    # "is this a clone?". It is reported alongside the stub-driven risk tier,
+    # never folded into it, so a missing checkpoint can never silently fake a
+    # forensic verdict. Degrades to available=False when torch/checkpoint
+    # are absent instead of erroring the whole analysis.
+    target_speaker: Optional[dict] = None
+    try:
+        from ..ml_bridge import VERIFIER
+
+        if x.size >= int(0.5 * sr):
+            target_speaker = VERIFIER.verify(x, sr)
         else:
-            verdict = "SYNTHETIC_VOICE_CLONE"
+            target_speaker = {
+                "available": False,
+                "label": "unavailable",
+                "is_target": False,
+                "reason": "audio too short (<0.5s)",
+            }
+    except Exception as e:  # never let the ML path break the forensic report
+        target_speaker = {
+            "available": False,
+            "label": "unavailable",
+            "is_target": False,
+            "reason": f"verifier error: {type(e).__name__}: {e}",
+        }
+
+    # Map tier to forensic verdict recognized by frontend.
+    #
+    # Speaker identity dominates the label: a clip whose voice does not match the
+    # enrolled target is an impostor regardless of which risk band it lands in.
+    # Previously the impostor check only ran inside the BLOCK band, so an
+    # impostor scoring 67/100 (CHALLENGE) was mislabelled "SUSPICIOUS_SPLICED_AUDIO"
+    # even at mean_speaker_sim 0.09.
+    if mean_speaker_sim < 0.40:
+        verdict = "IMPOSTOR_SPEAKER"
+    elif last.tier == "BLOCK" or last.risk >= 70:
+        verdict = "SYNTHETIC_VOICE_CLONE"
     elif last.tier == "CHALLENGE" or last.risk >= 35:
         verdict = "SUSPICIOUS_SPLICED_AUDIO"
     else:
@@ -376,6 +431,7 @@ async def analyze(
         vocoder_phase_discontinuities_detected=len(boundary_timestamps),
         detected_boundary_timestamps=boundary_timestamps,
         dpdp_compliance=dpdp,
+        target_speaker=target_speaker,
     )
 
 

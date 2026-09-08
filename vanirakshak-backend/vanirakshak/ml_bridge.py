@@ -42,7 +42,10 @@ class TargetSpeakerVerifier:
         self._lock = threading.Lock()
         self._model = None
         self._device = None
+        self.load_error: Optional[str] = None
         self.available = self.checkpoint_path.is_file()
+        if not self.available:
+            self.load_error = f"checkpoint not found: {self.checkpoint_path}"
 
     # -- lazy load (keeps startup fast; only loads on first use) -------------
     def _ensure_loaded(self) -> bool:
@@ -53,20 +56,36 @@ class TargetSpeakerVerifier:
         with self._lock:
             if self._model is not None:
                 return True
-            import torch
-            from ml.model import AcousticForensicClassifier
+            # Every failure below is *expected* on a minimal install: torch /
+            # librosa are deliberately optional so the service still boots and
+            # the REST surface still answers without the heavy ML stack.
+            # Degrade to available=False instead of raising — a missing
+            # dependency must never turn /v1/verify-speaker into a 500.
+            try:
+                import torch
+                import librosa  # noqa: F401  (feature extraction, checked up-front)
+                from ml.model import AcousticForensicClassifier
+            except Exception as e:  # ImportError / ModuleNotFoundError
+                self.available = False
+                self.load_error = f"ML stack unavailable ({type(e).__name__}: {e})"
+                return False
 
-            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            # Architecture must match the trained checkpoint (input_proj.0.weight is [128, 40]).
-            model = AcousticForensicClassifier(
-                input_dim=40, proj_dim=128, hidden_dim=64, embedding_dim=64
-            ).to(self._device)
-            state_dict = torch.load(str(self.checkpoint_path), map_location=self._device)
-            if isinstance(state_dict, dict) and "state_dict" in state_dict:
-                state_dict = state_dict["state_dict"]
-            model.load_state_dict(state_dict)
-            model.eval()
-            self._model = model
+            try:
+                self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                # Architecture must match the trained checkpoint (input_proj.0.weight is [128, 40]).
+                model = AcousticForensicClassifier(
+                    input_dim=40, proj_dim=128, hidden_dim=64, embedding_dim=64
+                ).to(self._device)
+                state_dict = torch.load(str(self.checkpoint_path), map_location=self._device)
+                if isinstance(state_dict, dict) and "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+                model.load_state_dict(state_dict)
+                model.eval()
+                self._model = model
+            except Exception as e:
+                self.available = False
+                self.load_error = f"checkpoint load failed ({type(e).__name__}: {e})"
+                return False
         return True
 
     # -- feature extraction (MUST match ml/extract_features.py exactly) -------
@@ -95,19 +114,31 @@ class TargetSpeakerVerifier:
                 "prob_target": None,
                 "is_target": False,
                 "label": "unavailable",
-                "reason": "model checkpoint not loaded",
+                "reason": self.load_error or "model checkpoint not loaded",
             }
 
-        import torch
+        # Inference is guarded too: a broken/partial ML stack must degrade to
+        # "unavailable", never surface as a 500 to the dashboard.
+        try:
+            import torch
 
-        feats = self.extract_mfcc(pcm_float32, sample_rate)  # (T, 40)
-        # Guard against degenerate input (silence / too-short chunk).
-        if feats.shape[0] < 2:
-            feats = np.vstack([feats, feats]) if feats.shape[0] == 1 else feats
-        with self._lock:
-            with torch.no_grad():
-                x = torch.from_numpy(feats).unsqueeze(0).to(self._device)
-                llr = float(self._model(x).item())
+            feats = self.extract_mfcc(pcm_float32, sample_rate)  # (T, 40)
+            # Guard against degenerate input (silence / too-short chunk).
+            if feats.shape[0] < 2:
+                feats = np.vstack([feats, feats]) if feats.shape[0] == 1 else feats
+            with self._lock:
+                with torch.no_grad():
+                    x = torch.from_numpy(feats).unsqueeze(0).to(self._device)
+                    llr = float(self._model(x).item())
+        except Exception as e:
+            return {
+                "available": False,
+                "llr": None,
+                "prob_target": None,
+                "is_target": False,
+                "label": "unavailable",
+                "reason": f"inference failed ({type(e).__name__}: {e})",
+            }
         prob_target = float(1.0 / (1.0 + np.exp(-llr)))
         is_target = llr >= 0.0  # decision rule from ml/evaluate.py
         return {
