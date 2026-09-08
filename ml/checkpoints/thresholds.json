@@ -1,80 +1,12 @@
 {
-  "benchmark_timestamp_iso": "2026-09-07T19:16:26Z",
-  "elapsed_seconds": 15.25,
-  "asvspoof5_metrics": {
-    "minDCF": 0.0,
-    "actDCF": 18.999999999999996,
-    "CLLR": 1.8282973026146767,
-    "EER_pct": 0.0
-  },
-  "telephony_robustness": {
-    "Clean (Broadband)": {
-      "EER_pct": 0.0,
-      "minDCF": 0.0
-    },
-    "G.711 A-law (VoIP / PSTN)": {
-      "EER_pct": 0.0,
-      "minDCF": 0.0
-    },
-    "G.711 mu-law (US PSTN)": {
-      "EER_pct": 0.0,
-      "minDCF": 0.0
-    },
-    "AMR-WB (3GPP VoLTE)": {
-      "EER_pct": 0.5,
-      "minDCF": 1.0
-    },
-    "GSM-EFR (2G Cellular)": {
-      "EER_pct": 1.0,
-      "minDCF": 1.0
-    },
-    "Gaussian Noise (15 dB SNR)": {
-      "EER_pct": 0.0,
-      "minDCF": 0.0
-    }
-  },
-  "demo_verification": {
-    "demo_01_genuine.wav": {
-      "risk_score": 46.34,
-      "tier": "CHALLENGE",
-      "expected_verdict": "AUTHENTIC_TARGET",
-      "windows_count": 6,
-      "receipt_hash": "425183059847fc844eff821ff8d031835ce49b30c8d48680e8b0069cb7242646"
-    },
-    "demo_02_full_clone.wav": {
-      "risk_score": 46.19,
-      "tier": "CHALLENGE",
-      "expected_verdict": "SYNTHETIC_VOICE_CLONE",
-      "windows_count": 6,
-      "receipt_hash": "4bf466e88bd3b53868ec146fe97f97448a069048312d218aa87548e5c9d4c3e4"
-    },
-    "demo_03_partial_splice.wav": {
-      "risk_score": 46.18,
-      "tier": "CHALLENGE",
-      "expected_verdict": "SUSPICIOUS_SPLICED_AUDIO",
-      "windows_count": 6,
-      "receipt_hash": "051213bba1bb2c1f8d9aafe8aad307d621c81f7cf83cb20c83f51cfa7abc614b"
-    },
-    "demo_04_impostor.wav": {
-      "risk_score": 48.04,
-      "tier": "CHALLENGE",
-      "expected_verdict": "IMPOSTOR_SPEAKER",
-      "windows_count": 6,
-      "receipt_hash": "f912ba7a15b95befb225813aefa3b4e14e1d6477bfd0efb4af6fc1e1c78c6659"
-    }
-  },
-  "calibrated_decision_thresholds": {
-    "ALLOW_max": 35.0,
-    "CHALLENGE_range": [
-      35.0,
-      69.9
-    ],
-    "BLOCK_min": 70.0,
-    "bayes_operational_threshold": -0.644
-  },
-  "sla_target_compliance": {
-    "target_sla_p95_ms": 200.0,
-    "measured_p95_ms": 23.22,
-    "status": "COMPLIANT"
-  }
+  "calibrated_at": "2026-09-08T02:23:24Z",
+  "input_feature_dim": 40,
+  "best_min_dcf": 0.0,
+  "validation_eer_pct": 0.0,
+  "validation_act_dcf": 0.0,
+  "validation_cllr": 0.0049,
+  "threshold_allow_max": 35.0,
+  "threshold_challenge_max": 69.9,
+  "threshold_block_min": 70.0,
+  "bayes_operating_threshold": -0.644
 }

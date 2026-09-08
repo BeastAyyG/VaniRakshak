@@ -10,8 +10,16 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple, Union
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BACKEND_DIR = REPO_ROOT / "vanirakshak-backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import numpy as np
 import torch
@@ -153,3 +161,79 @@ class ForensicAudioDataset(Dataset):
 
         tensor_y = torch.tensor(label, dtype=torch.long)
         return tensor_x, tensor_y
+
+
+class FeatureDataset(Dataset):
+    """Loads pre-extracted .npy feature matrices (e.g. MFCC / WavLM) from split CSV/JSON."""
+
+    def __init__(
+        self,
+        split_path: Union[str, Path],
+        features_dir: Union[str, Path],
+        target_len: int = 300,
+        is_train: bool = True,
+    ) -> None:
+        super().__init__()
+        import csv
+
+        self.split_path = Path(split_path).resolve()
+        self.features_dir = Path(features_dir).resolve()
+        self.target_len = target_len
+        self.is_train = is_train
+        self.items: List[Dict[str, Any]] = []
+
+        if not self.split_path.is_file():
+            raise FileNotFoundError(f"Split file not found: {self.split_path}")
+
+        if self.split_path.suffix.lower() == ".csv":
+            with open(self.split_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    cleaned = {k.strip(): v.strip() for k, v in r.items() if k is not None}
+                    if not cleaned:
+                        continue
+                    fp = cleaned.get("filepath") or cleaned.get("path")
+                    spk = cleaned.get("speaker_id") or cleaned.get("speaker") or ""
+                    label = 1 if spk.lower() in ("anchor", "modi", "target", "1", "genuine") else 0
+                    self.items.append({"filepath": fp, "speaker_id": spk, "label": label})
+        else:
+            data = json.loads(self.split_path.read_text(encoding="utf-8"))
+            records = data.get("files", data) if isinstance(data, dict) else data
+            for r in records:
+                fp = r.get("path") or r.get("filepath") or r.get("id")
+                spk = r.get("speaker_id") or r.get("label") or ""
+                label = 1 if (r.get("label") == "genuine" or str(spk).lower() in ("anchor", "modi", "target")) else 0
+                self.items.append({"filepath": fp, "speaker_id": spk, "label": label})
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        item = self.items[idx]
+        rel_p = Path(item["filepath"]).with_suffix(".npy")
+
+        feat_path = self.features_dir / rel_p
+        if not feat_path.is_file():
+            feat_path = self.features_dir / rel_p.name
+        if not feat_path.is_file():
+            raise FileNotFoundError(f"Feature file not found: {feat_path}")
+
+        arr = np.load(feat_path).astype(np.float32)
+        if arr.ndim == 1:
+            arr = np.expand_dims(arr, 0)
+
+        t_len = arr.shape[0]
+        if t_len > self.target_len:
+            if self.is_train:
+                start = random.randint(0, t_len - self.target_len)
+            else:
+                start = (t_len - self.target_len) // 2
+            arr = arr[start : start + self.target_len]
+        elif t_len < self.target_len:
+            pad = self.target_len - t_len
+            arr = np.pad(arr, ((0, pad), (0, 0)), mode="constant")
+
+        tensor_x = torch.from_numpy(arr).float()
+        tensor_y = torch.tensor(item["label"], dtype=torch.long)
+        return tensor_x, tensor_y
+
