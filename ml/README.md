@@ -4,6 +4,19 @@ Target-conditioned neural models, ASVspoof-5 evaluation metrics, and telephony c
 
 **The trained checkpoint covers one enrolled identity (Narendra Modi) and has never seen cloned audio — see the note under [Evaluated Metrics](#evaluated-metrics).**
 
+## Mission & Telecom Scaling
+
+The model is the engine behind VaniRakshak's voice-authenticity promise. It was first built to
+**guarantee that a call from Narendra Modi (Modi ji) cannot be faked or impersonated** — one
+enrolled anchor voice, checked against every inbound claim to be him. The same mechanism scales
+into a **telecom family-SIM safety feature** (in the spirit of Airtel's scam-detecting calls):
+carriers enroll real voice samples of each family member, then verify whether an incoming caller
+is the *real* enrolled family member or a deepfake, letting them sell it as a family-safety
+add-on. The current checkpoint validates only the single-identity "is this the enrolled voice?"
+question — extending it to the family scenario means enrolling each member on real samples **and**
+training/evaluating against cloned audio (see the honesty note under
+[Evaluated Metrics](#evaluated-metrics)).
+
 ## Architecture & Modules
 
 ```
