@@ -1,11 +1,13 @@
-# 🛡️ VaniRakshak — Factual Claim Verification System
-
-> **"Vani" = Voice/Speech | "Rakshak" = Guardian/Protector**
-> Guard every spoken word with real-time factual verification.
-
----
-
 <div align="center">
+
+  <img src="assets/logo.png" alt="VaniRakshak Official Logo" width="360" />
+
+  <h1>VaniRakshak (वाणी रक्षक)</h1>
+  <p><strong>Real-Time Voice Scam Shield &amp; Live Evidence Grounding</strong></p>
+
+  <p><em>"Vani" = Voice/Speech | "Rakshak" = Guardian/Protector &bull; Autonomous real-time defense against digital arrest coercion, financial KYC fraud, and voice deception.</em></p>
+
+
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green?logo=fastapi)](https://fastapi.tiangolo.com)
