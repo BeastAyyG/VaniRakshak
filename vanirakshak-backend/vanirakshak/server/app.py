@@ -379,6 +379,66 @@ async def analyze(
     )
 
 
+# ---------------------------------------------------------------------------
+# Target-speaker verification (the trained ml/ model, served honestly as an
+# identity check: "is this the enrolled voice (Modi ji), or not?").
+# ---------------------------------------------------------------------------
+class VerifySpeakerResponse(BaseModel):
+    available: bool
+    label: str
+    is_target: bool
+    llr: Optional[float] = None
+    prob_target: Optional[float] = None
+    reason: Optional[str] = None
+
+
+@app.post("/v1/verify-speaker", response_model=VerifySpeakerResponse)
+@app.post("/api/v1/verify-speaker", response_model=VerifySpeakerResponse)
+async def verify_speaker(
+    audio: Optional[UploadFile] = File(None),
+    file: Optional[UploadFile] = File(None),
+) -> VerifySpeakerResponse:
+    """Score a short voice chunk against the enrolled target speaker.
+
+    Honest scope: the model answers identity ("Modi ji" vs "not Modi ji"),
+    NOT "is this a synthetic/clone voice". It was trained on one target speaker
+    vs one non-target speaker and has never seen cloned audio.
+    """
+    from ..ml_bridge import VERIFIER
+
+    upload = audio or file
+    if upload is None:
+        raise HTTPException(400, "Audio payload required in form field 'audio' or 'file'")
+
+    data = await upload.read()
+    if not data:
+        raise HTTPException(400, "Received empty audio payload")
+
+    try:
+        x, sr = _read_wav_bytes(data)
+    except Exception:
+        raise HTTPException(400, "Could not decode WAV audio")
+
+    # Require a usable minimum (>= 0.5s) so silence doesn't produce a verdict.
+    if x.size < int(0.5 * sr):
+        return VerifySpeakerResponse(
+            available=VERIFIER.available,
+            label="unavailable",
+            is_target=False,
+            reason="audio too short (<0.5s)",
+        )
+
+    result = VERIFIER.verify(x, sr)
+    return VerifySpeakerResponse(
+        available=bool(result["available"]),
+        label=str(result["label"]),
+        is_target=bool(result["is_target"]),
+        llr=result["llr"],
+        prob_target=result["prob_target"],
+        reason=result.get("reason"),
+    )
+
+
 @app.post("/v1/sessions")
 @app.post("/api/v1/sessions")
 def start_session(req: SessionStartRequest) -> dict:
