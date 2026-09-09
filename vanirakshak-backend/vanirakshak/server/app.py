@@ -316,6 +316,25 @@ async def analyze(
     )
     sess.set_sample_rate(sr)
 
+    # ---- parallel ASR + keyword scam-phrase signal (advisory) --------------
+    # Computed BEFORE the window loop below and fed into the session via
+    # update_semantic() so every window's fusion call actually sees it — see
+    # the note above push_chunk's use of _semantic_state. This differs from
+    # the WS path (where semantic necessarily lags one window behind, since
+    # transcription is async and the audio arrives live): a one-shot /analyze
+    # upload is a single static file, so one transcript for the whole clip
+    # can inform every window's fusion equally, instead of running Groq once
+    # per window for no benefit. Previously this ran *after* the window loop
+    # so it never reached fusion at all (w_semantic was dead code here) and
+    # only decorated the response. Degrades to available=False on any
+    # failure; never breaks the forensic report.
+    try:
+        pcm_int16_full = (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+        semantic = await asyncio.to_thread(SEMANTIC_SIGNAL.analyze_window, pcm_int16_full, sr)
+    except Exception as e:
+        semantic = {"available": False, "semantic_risk": 0.0, "reason": f"semantic signal error: {type(e).__name__}: {e}"}
+    sess.update_semantic(semantic)
+
     # If audio is shorter than the buffer's window_samples, pad with zeros
     # so we can always evaluate at least one forensic window
     x_analysis = x
@@ -413,15 +432,6 @@ async def analyze(
             "is_target": False,
             "reason": f"verifier error: {type(e).__name__}: {e}",
         }
-
-    # ---- parallel ASR + keyword scam-phrase signal (advisory) --------------
-    # Blocking network call (Groq) — run off the event loop thread. Degrades
-    # to available=False on any failure; never breaks the forensic report.
-    try:
-        pcm_int16_full = (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
-        semantic = await asyncio.to_thread(SEMANTIC_SIGNAL.analyze_window, pcm_int16_full, sr)
-    except Exception as e:
-        semantic = {"available": False, "semantic_risk": 0.0, "reason": f"semantic signal error: {type(e).__name__}: {e}"}
 
     # Map tier to forensic verdict recognized by frontend.
     #
