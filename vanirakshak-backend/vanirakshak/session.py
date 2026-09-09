@@ -226,11 +226,60 @@ class CallSession:
         if self._active_challenge is None:
             return {"ok": False, "reason": "no_active_challenge"}
         passed, reason, conf = self.challenge.grade(self._active_challenge, response_text, response_latency_ms)
+
+        # TODO(human): decide what passing (or failing) buys the caller for
+        # the REST of this session, and implement it here.
+        #
+        # Right now neither outcome is reversible within a call:
+        #   - `_blocked` is a one-way latch (session.py:174-175) — once any
+        #     window hits BLOCK it never clears, regardless of what happens
+        #     to the challenge.
+        #   - `_triggered_challenge` (push_chunk, session.py:166-171) gates
+        #     challenge issuance and is also never reset — a session can
+        #     fire at most ONE challenge ever, pass or fail.
+        # A FAILED challenge already escalates to BLOCK below, which is
+        # unambiguous. What's open is the PASSED case:
+        #
+        #   Option A — challenge is a real recovery path: on pass, clear
+        #   `self._blocked = False` (if it was set) and
+        #   `self._triggered_challenge = False` so a later window that rises
+        #   back into CHALLENGE can issue a fresh one. A caller who
+        #   re-authenticates should get their transaction back, and the
+        #   interlock should track the CURRENT window's fused risk, not a
+        #   window from before the challenge.
+        #
+        #   Option B — a pass only prevents an ESCALATION that hasn't
+        #   happened yet, and never un-blocks or re-arms a session — the
+        #   challenge is a one-shot gate, not a reset button. A previously
+        #   BLOCKed call stays BLOCKed even after a correct answer, and no
+        #   second challenge ever fires in the same call.
+        #
+        # This changes the demo narrative (a "recover by answering
+        # correctly" story vs. a "one strike, and future strikes are silent"
+        # story) and frontend/app/page.tsx's interlock-authority fix
+        # upstream of this depends on which the server actually does.
+        # Clear the two flags for Option A; leave this comment's guidance in
+        # a short code comment either way so the next reader knows this was
+        # a deliberate choice, not an oversight.
         if passed:
             self._challenge_passed = True
         else:
             # failed challenge => escalate to BLOCK
             self._blocked = True
+
+        last = self._history[-1] if self._history else None
+        self.audit.append(
+            session_id=self.session_id,
+            caller_id=self.context.caller_id,
+            claimed_identity=self.context.claimed_identity,
+            risk_score=last.risk if last else 0.0,
+            tier="BLOCK" if not passed else (last.tier if last else "ALLOW"),
+            features={
+                "challenge_passed": 1.0 if passed else 0.0,
+                "challenge_confidence": float(conf),
+                "response_latency_ms": float(response_latency_ms),
+            },
+        )
         return {
             "ok": passed,
             "reason": reason,
