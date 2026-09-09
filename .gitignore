@@ -68,6 +68,9 @@ next-env.d.ts
 .opencode/
 .workbuddy-ai/
 
+# Runtime audit chain (VR_AUDIT_PATH default) — durable local record, not source
+audit_log.jsonl
+
 # -----------------------------------------------------------------------------
 # Merged from branch `ayush` — ASR stack additions
 # -----------------------------------------------------------------------------

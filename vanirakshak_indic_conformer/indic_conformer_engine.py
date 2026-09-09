@@ -101,10 +101,16 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
     }
     lang_display = lang_map.get(detected_lang.lower(), f"Indic ({detected_lang.upper()})")
 
-    # Generate dual representation: Hindi (native script) + Romanized Hinglish
-    from backend.services.asr.transliteration import HinglishTransliterationService
-    translit_svc = HinglishTransliterationService()
-    hinglish_text = translit_svc.to_hinglish(transcript)
+    # Generate dual representation: Hindi (native script) + Romanized Hinglish.
+    # The transliteration service lives in a different project layout and is
+    # not vendored here — import it lazily and fall back to the raw
+    # transcript so a successful Groq call never ends in ModuleNotFoundError.
+    try:
+        from backend.services.asr.transliteration import HinglishTransliterationService
+        hinglish_text = HinglishTransliterationService().to_hinglish(transcript)
+    except Exception as exc:
+        logger.warning(f"Hinglish transliteration unavailable ({exc}); returning raw transcript")
+        hinglish_text = transcript
 
     return {
         "engine": "Groq Cloud Whisper (whisper-large-v3-turbo)",
@@ -115,7 +121,9 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
         "segments": segments_list,
         "language_code": detected_lang.lower(),
         "language": lang_display,
-        "language_probability": 0.99,
+        # Groq verbose_json returns no language confidence — None, not a
+        # fabricated 0.99. No consumer reads this key (checked server.py + UI).
+        "language_probability": None,
         "duration": round(duration, 2),
         "inference_sec": round(inference_sec, 3)
     }

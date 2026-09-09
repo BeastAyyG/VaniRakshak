@@ -120,7 +120,9 @@ def transcribe_with_sotto(audio_bytes: bytes) -> Dict:
         "segments": segments_list,
         "language_code": detected_lang.lower(),
         "language": lang_display,
-        "language_probability": 0.99,
+        # Groq verbose_json returns no language confidence — None, not a
+        # fabricated 0.99. No consumer reads this key (checked server.py + UI).
+        "language_probability": None,
         "duration": round(duration, 2),
         "inference_sec": round(inference_sec, 3),
         "device": f"Groq LPU / Host {device}",
