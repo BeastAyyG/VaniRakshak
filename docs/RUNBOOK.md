@@ -207,9 +207,17 @@ hard way:
   Gemini threat detection + Crawl4AI web grounding + Gemini fact
   verification, `GEMINI_API_KEY` set, `google-genai`/`crawl4ai` installed;
   run with `cd vanirakshak_sotto && python server.py`, port 8082).
-  `vanirakshak_indic_conformer/` and `ayush_agnihotri/` remain
-  banner-flagged only, never audited or fixed — `indic_conformer/server.py`
-  still has the broken `from google import genai` import SACH's server.py
-  had until this pass. None of the three is wired into the live pipeline,
-  backend, web frontend, or phone-app call flow — cosmetic/documentation
-  correctness for those two, not a running-system gap.
+  `vanirakshak_indic_conformer/` now boots too — verified via TestClient:
+  `/api/health` returns 200 as "VaniRakshak IndicConformer Edition v2.2"
+  (Groq Whisper LPU with an Indic adaptation), and its Gemini client
+  constructs, once a `.env` carrying `GEMINI_API_KEY` sits beside it (its
+  loader walks `.` then two parents; there is no repo-root `.env`, so the
+  local one is required). An earlier revision of this entry claimed its
+  `from google import genai` import was still broken — that was wrong:
+  both that form and `import google.genai as genai` resolve fine under
+  `google-genai` 2.x, so the only thing it was ever missing was the key.
+  `ayush_agnihotri/` holds no code at all — two markdown files describing
+  a different product (Tavily + Gemini claim verification), carrying a
+  banner to that effect; there is nothing there to audit or run. None of
+  these is wired into the live pipeline, backend, web frontend, or
+  phone-app call flow.

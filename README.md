@@ -163,9 +163,9 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
 ├── vanirakshak_sotto/            # VaniRakshak SACH — standalone fact-check server (Groq + Gemini
 │                                 # + Crawl4AI live web verification), working end-to-end given
 │                                 # GEMINI_API_KEY — see its own server.py; port 8082
-├── vanirakshak_indic_conformer/  # a second, unrelated fact-check prototype — real code, NOT
-│                                 # currently runnable (missing deps, no API key, unwired) — see
-│                                 # docs/archive/AUDIT_REPORT.md §12
+├── vanirakshak_indic_conformer/  # second fact-check prototype, same shape (Groq Whisper Indic
+│                                 # adaptation + Gemini + Crawl4AI); boots given a local .env with
+│                                 # GEMINI_API_KEY — unwired from the acoustic pipeline
 └── vanirakshak-backend/  # Python FastAPI forensic service
     ├── tests/
     │   └── test_stream_e2e.py  # protocol conformance test

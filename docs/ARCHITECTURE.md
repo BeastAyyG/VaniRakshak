@@ -8,9 +8,11 @@
 > (`vanirakshak_sotto/`), a working Groq Whisper + Gemini + Crawl4AI voice
 > transcription and claim-verification server (port 8082) once
 > `GEMINI_API_KEY` is set — not wired into the acoustic pipeline above.
-> `vanirakshak_indic_conformer/` remains a second, unrelated fact-checking
-> prototype, not currently runnable. This document covers the web console +
-> backend.
+> `vanirakshak_indic_conformer/` is a second fact-checking prototype of the
+> same shape (Groq Whisper with an Indic adaptation + Gemini + Crawl4AI);
+> it also boots and answers `/api/health` once a `.env` carrying
+> `GEMINI_API_KEY` exists beside it. Neither prototype is wired into the
+> acoustic pipeline. This document covers the web console + backend.
 
 ## System Components
 
