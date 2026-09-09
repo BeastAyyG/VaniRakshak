@@ -371,7 +371,7 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
                 <>
                   {(report.semantic.hinglish_text || report.semantic.transcript) && (
                     <p className="mt-1.5 text-[11px] leading-relaxed text-[#a1a1a1] bg-[#171717] p-2 rounded border border-white/[0.05] font-mono">
-                      "{report.semantic.hinglish_text || report.semantic.transcript}"
+                      &ldquo;{report.semantic.hinglish_text || report.semantic.transcript}&rdquo;
                     </p>
                   )}
                   {(report.semantic.matches?.length ?? 0) > 0 && (

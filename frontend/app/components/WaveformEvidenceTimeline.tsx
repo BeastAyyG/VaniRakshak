@@ -46,10 +46,19 @@ export default function WaveformEvidenceTimeline({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Per-bar peak amplitudes decoded from the actual audio (140 bars, 0..1).
-  // null = not decoded yet or decode failed — the canvas falls back to the
-  // old synthetic pattern so the timeline still renders without audio.
-  const [peaks, setPeaks] = useState<number[] | null>(null);
+  // Per-bar peak amplitudes decoded from the actual audio (140 bars, 0..1),
+  // tagged with the source they were decoded from. null = not decoded yet or
+  // decode failed — the canvas falls back to the synthetic pattern so the
+  // timeline still renders without audio.
+  //
+  // Tagging the source (rather than clearing peaks synchronously when the
+  // source changes) is what keeps this out of react-hooks' cascading-render
+  // rule: a stale decode is discarded by identity comparison at draw time
+  // instead of by an extra render pass.
+  type PeakState = { src: string | Blob; values: number[] };
+  const [peaks, setPeaks] = useState<PeakState | null>(null);
+  const peakSrc: string | Blob | null = audioBlob ?? audioUrl ?? null;
+  const activePeaks = peaks && peaks.src === peakSrc ? peaks.values : null;
 
   const hasAudio = Boolean(audioUrl || audioBlob);
 
@@ -59,7 +68,6 @@ export default function WaveformEvidenceTimeline({
   // null — colors and boundary markers stay data-driven regardless.
   useEffect(() => {
     let cancelled = false;
-    setPeaks(null);
     if (!audioUrl && !audioBlob) return;
     const BAR_COUNT = 140;
     (async () => {
@@ -86,7 +94,7 @@ export default function WaveformEvidenceTimeline({
           if (m > peak) peak = m;
         }
         if (peak > 0) for (let i = 0; i < BAR_COUNT; i++) out[i] /= peak;
-        setPeaks(out);
+        setPeaks({ src: (audioBlob ?? audioUrl) as string | Blob, values: out });
       } catch {
         if (!cancelled) setPeaks(null);
       }
@@ -212,8 +220,8 @@ export default function WaveformEvidenceTimeline({
       // Real decoded peaks when available; synthetic sine fallback only
       // while decoding or when the source can't be fetched/decoded.
       let amp: number;
-      if (peaks) {
-        amp = Math.max(0.03, Math.min(1, peaks[i] ?? 0));
+      if (activePeaks) {
+        amp = Math.max(0.03, Math.min(1, activePeaks[i] ?? 0));
       } else {
         const baseAmp = Math.sin((i / barCount) * Math.PI * 4) * 0.3 + 0.5;
         const noise = (Math.sin(i * 12.3) * 0.5 + 0.5) * 0.4;
@@ -253,7 +261,7 @@ export default function WaveformEvidenceTimeline({
     ctx.moveTo(scrubberX, 0);
     ctx.lineTo(scrubberX, height);
     ctx.stroke();
-  }, [windows, durationSec, currentTime, detectedBoundaryTimestamps, peaks]);
+  }, [windows, durationSec, currentTime, detectedBoundaryTimestamps, activePeaks]);
 
   const formatSec = (s: number) => {
     const mins = Math.floor(s / 60);

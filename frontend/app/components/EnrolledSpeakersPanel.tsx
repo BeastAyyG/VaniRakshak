@@ -49,9 +49,28 @@ export default function EnrolledSpeakersPanel({
     }
   }, [backendUrl]);
 
+  // Not `refresh()` directly: calling it synchronously in the effect body
+  // trips react-hooks' cascading-render rule, and it also had a real (if
+  // small) stale-write race — if backendUrl changed mid-flight, the older
+  // response could land after the newer one. The ignore flag closes both.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch(`${backendUrl}/api/v1/enroll`);
+        if (!res.ok || ignore) return;
+        const data = await res.json();
+        if (ignore) return;
+        setEnrolled(Array.isArray(data.enrolled) ? data.enrolled : []);
+        setAsvBackend(data.asv_backend || "");
+      } catch {
+        // Backend offline — the rest of the dashboard already surfaces that.
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [backendUrl]);
 
   const handleEnroll = async () => {
     const userId = newLabel.trim().toLowerCase().replace(/\s+/g, "_");

@@ -148,7 +148,12 @@ export default function Home() {
   // Where the active challenge came from. Only a server-issued phrase can be
   // graded by the backend (it grades against its OWN challenge), so a locally
   // generated drill phrase must be graded locally.
+  // The ref is read inside async event handlers (submitChallengeResponse),
+  // where it must be the freshest value. The state mirror below is what
+  // render may read — a ref read during render is not reactive, so the
+  // interlock could compute its tier from a stale source. Keep both in sync.
   const challengeSourceRef = useRef<"server" | "local">("local");
+  const [challengeSource, setChallengeSource] = useState<"server" | "local">("local");
   const [activeChallenge, setActiveChallenge] = useState<LocalChallenge | null>(null);
   const [challengeStatus, setChallengeStatus] = useState<"none" | "awaiting" | "passed" | "failed">("none");
   const [challengeResponseText, setChallengeResponseText] = useState<string>("");
@@ -489,6 +494,7 @@ export default function Home() {
                 };
                 activeChallengeRef.current = ch;
                 challengeSourceRef.current = "server";
+                setChallengeSource("server");
                 challengeIssuedAtRef.current = Date.now();
                 setActiveChallenge(ch);
                 setChallengeStatus("awaiting");
@@ -615,6 +621,7 @@ export default function Home() {
     activeChallengeRef.current = null;
     challengePendingRef.current = false;
     challengeSourceRef.current = "local";
+    setChallengeSource("local");
     setActiveChallenge(null);
     setChallengeStatus("none");
     setChallengeResponseText("");
@@ -644,8 +651,28 @@ export default function Home() {
   // overrides are only for the demo carve-out docs/PROTOCOL.md §5
   // describes: a manual drill (no server challenge exists to track) or the
   // backend being unreachable (no live verdict to trust either way).
+  // Reads `challengeSource` (state), NOT challengeSourceRef.current. A ref
+  // read during render is not reactive, so the previous version could
+  // evaluate against a stale source — and this predicate is what decides
+  // whether the client may unlock a transaction the server has blocked.
+  //
+  // Permissive (||), deliberately. Each condition marks a case where there
+  // is no server verdict to defer to:
+  //   challengeSource === "local"  — a manual drill; the backend has no
+  //     challenge of its own to grade, so it will never speak to this one.
+  //   !backendOnline               — nothing to defer to at all.
+  //   !micLive                     — no live stream, so `liveTier` came
+  //     from a one-shot report rather than a streamed verdict.
+  //
+  // The case that governs the choice: a SERVER-issued challenge, backend
+  // online, mic live, graded pass — then the next window streams BLOCK.
+  // All three conditions are false there, so the override does not engage
+  // and liveTier (BLOCK) stands. That is the AGENTS.md §2 invariant, and
+  // it holds without needing &&. Requiring all three instead would disable
+  // the drill carve-out docs/PROTOCOL.md §5 documents, buying no safety
+  // the || form doesn't already give.
   const useLocalChallengeOverride =
-    challengeSourceRef.current === "local" || !backendOnline || !micLive;
+    challengeSource === "local" || !backendOnline || !micLive;
   const effectiveTier: string =
     useLocalChallengeOverride && challengeStatus === "passed"
       ? "ALLOW"
@@ -726,6 +753,7 @@ export default function Home() {
     const ch = issueLocalChallenge();
     activeChallengeRef.current = ch;
     challengeSourceRef.current = "local";
+    setChallengeSource("local");
     challengeIssuedAtRef.current = Date.now();
     setActiveChallenge(ch);
     setChallengeStatus("awaiting");
