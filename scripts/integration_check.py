@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 import threading
@@ -37,6 +38,7 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ROOT = REPO_ROOT / "vanirakshak-backend"
 DEMO_DIR = REPO_ROOT / "frontend" / "public" / "demo"
+GROUND_TRUTH_PATH = REPO_ROOT / "data" / "demo" / "ground_truth.json"
 
 # (filename, expected verdict). Expected comes from *provenance*, not from a
 # wish: demo_02 is a signal-degraded copy of the target voice, so the honest
@@ -73,6 +75,25 @@ WS_VERDICT_KEYS = [
     "interlock_active",
     "receipt_hash",
 ]
+
+# Every key docs/PROTOCOL.md documents on a live challenge object
+# (challenge/engine.py::Challenge.to_dict). expected_digits is a list of
+# single-digit strings; expected_full is the full spoken phrase (a regression
+# guard for the bug where it used to be just the digits, e.g. "8 4" instead
+# of "mango 8 nadi 4").
+CHALLENGE_KEYS = ["phrase", "expected_digits", "expected_full", "instructions", "issued_at_ms", "seed"]
+
+# The `semantic` block's key set must be identical whether it's idle
+# (session.py::_SEMANTIC_IDLE), degraded (semantic/signal.py::_UNAVAILABLE_BASE),
+# or a populated transcript (semantic/signal.py::analyze_window's success
+# return) — a regression guard for the schema-drift bug where the idle shape
+# was missing keyword_risk/claim_risk/claim_findings that only appeared once
+# ASR actually ran, silently changing the object's shape mid-session.
+REQUIRED_SEMANTIC_KEYS = {
+    "available", "transcript", "hinglish_text", "language", "matches",
+    "categories_hit", "semantic_risk", "keyword_risk", "claim_risk",
+    "claim_findings", "provider", "reason",
+}
 
 
 class Checks:
@@ -167,13 +188,31 @@ def check_analyze(client, checks: Checks) -> Dict[str, Dict[str, Any]]:
     return results
 
 
+def _real_backends_active() -> Dict[str, str]:
+    """Which detector backends this run's server was configured for.
+
+    Read from this process's own environment — the caller is expected to set
+    these before booting the in-process app (or before starting `run.py` for
+    `--live`), the same env vars `pipeline.py`'s factory reads.
+    """
+    return {
+        "asv": os.environ.get("VR_ASV_BACKEND", "stub").lower(),
+        "cm": os.environ.get("VR_CM_BACKEND", "stub").lower(),
+    }
+
+
 def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> None:
     """Do the four benchmark clips actually score differently?
 
-    Known limitation (AUDIT_REPORT.md §5): the shipped detectors are
-    deterministic stubs, so the risk tier barely moves between clips. Reported
-    as an observation, never a hard failure — but surfaced loudly so nobody
-    quotes the benchmark table as detection performance.
+    With the stub detectors (default, zero-dependency) this stays purely
+    informational — AUDIT_REPORT.md §5 documents why the stubs don't
+    separate these clips, and asserting on them would just be a flaky test
+    dressed up as an accuracy claim.
+
+    When real detector backends are active (VR_ASV_BACKEND=ecapa and/or
+    VR_CM_BACKEND=wavlm), this additionally asserts each clip's risk *tier*
+    against `data/demo/ground_truth.json`'s `expected_tier` — an accuracy
+    claim is only asserted when it's backed by real features.
     """
     if len(results) < 4:
         return
@@ -187,6 +226,31 @@ def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> 
             "    NOTE: spread < 5 pts — the stub detectors do not separate these\n"
             "          clips. Treat the benchmark table as a UI/API smoke test,\n"
             "          NOT as measured detection accuracy. See AUDIT_REPORT.md §5."
+        )
+
+    backends = _real_backends_active()
+    real_active = backends["asv"] == "ecapa" or backends["cm"] == "wavlm"
+    if not real_active:
+        print(f"    (tier-match gate skipped — stub backends active: {backends})")
+        return
+
+    if not GROUND_TRUTH_PATH.is_file():
+        checks.record("ground_truth.json present for tier gate", False, str(GROUND_TRUTH_PATH))
+        return
+    gt = json.loads(GROUND_TRUTH_PATH.read_text(encoding="utf-8"))["files"]
+
+    print(f"\n  Tier-match gate (real backends active: {backends})")
+    for fname, _expected_verdict in DEMOS:
+        if fname not in results or fname not in gt:
+            continue
+        expected_tier = gt[fname].get("expected_tier")
+        actual_tier = results[fname].get("tier")
+        if not expected_tier:
+            continue
+        checks.record(
+            f"{fname} tier == {expected_tier}",
+            actual_tier == expected_tier,
+            f"got tier={actual_tier} risk={results[fname].get('overall_risk_score')}",
         )
 
 
@@ -354,6 +418,77 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
         bool(v.get("receipt_hash")),
         str(v.get("receipt_hash"))[:16] + "...",
     )
+
+    # metrics.asv_evaluated must appear on every verdict — a regression guard
+    # for the bug where claimed_identity defaulted to "" everywhere, so ASV
+    # never ran and asv_consistency was a silent hardcoded 0.5.
+    missing_asv_eval = [i for i, vv in enumerate(verdicts) if "asv_evaluated" not in vv.get("metrics", {})]
+    checks.record(
+        "metrics.asv_evaluated present on every verdict",
+        not missing_asv_eval,
+        f"asv_evaluated={v.get('metrics', {}).get('asv_evaluated')}"
+        + (f" MISSING on verdicts {missing_asv_eval}" if missing_asv_eval else ""),
+    )
+
+    # semantic block: same key set whether idle, degraded, or populated.
+    semantic_key_mismatches = {
+        i: sorted(REQUIRED_SEMANTIC_KEYS - set(vv.get("semantic", {}).keys()))
+        for i, vv in enumerate(verdicts)
+        if REQUIRED_SEMANTIC_KEYS - set(vv.get("semantic", {}).keys())
+    }
+    checks.record(
+        "semantic block has the full key set on every verdict (idle/degraded/populated)",
+        not semantic_key_mismatches,
+        f"sample keys={sorted(v.get('semantic', {}).keys())}"
+        + (f" MISSING={semantic_key_mismatches}" if semantic_key_mismatches else ""),
+    )
+
+    # challenge object: this fixture (demo_04_impostor.wav) reliably fires a
+    # CHALLENGE before escalating to BLOCK, so this is not conditional.
+    challenge_verdicts = [vv for vv in verdicts if vv.get("trigger_challenge") and vv.get("challenge")]
+    if challenge_verdicts:
+        ch = challenge_verdicts[0]["challenge"]
+        missing_ch = [k for k in CHALLENGE_KEYS if k not in ch]
+        digits_ok = isinstance(ch.get("expected_digits"), list) and all(
+            isinstance(d, str) and len(d) == 1 for d in ch.get("expected_digits", [])
+        )
+        # expected_full must be the full spoken phrase, not just the digits —
+        # i.e. it must contain every word token, not only the digit tokens.
+        full_has_words = bool(ch.get("expected_full")) and any(
+            w.isalpha() for w in str(ch.get("expected_full", "")).split()
+        )
+        checks.record(
+            "challenge object has full protocol shape",
+            not missing_ch and digits_ok and full_has_words,
+            f"phrase={ch.get('phrase')!r} expected_full={ch.get('expected_full')!r}"
+            + (f" MISSING={missing_ch}" if missing_ch else "")
+            + ("" if digits_ok else " BAD_DIGITS_TYPE")
+            + ("" if full_has_words else " expected_full missing word tokens"),
+        )
+    else:
+        print("    NOTE: no challenge fired this run — demo_04_impostor.wav usually triggers one on its first window.")
+
+    # VR_IMPOSTOR_BLOCK_BELOW override: a deterministic tier-forcing rule that
+    # docs/PROTOCOL.md documents but a client deriving its own tier from
+    # risk_score alone would miss. Only checkable in-process, where this
+    # process's own config actually governs the server that produced `verdicts`.
+    if not live:
+        sys.path.insert(0, str(BACKEND_ROOT))
+        from vanirakshak.config import settings  # type: ignore
+
+        threshold = settings.risk.impostor_block_below
+        override_violations = [
+            (i, vv.get("metrics", {}).get("asv_consistency"), vv.get("tier"))
+            for i, vv in enumerate(verdicts)
+            if vv.get("metrics", {}).get("asv_consistency") is not None
+            and vv["metrics"]["asv_consistency"] < threshold
+            and vv.get("tier") != "BLOCK"
+        ]
+        checks.record(
+            f"VR_IMPOSTOR_BLOCK_BELOW override holds (asv_consistency < {threshold} => BLOCK)",
+            not override_violations,
+            f"checked {len(verdicts)} verdicts" + (f" VIOLATIONS={override_violations}" if override_violations else ""),
+        )
 
 
 def main() -> int:
