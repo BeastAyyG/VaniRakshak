@@ -24,6 +24,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.vericall.R
 import com.vericall.data.VaniSampleData
 import com.vericall.databinding.ActivityTempContactsBinding
+import com.vericall.util.VaniBackendConfig
 import com.vericall.util.VaniCallRouter
 import com.vericall.util.VaniNotificationHelper
 
@@ -81,6 +82,8 @@ class TempContactsActivity : AppCompatActivity() {
 
         binding.btnEnableScreening.setOnClickListener { requestScreeningRole() }
         binding.btnEnableAlerts.setOnClickListener { requestNotificationAccess() }
+        binding.btnBackendSettings.setOnClickListener { showBackendSettingsDialog() }
+        refreshBackendLabel()
 
         // Runs the real detection path end to end, so the incoming-call alert
         // can be demonstrated without an actual phone call.
@@ -139,6 +142,51 @@ class TempContactsActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------- setup state
+
+    private fun refreshBackendLabel() {
+        binding.tvBackendHost.text =
+            "Backend: ${VaniBackendConfig.getHost(this)}:${VaniBackendConfig.getPort(this)}"
+    }
+
+    /** Debug settings: LAN IP for real devices, 127.0.0.1 + adb reverse for emulator. */
+    private fun showBackendSettingsDialog() {
+        val input = android.widget.EditText(this).apply {
+            setText("${VaniBackendConfig.getHost(this@TempContactsActivity)}:${VaniBackendConfig.getPort(this@TempContactsActivity)}")
+            hint = "host:port (e.g. 192.168.1.5:8000)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+        }
+        val padded = android.widget.FrameLayout(this).apply {
+            setPadding(48, 24, 48, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Backend settings")
+            .setMessage("Use your PC's LAN IP on a real device. 127.0.0.1 needs `adb reverse tcp:8000 tcp:8000`. Applies to the next call.")
+            .setView(padded)
+            .setPositiveButton("Save") { _, _ ->
+                val parts = input.text.toString().trim().split(":")
+                val host = parts.getOrNull(0)?.trim().orEmpty()
+                val port = parts.getOrNull(1)?.trim()?.toIntOrNull()
+                    ?: VaniBackendConfig.getPort(this)
+                if (host.isNotEmpty()) {
+                    VaniBackendConfig.setHostPort(this, host, port)
+                    refreshBackendLabel()
+                    Toast.makeText(this, "Backend set to $host:$port", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Host cannot be empty", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Reset") { _, _ ->
+                VaniBackendConfig.setHostPort(
+                    this, VaniBackendConfig.DEFAULT_HOST, VaniBackendConfig.DEFAULT_PORT
+                )
+                refreshBackendLabel()
+            }
+            .show()
+    }
 
     private fun hasNotificationAccess(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -301,6 +349,7 @@ class TempContactsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshBackendLabel()
         if (::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }

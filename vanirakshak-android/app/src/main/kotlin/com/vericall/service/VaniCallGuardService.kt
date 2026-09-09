@@ -7,9 +7,15 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.content.ContextCompat
+import android.annotation.SuppressLint
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import com.vericall.audio.VaniKeywordTrigger
 import com.vericall.audio.VaniLiveVoiceAnalyzer
 import com.vericall.audio.VaniSpeakerVerifier
+import com.vericall.audio.VaniStreamingClient
+import com.vericall.util.VaniBackendConfig
 import com.vericall.model.RiskLevel
 import com.vericall.model.VaniContact
 import com.vericall.shield.VaniCoercionOverlay
@@ -28,6 +34,13 @@ import com.vericall.util.VaniRiskBus
 class VaniCallGuardService : Service() {
 
     private var analyzer: VaniLiveVoiceAnalyzer? = null
+    private var streamingClient: VaniStreamingClient? = null
+    private var streamCapture: AudioRecord? = null
+    private var streamThread: Thread? = null
+    @Volatile private var streaming = false
+    @Volatile private var fellBackToLocal = false
+    /** One-way latch: once the server says BLOCK/interlock, we never downgrade. */
+    @Volatile private var latchedBlock = false
     private var foregroundWatcher: VaniForegroundWatcher? = null
     private var callerName: String = "Caller"
     private var activePhone: String? = null
@@ -54,6 +67,8 @@ class VaniCallGuardService : Service() {
             if (intent?.action == ACTION_VERIFY_SPEAKER) triggerSpeakerVerify()
         }
     }
+    /** onStartCommand runs on every RINGING/OFFHOOK; guard against double registration. */
+    private var verifyReceiverRegistered = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -88,14 +103,20 @@ class VaniCallGuardService : Service() {
         }
 
         analyzer?.stopListening()
+        stopStreaming()
+        fellBackToLocal = false
+        latchedBlock = false
         activePhone = phone
 
         // Listen for the manual "Verify Speaker" broadcast (fired by the UI button).
-        registerReceiver(
-            verifyReceiver,
-            android.content.IntentFilter(ACTION_VERIFY_SPEAKER),
-            android.content.Context.RECEIVER_NOT_EXPORTED
-        )
+        if (!verifyReceiverRegistered) {
+            registerReceiver(
+                verifyReceiver,
+                android.content.IntentFilter(ACTION_VERIFY_SPEAKER),
+                android.content.Context.RECEIVER_NOT_EXPORTED
+            )
+            verifyReceiverRegistered = true
+        }
 
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
@@ -122,19 +143,9 @@ class VaniCallGuardService : Service() {
             isVoiceEnrolled = enrolled
         )
 
-        analyzer = VaniLiveVoiceAnalyzer(this).apply {
-            onRiskUpdated = { risk, synthetic, speakerMatch, level, message ->
-                val snapshot = VaniRiskBus.Snapshot(risk, synthetic, speakerMatch, level, message)
-                VaniRiskBus.publish(snapshot)
-                VaniScamShieldController.onRiskScoreUpdated(risk)
-                VaniNotificationHelper.showLiveRiskNotification(
-                    this@VaniCallGuardService, name, phone,
-                    risk, synthetic, speakerMatch, level, message, enrolled
-                )
-            }
-            onAmplitudeUpdated = { VaniRiskBus.publishAmplitude(it) }
-            startListening(contact)
-        }
+        // Server-driven path first (PROTOCOL §1–§5); on-device heuristic is the
+        // offline fallback, not a competing verdict engine.
+        startServerStream(name, phone, enrolled, contact)
 
         // OPT-IN keyword trigger. SpeechRecognizer also uses the mic, so only enable when the
         // live analyzer is paused; left off by default to keep the manual verify path reliable.
@@ -143,6 +154,155 @@ class VaniCallGuardService : Service() {
         }
 
         return START_NOT_STICKY
+    }
+
+    /**
+     * Server-driven path: capture 16 kHz mono PCM and stream it over the WS
+     * socket (handshake → binary frames). The server owns tier + interlock.
+     * Any transport failure falls back to the on-device analyzer exactly once.
+     */
+    private fun startServerStream(
+        name: String, phone: String, enrolled: Boolean, contact: VaniContact
+    ) {
+        val wsUrl = VaniBackendConfig.wsUrl(this)
+        val client = VaniStreamingClient(wsUrl, callerId = phone).apply {
+            onSnapshot = { snapshot ->
+                // One-way latch: BLOCK/interlock is sticky for the rest of the call.
+                if (snapshot.interlockActive || snapshot.tier == "BLOCK") latchedBlock = true
+                val effective = if (latchedBlock && snapshot.tier != "BLOCK") {
+                    snapshot.copy(
+                        tier = "BLOCK", level = RiskLevel.DANGER, interlockActive = true,
+                        message = "Server verdict: BLOCK — do not proceed with any transaction."
+                    )
+                } else snapshot
+                VaniRiskBus.publish(effective)
+                VaniScamShieldController.onRiskScoreUpdated(effective.risk)
+                VaniNotificationHelper.showLiveRiskNotification(
+                    this@VaniCallGuardService, name, phone,
+                    effective.risk, effective.synthetic, effective.speakerMatch,
+                    effective.level, effective.message, enrolled,
+                    tier = effective.tier, receiptHash = effective.receiptHash
+                )
+            }
+            onExhausted = { startLocalFallback(name, phone, enrolled, contact) }
+        }
+        streamingClient = client
+        client.start()
+        startPcmFeed(client, name, phone, enrolled, contact)
+    }
+
+    /** Captures mic PCM on a worker thread and feeds both the socket and the amplitude meter. */
+    @SuppressLint("MissingPermission")
+    private fun startPcmFeed(
+        client: VaniStreamingClient,
+        name: String, phone: String, enrolled: Boolean, contact: VaniContact
+    ) {
+        if (streaming) return
+        streaming = true
+        streamThread = Thread({
+            var record: AudioRecord? = null
+            try {
+                val minBuf = AudioRecord.getMinBufferSize(
+                    16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+                )
+                record = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                    16000, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, 32000)
+                )
+                if (record.state != AudioRecord.STATE_INITIALIZED) {
+                    record.release()
+                    record = null
+                } else {
+                    streamCapture = record
+                    record.startRecording()
+                }
+            } catch (e: Exception) {
+                record?.release()
+                record = null
+            }
+            if (record == null) {
+                streaming = false
+                runOnMain { startLocalFallback(name, phone, enrolled, contact) }
+                return@Thread
+            }
+            val buf = ShortArray(1600) // 100ms @16kHz
+            while (streaming) {
+                val n = try { record.read(buf, 0, buf.size) } catch (e: Exception) { -1 }
+                if (n != null && n > 0) {
+                    var peak = 0
+                    for (i in 0 until n) {
+                        val a = kotlin.math.abs(buf[i].toInt())
+                        if (a > peak) peak = a
+                    }
+                    val amp = (peak / 20000.0f).coerceIn(0f, 1f)
+                    runOnMain { VaniRiskBus.publishAmplitude(amp) }
+                    client.sendPcm(buf, n)
+                }
+                try { Thread.sleep(20) } catch (e: InterruptedException) { break }
+            }
+            runCatching { record.stop() }
+            runCatching { record.release() }
+        }, "VaniStreamFeed").apply { start() }
+    }
+
+    private fun runOnMain(block: () -> Unit) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post(block)
+    }
+
+    /** Offline fallback: the on-device heuristic publishes locally-flagged snapshots. */
+    @Synchronized
+    private fun startLocalFallback(name: String, phone: String, enrolled: Boolean, contact: VaniContact?) {
+        if (fellBackToLocal) return
+        fellBackToLocal = true
+        stopStreaming()
+        val who = contact ?: VaniContact(
+            id = "live_call", name = name, phone = phone,
+            relation = "Live incoming call", isVoiceEnrolled = enrolled
+        )
+        VaniRiskBus.publish(
+            VaniRiskBus.Snapshot(
+                0, 0, 0, RiskLevel.WARNING,
+                "Backend unreachable — using on-device analysis (not a server verdict)."
+            )
+        )
+        analyzer = VaniLiveVoiceAnalyzer(this).apply {
+            onRiskUpdated = { risk, synthetic, speakerMatch, level, message ->
+                val snapshot = VaniRiskBus.Snapshot(
+                    risk, synthetic, speakerMatch, level, message,
+                    serverDriven = false
+                )
+                if (latchedBlock) {
+                    // Even locally, never downgrade a latched BLOCK.
+                    VaniRiskBus.publish(
+                        snapshot.copy(
+                            tier = "BLOCK", level = RiskLevel.DANGER,
+                            interlockActive = true
+                        )
+                    )
+                } else {
+                    VaniRiskBus.publish(snapshot)
+                }
+                VaniScamShieldController.onRiskScoreUpdated(risk)
+                VaniNotificationHelper.showLiveRiskNotification(
+                    this@VaniCallGuardService, name, phone,
+                    risk, synthetic, speakerMatch, level, message, enrolled
+                )
+            }
+            onAmplitudeUpdated = { VaniRiskBus.publishAmplitude(it) }
+            startListening(who)
+        }
+    }
+
+    private fun stopStreaming() {
+        streaming = false
+        streamingClient?.stop()
+        streamingClient = null
+        streamThread?.interrupt()
+        streamThread = null
+        runCatching { streamCapture?.stop() }
+        runCatching { streamCapture?.release() }
+        streamCapture = null
     }
 
     /**
@@ -163,6 +323,17 @@ class VaniCallGuardService : Service() {
      * already renders. This is an IDENTITY check — never a "synthetic/clone" claim.
      */
     private fun triggerSpeakerVerify() {
+        // In server-streaming mode the backend already runs ASV per window —
+        // the manual button only matters for the offline fallback's ring buffer.
+        if (analyzer == null) {
+            VaniRiskBus.publish(
+                VaniRiskBus.Snapshot(
+                    0, 0, 0, RiskLevel.WARNING,
+                    "Speaker verify: server stream already includes voice verification per window."
+                )
+            )
+            return
+        }
         val pcm = analyzer?.getRecentPcm(2.0f) ?: ShortArray(0)
         if (pcm.isEmpty()) {
             VaniRiskBus.publish(
@@ -173,7 +344,7 @@ class VaniCallGuardService : Service() {
             )
             return
         }
-        VaniSpeakerVerifier.verify(pcm, 16000) { verdict ->
+        VaniSpeakerVerifier.verify(this, pcm, 16000) { verdict ->
             val (level, message) = when {
                 !verdict.available ->
                     RiskLevel.WARNING to "Speaker verify unavailable: ${verdict.reason ?: "backend not reachable"}"
@@ -197,10 +368,12 @@ class VaniCallGuardService : Service() {
     override fun onDestroy() {
         analyzer?.stopListening()
         analyzer = null
+        stopStreaming()
         activePhone = null
         keywordTrigger?.stop()
         keywordTrigger = null
         runCatching { unregisterReceiver(verifyReceiver) }
+        verifyReceiverRegistered = false
 
         foregroundWatcher?.stop()
         foregroundWatcher = null

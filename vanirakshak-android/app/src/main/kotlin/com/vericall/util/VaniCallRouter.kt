@@ -142,7 +142,16 @@ object VaniCallRouter {
         }
         ContextCompat.startForegroundService(context, intent)
         true
+    } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+        // Android 12+: FGS launch from background is denied. Caller falls back
+        // to the foreground guard screen, which may then start the service.
+        android.util.Log.w("VaniCallRouter", "FGS start denied (background): ${e.message}")
+        false
+    } catch (e: SecurityException) {
+        android.util.Log.w("VaniCallRouter", "FGS start denied (security): ${e.message}")
+        false
     } catch (e: Exception) {
+        android.util.Log.w("VaniCallRouter", "FGS start failed: ${e.message}")
         false
     }
 }

@@ -21,7 +21,7 @@ identity check below. The server owns *that* verdict; the app renders it.
 
 ## Build
 
-Requires **JDK 17+** and the **Android SDK** (Gradle 9.6 comes from the wrapper).
+Requires **JDK 17+** and the **Android SDK** (Gradle 8.7 comes from the wrapper).
 
 ```bash
 # local.properties must point at your SDK (it currently says C:\Android\Sdk)

@@ -254,6 +254,27 @@
                 android:text="Synthetic vocoder artifacts detected. Speaker does not match the enrolled profile."
                 android:textColor="@color/body"
                 android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvServerTier"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:text=""
+                android:textColor="@color/mute"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvReceiptHash"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text=""
+                android:textColor="@color/mute"
+                android:textSize="11sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <!-- Detection metrics: quiet rows on cream card, hairline dividers -->
@@ -405,6 +426,30 @@
                 android:text="Analyzing caller response latency..."
                 android:textColor="@color/warning_deep"
                 android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etChallengeResponse"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_chip_white"
+                android:hint="Digits you hear, in order (e.g. 8 4)"
+                android:importantForAutofill="no"
+                android:inputType="number"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGradeChallenge"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="Grade response"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- Actions: one red CTA, ink secondary, cream tertiary -->

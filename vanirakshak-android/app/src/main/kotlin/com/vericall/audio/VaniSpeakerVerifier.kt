@@ -1,6 +1,8 @@
 package com.vericall.audio
 
+import android.content.Context
 import android.util.Log
+import com.vericall.util.VaniBackendConfig
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -16,13 +18,21 @@ import java.util.concurrent.Executors
  * single target speaker vs a single non-target speaker and has never seen cloned
  * audio. Present the result as an identity check only.
  *
- * The phone reaches the backend over `adb reverse tcp:8000 tcp:8000`, so the
- * app simply calls http://127.0.0.1:8000 — no external network, no HTTPS needed.
+ * The backend host is configurable (VaniBackendConfig): default 127.0.0.1:8000
+ * over `adb reverse tcp:8000 tcp:8000`, or a LAN IP from the app's settings.
+ * Plain HTTP is fine for the loopback/LAN prototype; no HTTPS needed.
  */
 object VaniSpeakerVerifier {
 
     // Set with: adb reverse tcp:8000 tcp:8000  (backend runs on the dev PC :8000)
-    var backendBaseUrl: String = "http://127.0.0.1:8000"
+    // or the in-app backend settings (LAN IP). Kept as a volatile override for
+    // tests; production callers should pass VaniBackendConfig.httpBase(ctx).
+    @Volatile
+    var backendBaseUrl: String? = null
+
+    private fun baseUrl(context: Context?): String =
+        backendBaseUrl ?: context?.let { VaniBackendConfig.httpBase(it) }
+        ?: "http://${VaniBackendConfig.DEFAULT_HOST}:${VaniBackendConfig.DEFAULT_PORT}"
 
     private val executor = Executors.newSingleThreadExecutor()
     private const val TAG = "VaniSpeakerVerifier"
@@ -36,17 +46,23 @@ object VaniSpeakerVerifier {
         val reason: String?
     )
 
+    fun verify(pcm: ShortArray, sampleRate: Int, onResult: (Verdict) -> Unit) {
+        verify(null, pcm, sampleRate, onResult)
+    }
+
     /**
      * Encode 16-bit PCM as a WAV file and POST it to /v1/verify-speaker.
+     * @param context  used to resolve the configured backend host (may be null in tests)
      * @param pcm      mono 16-bit PCM samples
      * @param sampleRate Hz (typically 16000)
      * @param onResult called on the calling thread with the model verdict
      */
-    fun verify(pcm: ShortArray, sampleRate: Int, onResult: (Verdict) -> Unit) {
+    fun verify(context: Context?, pcm: ShortArray, sampleRate: Int, onResult: (Verdict) -> Unit) {
+        val base = baseUrl(context)
         executor.execute {
             try {
                 val wav = encodeWav(pcm, sampleRate)
-                val verdict = postWav(wav)
+                val verdict = postWav(base, wav)
                 onResult(verdict)
             } catch (e: Exception) {
                 Log.e(TAG, "verify failed: ${e.message}")
@@ -82,8 +98,8 @@ object VaniSpeakerVerifier {
         return baos.toByteArray()
     }
 
-    private fun postWav(wav: ByteArray): Verdict {
-        val url = URL("$backendBaseUrl/v1/verify-speaker")
+    private fun postWav(base: String, wav: ByteArray): Verdict {
+        val url = URL("$base/v1/verify-speaker")
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.doOutput = true

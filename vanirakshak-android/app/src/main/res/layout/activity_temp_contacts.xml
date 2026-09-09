@@ -190,6 +190,38 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
+        <!-- Backend host: configurable so real devices don't need adb reverse -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvBackendHost"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:text="Backend: 127.0.0.1:8000"
+                android:textColor="@color/mute"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnBackendSettings"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:stateListAnimator="@null"
+                android:text="Backend settings"
+                android:textAllCaps="false"
+                android:textSize="13sp" />
+        </LinearLayout>
+
         <!-- Search bar: 48dp full pill on warm cream -->
         <LinearLayout
             android:layout_width="match_parent"
