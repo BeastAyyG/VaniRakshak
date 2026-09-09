@@ -35,7 +35,7 @@ to answer that one question reliably and fast.
 
 The system was first built for a single, high-stakes purpose: **guarantee that a call from
 Narendra Modi (Modi ji) cannot be faked or impersonated.** One enrolled voice profile — eight
-real recordings of Modi ji as captured in `data/anchor_speaker_profile.json`
+real recordings of Modi ji as captured in `data/anchor_asv_embedding.json`
 (`user_id: narendra_modi`) — becomes the anchor. Any inbound or live call claiming to be him is
 checked against that anchor. If the voice does not match, it is flagged as *not* the enrolled
 Modi voice. The value proposition is deliberately simple and strong: **no one can stand up a

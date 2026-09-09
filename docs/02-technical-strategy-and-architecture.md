@@ -175,17 +175,20 @@ Real-world call audio contains transient glitches, packet drops, or brief coughi
 However, against high-confidence real-time voice cloning attacks, smoothing would introduce hazardous alert delay. To counter this, VaniRakshak implements a **Fast-Rise Override**:
 
 ```python
-# vanirakshak/risk/fusion.py
-if window.cm_score < -2.0:
-    # Decisive spoof evidence: bypass smoothing immediately
+# vanirakshak/risk/fusion.py — RiskFusionEngine.update()
+p = calibrate(window, context_risk, self.fusion_cfg, semantic_risk)
+if p > self.risk_cfg.fast_rise_threshold:
+    # Decisive spoof posterior: bypass EMA smoothing immediately
     risk = 100.0 * p
+    self._ema = risk
 else:
     # Standard temporal smoothing
+    risk = 100.0 * p
     if self._ema is None:
-        self._ema = 100.0 * p
+        self._ema = risk
     else:
-        self._ema = self.risk_cfg.ema_alpha * (100.0 * p) + (1.0 - self.risk_cfg.ema_alpha) * self._ema
-    risk = self._ema
+        self._ema = self.risk_cfg.ema_alpha * risk + (1.0 - self.risk_cfg.ema_alpha) * self._ema
+        risk = self._ema
 
 risk = float(max(0.0, min(100.0, risk)))
 ```
@@ -193,11 +196,29 @@ risk = float(max(0.0, min(100.0, risk)))
 Mathematically:
 
 $$\text{risk}_t = \begin{cases} 
-100 \cdot P(\text{spoof} \mid \mathbf{x}_t) & \text{if } \text{LLR}_{\text{cm}} < -2.0 \quad (\text{Fast-Rise Override}) \\
+100 \cdot P(\text{spoof} \mid \mathbf{x}_t) & \text{if } P(\text{spoof} \mid \mathbf{x}_t) > \tau_{\text{fast-rise}} \quad (\text{Fast-Rise Override}) \\
 \alpha \cdot (100 \cdot P(\text{spoof} \mid \mathbf{x}_t)) + (1 - \alpha) \cdot \text{EMA}_{t-1} & \text{otherwise} 
 \end{cases}$$
 
-where default smoothing factor $\alpha = 0.65$ (`VR_EMA_ALPHA`).
+where default smoothing factor $\alpha = 0.65$ (`VR_EMA_ALPHA`) and
+$\tau_{\text{fast-rise}} = 0.85$ (`VR_FAST_RISE_THRESHOLD`) — the trigger is
+the **fused posterior probability**, not a raw CM log-likelihood-ratio
+threshold on its own; an earlier version of this document (and this section,
+until corrected) described the trigger as `LLR_cm < -2.0`, which is not what
+the code checks. `docs/07-privacy-compliance-and-apis.md`'s environment
+table has always had this right.
+
+**A second, separate override exists that this section did not previously
+document:** a deterministic **impostor override**
+(`VR_IMPOSTOR_BLOCK_BELOW`, default `0.10`). When `window.asv_score` — the
+ASV consistency score — falls below this threshold, the tier is forced to
+`BLOCK` regardless of the fused risk score, and both `risk` and the EMA are
+floored at the `CHALLENGE`/`BLOCK` boundary so the reported score and tier
+never contradict each other. This only engages when ASV actually ran
+(`metrics.asv_evaluated`) — an unenrolled/unclaimed caller's neutral `0.5`
+score is never below the threshold. See `docs/PROTOCOL.md` §8 for the full
+client-facing implication: a client deriving its own tier from `risk_score`
+alone can disagree with the server in exactly this case.
 
 ---
 

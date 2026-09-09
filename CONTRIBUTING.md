@@ -38,9 +38,10 @@ VaniRakshak consists of three main layers. Keep changes strictly decoupled:
 ```
 VaniRakshak/
 ├── frontend/             # Next.js 16 (App Router) + Tailwind CSS + AudioWorklet
-├── vanirakshak-backend/  # FastAPI real-time forensic WebSocket/REST service
+├── vanirakshak-backend/  # FastAPI real-time forensic WebSocket/REST service — the ONE live backend
 ├── docs/                 # Single source of truth for contracts & architecture
-├── backend/
+├── backend/              # Retired standalone server; only shared model-loading modules remain
+│                         # (backend/README.md explains exactly what's kept and why)
 ├── ml/
 ├── benchmarks/
 └── data/                 # Benchmark scripts and demo audio ground-truth
@@ -78,12 +79,17 @@ VaniRakshak/
 * **Environment Setup (do this first):**
   ```bash
   make setup      # pip install -r requirements-dev.txt (CPU torch wheels)
-  make test       # pytest -v  -> expect 21 passed, 0 skipped
+  make test       # pytest -v  -> expect 15 passed
   ```
-  Without `make setup`, 9 of the 21 tests silently skip. Those 9 are the *only*
-  coverage of the heavy `backend/` tree, so a green board of "12 passed" is
-  misleading. The missing modules are **torchaudio** and **librosa** — an older
-  skip message blamed torch/soundfile, which was wrong.
+  `pytest.ini` sets `testpaths = vanirakshak-backend/tests`, so plain `pytest`
+  and `pytest vanirakshak-backend/tests/` collect the same 15 tests — there
+  is no longer a "12 passed vs 21 passed" distinction to watch for; that was
+  true of an earlier tree layout that no longer exists (the standalone
+  `backend/` server and its test suite were removed — see `backend/README.md`).
+  A separate root-level `tests/` directory (18 tests, ASR stack coverage —
+  `tests/test_asr.py`, `tests/test_groq_asr.py`) is **not** collected by
+  `make test`; run `pytest tests/` explicitly if you're changing anything
+  under `backend/services/asr/` or `vanirakshak/semantic/`.
 * **Python Standard:** Python 3.10+ with strict type hinting (`from __future__ import annotations`).
 * **Deterministic Fallbacks ("Honest Stubs"):**
   * When real heavy checkpoints (WavLM, ECAPA-TDNN) are not loaded or GPU is absent, models must gracefully fall back to the deterministic synthetic stubs in `vanirakshak/detectors/`.
@@ -112,10 +118,14 @@ VaniRakshak/
 Before opening a pull request or pushing your branch:
 - [ ] `git status` shows no untracked binaries, weights (`.pt`), or agent session files.
 - [ ] Frontend builds without TypeScript or ESLint errors (`npm run build` in `frontend/`).
-- [ ] Backend tests pass. Run the **whole** suite — `pytest` (21 tests). Do not
-      run only `pytest vanirakshak-backend/tests/`: that subset skips the heavy
-      `backend/` tree entirely, so it reports "12 passed" while 9 tests never run.
+- [ ] Backend tests pass: `pytest` (15 tests, `pytest.ini`'s `testpaths`).
 - [ ] `docs/PROTOCOL.md` reflects any newly introduced payload fields or parameter changes.
+- [ ] `python scripts/integration_check.py` passes (17 checks) — the WS/REST
+      vertical-slice check the dashboard actually depends on; catches wire-
+      contract regressions `pytest` alone won't.
+- [ ] `python scripts/check_docs.py` passes — checks that every file path and
+      `VR_*` env var a doc mentions actually exists, and that the documented
+      WS verdict keys match what `test_stream_e2e.py` asserts.
 - [ ] `python benchmarks/run_benchmarks.py` exits 0. It exits **non-zero on
       failure by design** — investigate the failure rather than silencing it.
       Note the demo ground-truth check compares the emitted tier against a

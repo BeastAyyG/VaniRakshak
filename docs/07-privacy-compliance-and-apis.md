@@ -1,5 +1,15 @@
 # Privacy Compliance & API Reference
 
+> **2026-09-09 note:** §4 and §5 below duplicated the WebSocket/REST contract
+> and environment-variable table independently of `docs/PROTOCOL.md` and
+> `docs/API_SPEC.md` — and had drifted from both (a pre-merge health payload
+> missing `hardware`/`models`/`anchor`, no `semantic`/`target_speaker`
+> blocks, no `POST /v1/verify-speaker` or `GET /v1/enroll`, several env vars
+> missing). Three independent descriptions of the same contract is how this
+> kind of drift happens in the first place, so §4/§5 now point at the single
+> current source instead of maintaining a third copy. §1-3 (the DPDP/privacy
+> architecture) are this document's unique content and remain in full below.
+
 ## 1. Regulatory Framework: India DPDP Act 2023 Compliance
 
 The **Digital Personal Data Protection (DPDP) Act, 2023** establishes strict requirements for the processing, retention, and protection of digital personal data within India. Voice recordings constitute **biometric personal data** under Indian privacy law.
@@ -97,250 +107,27 @@ If an insider or attacker alters, re-orders, or deletes any audit log entry, the
 
 ## 4. API Reference
 
-VaniRakshak exposes both real-time streaming WebSocket endpoints and standard HTTP REST endpoints.
+See **[docs/PROTOCOL.md](PROTOCOL.md)** for the WebSocket contract
+(handshake, verdict schema, `metrics.asv_evaluated`, the always-present
+`semantic` block, the challenge object, close codes) and
+**[docs/API_SPEC.md](API_SPEC.md)** for the complete REST reference,
+including endpoints this section previously omitted entirely
+(`POST /v1/verify-speaker`, `GET /v1/enroll`, `AnalyzeResponse`'s
+`target_speaker` block, the `anchor` health block).
 
-### 4.1. WebSocket API: `/ws/stream` (alias `/v1/stream`)
-
-The primary streaming interface for live call monitoring and real-time frontend dashboard interaction.
-
-#### Connection Lifecycle
-
-```
-Client (Browser / CTI Gateway)                         Server (FastAPI)
-             │                                                │
-             │──── 1. HTTP WebSocket Upgrade ───────────────▶│ (Accepts on ws://host:8000/ws/stream)
-             │◀─── 2. 101 Switching Protocols ────────────────│
-             │                                                │
-             │──── 3. Frame 1: JSON Text Handshake ──────────▶│ (Parses metadata, initializes session)
-             │                                                │
-             │──── 4. Frame 2..N: Binary PCM Chunks ─────────▶│ (Buffers 16 kHz 16-bit PCM in RAM)
-             │                                                │
-             │◀─── 5. JSON Text Verdict (every 1.0s hop) ─────│ (Emits risk score, tier, receipt hash)
-             │                                                │
-```
-
-> [!IMPORTANT]
-> **Strict Handshake Protocol Requirement:**
-> The first frame sent across the WebSocket **must be a JSON text handshake**. If binary audio is sent before the handshake, the backend closes the connection immediately with WebSocket error code `1003`.
-
-#### 1. Handshake Schema (Client $\to$ Server)
-```json
-{
-  "session_id": "call-ind-9821-4412",
-  "sample_rate": 16000,
-  "caller_id": "+91-9876543210",
-  "claimed_identity": "customer_acct_44901",
-  "transaction_value_inr": 150000.0,
-  "origin_country": "IN",
-  "prior_fraud_score": 0.05
-}
-```
-
-#### 2. Binary Audio Frames (Client $\to$ Server)
-- **Format:** Raw 16-bit signed integer mono PCM (`Int16Array`).
-- **Sample Rate:** 16,000 Hz.
-- **Chunk Size:** Arbitrary chunk sizes supported (typically 50 ms to 1000 ms blocks).
-
-#### 3. Verdict Response Schema (Server $\to$ Client)
-Emitted every 1.0 second once the sliding buffer reaches 4.04 seconds:
-```json
-{
-  "timestamp_ms": 1773070080123,
-  "risk_score": 84.5,
-  "p_spoof": 0.9412,
-  "tier": "BLOCK",
-  "metrics": {
-    "cm_score": -3.42,
-    "cm_genuine_prob": 0.0317,
-    "asv_consistency": 0.22,
-    "channel_anomaly": 0.85,
-    "prosody_unnatural": 0.91,
-    "snr_db": 14.2,
-    "codec_guess": "wideband_opus"
-  },
-  "trigger_challenge": false,
-  "interlock_active": true,
-  "receipt_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "challenge": null
-}
-```
-
-#### WebSocket Status Codes
-| Code | Reason |
-|---|---|
-| `1000` | Normal socket closure. |
-| `1003` | Handshake format violation (binary audio sent before JSON text handshake). |
-
----
-
-### 4.2. REST API Reference
-
-#### `GET /api/v1/health` (and `GET /v1/health`)
-Checks backend operational status, liveness, and hardware execution context.
-
-**Response (`200 OK`):**
-```json
-{
-  "ok": true,
-  "version": "0.1.0-sprint1",
-  "active_sessions": 2
-}
-```
-
----
-
-#### `POST /v1/enroll`
-Registers a 10–20 second genuine voice sample for target-conditioned speaker verification.
-
-- **Content-Type:** `multipart/form-data`
-- **Parameters:**
-  - `user_id` (string, required): Unique identifier for the speaker/account.
-  - `audio` (file, required): WAV/FLAC audio file (minimum 0.5 seconds).
-
-**Response (`200 OK`):**
-```json
-{
-  "status": "enrolled",
-  "user_id": "customer_acct_44901",
-  "embedding_dimension": 192,
-  "audio_retained": false,
-  "created_at": "2026-09-07T15:18:00Z"
-}
-```
-
----
-
-#### `POST /v1/analyze`
-One-shot offline forensic analysis of a recorded WAV or FLAC file.
-
-- **Content-Type:** `multipart/form-data`
-- **Parameters:**
-  - `audio` (file, required): Recorded audio file.
-  - `caller_id` (string, optional): Caller phone number.
-  - `claimed_identity` (string, optional): Enrolled speaker identity.
-
-**Response (`200 OK`):**
-```json
-{
-  "status": "success",
-  "file_duration_sec": 4.5,
-  "calibrated_risk": 78.4,
-  "p_spoof": 0.8921,
-  "tier": "BLOCK",
-  "receipt_hash": "8f4a1c3...",
-  "breakdown": {
-    "codec_guess": "g711_or_pstn",
-    "cm_score": -2.85,
-    "asv_consistency": 0.31,
-    "channel_anomaly": 0.65,
-    "prosody_unnatural": 0.82
-  }
-}
-```
-
----
-
-#### `POST /v1/sessions`
-Initializes a stateful session context prior to an incoming call or transaction.
-
-**Request Body (`application/json`):**
-```json
-{
-  "caller_id": "+91-9876543210",
-  "claimed_identity": "customer_acct_44901",
-  "transaction_value_inr": 250000.0,
-  "origin_country": "IN",
-  "prior_fraud_score": 0.0
-}
-```
-
-**Response (`200 OK`):**
-```json
-{
-  "session_id": "call-7a8f1b2c3d"
-}
-```
-
----
-
-#### `POST /v1/sessions/{session_id}/challenge`
-Submits a user's verbal challenge response for verification.
-
-**Request Body (`application/json`):**
-```json
-{
-  "response_text": "Mango 8 nadi 4 blue",
-  "response_latency_ms": 1420
-}
-```
-
-**Response (`200 OK`):**
-```json
-{
-  "ok": true,
-  "reason": "pass",
-  "confidence": 0.95,
-  "blocked": false
-}
-```
-
----
-
-#### `GET /v1/audit`
-Retrieves recent audit events and verifies cryptographic hash-chain integrity.
-
-- **Query Parameters:** `n` (integer, default: 50): Number of tail events to retrieve.
-
-**Response (`200 OK`):**
-```json
-{
-  "chain_valid": true,
-  "events": [
-    {
-      "session_id": "call-7a8f1b2c3d",
-      "caller_id": "+91-9876543210",
-      "claimed_identity": "customer_acct_44901",
-      "timestamp": 1773070080.123,
-      "timestamp_iso": "2026-09-07T15:18:00Z",
-      "risk_score": 84.5,
-      "tier": "BLOCK",
-      "features": {
-        "cm_genuine_prob": 0.0317,
-        "asv_consistency": 0.22,
-        "channel_anomaly": 0.85,
-        "prosody_unnatural": 0.91,
-        "snr_db": 14.2
-      },
-      "receipt_hash": "e3b0c442...",
-      "prev_hash": "a1b2c3d4..."
-    }
-  ]
-}
-```
-
----
+The one detail worth restating here, since it's the privacy-relevant part:
+the audit log (§3 above) stores exactly the scalar features listed there —
+`cm_score`, `cm_genuine_prob`, `asv_consistency`, `channel_anomaly`,
+`prosody_unnatural`, `snr_db` — plus, as of the challenge-grading fix in this
+revision, `challenge_passed`, `challenge_confidence`, and
+`response_latency_ms` on graded-challenge events. Never raw audio, never
+invertible embeddings, regardless of which endpoint produced the entry.
 
 ## 5. Configuration & Environment Variables
 
-All parameters can be configured via environment variables or a `.env` file:
-
-| Environment Variable | Default Value | Type | Scope | Description |
-|---|---|---|---|---|
-| `VR_PORT` | `8000` | Integer | Server | Backend HTTP & WebSocket listen port. |
-| `VR_HOST` | `127.0.0.1` | String | Server | Backend network interface bind address. |
-| `VR_CORS_ORIGINS` | `http://localhost:3001,http://127.0.0.1:3001` | String (csv) | Security | Permitted CORS origins for Next.js browser clients. |
-| `VR_ALERT_WEBHOOK_URL` | *(unset)* | String (URL) | Alerting | Destination URL for outbound POST alerts on `CHALLENGE` or `BLOCK`. Unset disables outbound webhook dispatch. |
-| `NEXT_PUBLIC_BACKEND_WS` | `ws://localhost:8000/ws/stream` | String (WS URI)| Frontend | Target WebSocket URI used by the Next.js UI. |
-| `VR_SAMPLE_RATE` | `16000` | Integer | DSP | Processing sample rate in Hz. |
-| `VR_WINDOW_SECONDS` | `4.04` | Float | DSP | Receptive field duration for countermeasure analysis. |
-| `VR_HOP_SECONDS` | `1.0` | Float | DSP | Sliding window step interval in seconds. |
-| `VR_ALLOW_THRESHOLD` | `35.0` | Float | Fusion | Upper risk score bound for the `ALLOW` tier. |
-| `VR_CHALLENGE_THRESHOLD`| `70.0` | Float | Fusion | Upper risk score bound for the `CHALLENGE` tier ($\ge 70.0$ triggers `BLOCK`). |
-| `VR_EMA_ALPHA` | `0.65` | Float | Fusion | Exponential moving average smoothing weight ($0 < \alpha \le 1$). |
-| `VR_FAST_RISE_THRESHOLD`| `0.85` | Float | Fusion | Posterior spoof probability threshold that bypasses EMA smoothing. |
-| `VR_FUSION_BIAS` | `-1.6` | Float | Fusion | Bayesian logistic regression intercept ($\beta_0$). |
-| `VR_FUSION_W_CM` | `2.4` | Float | Fusion | Weight for countermeasure spoof evidence ($w_{\text{cm}}$). |
-| `VR_FUSION_W_ASV` | `1.6` | Float | Fusion | Weight for speaker verification mismatch ($w_{\text{asv}}$). |
-| `VR_FUSION_W_PROSODY` | `0.7` | Float | Fusion | Weight for prosody unnaturalness ($w_{\text{prosody}}$). |
-| `VR_FUSION_W_CHANNEL` | `0.9` | Float | Fusion | Weight for channel codec anomaly ($w_{\text{channel}}$). |
-| `VR_FUSION_W_CONTEXT` | `0.5` | Float | Fusion | Weight for contextual metadata risk ($w_{\text{context}}$). |
+See **[docs/PROTOCOL.md](PROTOCOL.md) §8** for the complete, current table.
+This section doesn't duplicate it — three independent copies of the same
+list is exactly how it went stale in the first place (missing
+`VR_ASV_BACKEND`, `VR_CM_BACKEND`, `VR_IMPOSTOR_BLOCK_BELOW`,
+`VR_FUSION_W_SEMANTIC`, `GROQ_API_KEY`, `VR_ANCHOR_EMBEDDING`,
+`VR_FUSION_PRESET` at various points).

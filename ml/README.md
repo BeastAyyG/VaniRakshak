@@ -28,6 +28,11 @@ ml/
 ├── evaluate.py           # Comprehensive ASVspoof-5 and telephony benchmark runner
 ├── extract_features.py   # Batch 40-dim MFCC extraction; single-file WavLM (768) / ECAPA (192) mode
 ├── checkpoints/          # Model weights & calibrated thresholds.json
+│   ├── best_model.pt                 # identity: "is this the enrolled speaker?" (loaded by ml_bridge.py)
+│   ├── model_epoch_50.pt/.pth        # byte-identical to best_model.pt (same training run's
+│   │                                 # intermediate + final checkpoint) — not separately consumed
+│   ├── thresholds.json               # metrics for the above (task-tagged)
+│   └── countermeasure_asvspoof.pt    # spoof/clone CM — only exists after an ASVspoof run
 └── requirements.txt      # PyTorch, NumPy, SciPy dependencies
 ```
 
@@ -47,9 +52,35 @@ python ml/evaluate.py --checkpoint ml/checkpoints/best_model.pt
 Without `--checkpoint`, this runs the synthetic-stub benchmark battery instead and does not touch the trained weights.
 
 ### 3. Model Training
+
+**Identity model** (default — "is this the enrolled speaker?"). Writes `checkpoints/best_model.pt`:
 ```bash
 python ml/train.py --epochs 50 --batch-size 32
 ```
+
+**Countermeasure** (— "was this audio machine-generated?"). This is the only path that
+produces a real clone/spoof detector, and it requires a real spoof corpus — ASVspoof
+2019 LA / 2021 / 5 all work. Writes `checkpoints/countermeasure_asvspoof.pt`:
+```bash
+python ml/train.py --epochs 50 --batch-size 32 \
+  --asvspoof-protocol /path/to/ASVspoof2019.LA.cm.train.trn.txt \
+  --asvspoof-audio-dir /path/to/ASVspoof2019_LA_train/flac \
+  --asvspoof-val-protocol /path/to/ASVspoof2019.LA.cm.dev.trl.txt \
+  --asvspoof-val-audio-dir /path/to/ASVspoof2019_LA_dev/flac
+```
+`--limit N` caps how many utterances load, for a quick smoke run. Add `--asvspoof-val-*`
+whenever you can: without it, the validation split is a non-speaker-disjoint tail slice
+of the training protocol and its EER must not be quoted as generalisation.
+
+Deliberately speaker-independent: a countermeasure should learn vocoder artefacts in
+general, not one person's clones. The per-person half of the system is ASV
+(`vanirakshak/detectors/asv_ecapa.py`), which already generalises to any enrolled voice
+with no retraining — so enrolling a new family member never requires new spoof data.
+
+> **Do not train a countermeasure by cloning your own anchor speaker.** Beyond producing
+> deepfake audio of a real person, it yields a model that only recognises *that person's*
+> clones and cannot transfer to a new customer — the same non-transferability that limits
+> `best_model.pt` today.
 
 ## Evaluated Metrics
 
@@ -58,9 +89,18 @@ python ml/train.py --epochs 50 --batch-size 32
 - **CLLR**: Log-likelihood ratio cost measuring probabilistic calibration. Measured: `0.0049`.
 - **EER**: Equal Error Rate operating point ($P_{\text{miss}} = P_{\text{fa}}$). Measured: `0.00%`.
 
+**There was never a trained countermeasure.** `checkpoints/countermeasure_cm.pt` used to sit
+next to `best_model.pt` and was byte-identical to it — `train.py` saved the same weights under
+both names, so an *identity* model shipped wearing a *countermeasure's* filename. It has been
+deleted, and `train.py` now writes exactly one checkpoint per run, named for the task it
+actually trained (`best_model.pt` or `countermeasure_asvspoof.pt`). `thresholds.json` now
+carries `task` / `task_note` fields so its metrics cannot be read as anti-spoofing numbers again.
+
 **The shipped checkpoint is fine-tuned for one person.** The enrolled target is a single
 identity — **Narendra Modi** — represented by 8 recordings in `data/anchor_speaker_std/`
-(see `data/anchor_speaker_profile.json`, `user_id: narendra_modi`). It is a one-person
+(see `data/anchor_asv_embedding.json` / `data/anchor_asv_embedding_ecapa.json`,
+`user_id: narendra_modi` — the files `vanirakshak/anchor.py` actually loads;
+`data/anchor_speaker_profile.json` was deleted, see `data/README.md`). It is a one-person
 target-speaker verifier, not a general voice-clone detector. Re-enrolling a different target
 requires retraining; the weights here do not transfer.
 

@@ -6,8 +6,13 @@
 # included pytest -- so `make test` (which runs bare `pytest`) could never work
 # on a clean checkout.
 #
-# This manifest installs everything needed to run the FULL suite (21 tests) and
-# to boot either backend.
+# This manifest installs enough to run `pytest` (15 tests, pytest.ini's
+# testpaths = vanirakshak-backend/tests) and to boot the one live backend
+# (vanirakshak-backend/). It does NOT by itself cover the root-level tests/
+# directory (18 more tests, the ASR stack) -- that additionally needs `groq`
+# and `python-dotenv` from the root requirements.txt, which `make setup` does
+# not install. Run `pip install -r requirements.txt` too if you're touching
+# backend/services/asr/ or vanirakshak/semantic/.
 #
 #   pip install -r requirements-dev.txt
 #
@@ -32,22 +37,19 @@ python-multipart>=0.0.10
 httpx>=0.27
 websockets>=12.0
 
-# --- backend (heavy forensic path) -------------------------------------------
-# backend/tests/test_forensic_signal.py is the ONLY coverage of this tree.
-# Without these four, 9 of 21 tests silently skip.
-#
-# The old skip message blamed "torch, soundfile", which was wrong: both of those
-# are importable, but backend.app.core.audio needs torchaudio and
-# backend.app.core.forensic_signal needs librosa. Installing what the old
-# message asked for left the tests skipped with no clue why.
+# --- real (optional) detector backends and the trained ml/ identity model ---
+# The standalone backend/ server these were originally installed for has been
+# retired (backend/README.md) -- backend/app/models/{ecapa_verifier,
+# wavlm_detector}.py now serve as shared modules imported by
+# vanirakshak/detectors/{asv_ecapa,cm_wavlm}.py (VR_ASV_BACKEND=ecapa,
+# VR_CM_BACKEND=wavlm) and by ml_bridge.py (the ml/ identity model, MFCC
+# features via librosa). None of this is required for the default,
+# zero-dependency stub detectors -- only for the real backends and
+# POST /v1/verify-speaker.
 soundfile>=0.12
 torch>=2.1
 torchaudio>=2.1
 librosa>=0.10
-
-# --- optional real model backends --------------------------------------------
-# Imported at module scope by backend/app/models/wavlm_detector.py, which
-# backend/app/main.py needs in order to boot the heavy service.
 transformers>=4.36
 
 # Imported lazily inside ECAPAVerifier._ensure_model_loaded(), which falls back
