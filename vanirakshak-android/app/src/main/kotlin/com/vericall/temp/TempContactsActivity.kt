@@ -86,9 +86,20 @@ class TempContactsActivity : AppCompatActivity() {
         refreshBackendLabel()
 
         // Runs the real detection path end to end, so the incoming-call alert
-        // can be demonstrated without an actual phone call.
+        // can be demonstrated without an actual phone call. Opens the guard
+        // screen as a LIVE call (the "answer" step): that is what starts the
+        // guard service, mic capture and server streaming — otherwise the WS
+        // path would never run and the backend would see zero sessions.
+        // NOTE: must NOT open the stored c1 profile screen — that path runs
+        // the in-process demo analyzer only (isLiveCall=false).
         binding.btnSimulateIncoming.setOnClickListener {
+            // Fresh-session semantics: stop any lingering guard and drop the
+            // previous call's verdict, or the new screen would replay stale
+            // bus state and never start a new server session.
+            VaniCallRouter.onEnded(this)
             VaniCallRouter.onRinging(this, SIMULATED_CALLER_NUMBER)
+            val caller = VaniCallRouter.resolve(this, SIMULATED_CALLER_NUMBER)
+            openLiveGuard(caller)
         }
 
         adapter = TempContactAdapter(
@@ -128,7 +139,6 @@ class TempContactsActivity : AppCompatActivity() {
             adapter.getItem(position)?.let { openDetail(it.id) }
         }
     }
-
     fun openDetail(contactId: String) {
         val contact = VaniSampleData.getContactById(contactId) ?: VaniSampleData.contacts[0]
         // Show real-time Android Notification with risk score
@@ -141,11 +151,28 @@ class TempContactsActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * Opens the guard screen as a LIVE call (same intent the ringing-alert
+     * notification builds): the detail screen then starts the guard service,
+     * mic capture and server streaming.
+     */
+    fun openLiveGuard(caller: VaniCallRouter.Caller) {
+        startActivity(
+            Intent(this, TempContactDetailActivity::class.java).apply {
+                putExtra(EXTRA_CONTACT_ID, "live_call")
+                putExtra(VaniNotificationHelper.EXTRA_CALLER_NAME, caller.name)
+                putExtra(VaniNotificationHelper.EXTRA_CALLER_PHONE, caller.phone)
+                putExtra(VaniNotificationHelper.EXTRA_CALLER_ENROLLED, caller.enrolled)
+            }
+        )
+    }
+
     // -------------------------------------------------------------- setup state
 
     private fun refreshBackendLabel() {
+        val gate = if (VaniBackendConfig.isKeywordGate(this)) "keyword-gate ON" else "always-stream"
         binding.tvBackendHost.text =
-            "Backend: ${VaniBackendConfig.getHost(this)}:${VaniBackendConfig.getPort(this)}"
+            "Backend: ${VaniBackendConfig.getHost(this)}:${VaniBackendConfig.getPort(this)} • $gate"
     }
 
     /** Debug settings: LAN IP for real devices, 127.0.0.1 + adb reverse for emulator. */
@@ -157,9 +184,15 @@ class TempContactsActivity : AppCompatActivity() {
                 android.text.InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine()
         }
-        val padded = android.widget.FrameLayout(this).apply {
+        val gateCheck = android.widget.CheckBox(this).apply {
+            text = "Wake server only on money-talk keywords (saves data/battery)"
+            isChecked = VaniBackendConfig.isKeywordGate(this@TempContactsActivity)
+        }
+        val padded = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
             setPadding(48, 24, 48, 0)
             addView(input)
+            addView(gateCheck)
         }
         AlertDialog.Builder(this)
             .setTitle("Backend settings")
@@ -170,6 +203,7 @@ class TempContactsActivity : AppCompatActivity() {
                 val host = parts.getOrNull(0)?.trim().orEmpty()
                 val port = parts.getOrNull(1)?.trim()?.toIntOrNull()
                     ?: VaniBackendConfig.getPort(this)
+                VaniBackendConfig.setKeywordGate(this, gateCheck.isChecked)
                 if (host.isNotEmpty()) {
                     VaniBackendConfig.setHostPort(this, host, port)
                     refreshBackendLabel()

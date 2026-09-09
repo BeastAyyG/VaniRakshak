@@ -117,6 +117,7 @@ class VaniStreamingClient(
                 put("prior_fraud_score", 0)
             }
             webSocket.send(handshake.toString())
+            Log.i(TAG, "ws connected, session=$sessionId")
             postStatus("Connected — streaming to forensic backend…")
         }
 

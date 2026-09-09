@@ -12,6 +12,9 @@ import com.vericall.model.RiskLevel
  */
 object VaniRiskBus {
 
+    /** Guard pipeline phase. LISTENING = armed on-device, server idle; SCORING = WS streaming. */
+    enum class ListenState { LISTENING, SCORING }
+
     data class Snapshot(
         val risk: Int,
         val synthetic: Int,
@@ -30,7 +33,9 @@ object VaniRiskBus {
         /** Server interlock_active flag. One-way latch enforced by callers. */
         val interlockActive: Boolean = false,
         /** WS session id that produced this verdict (needed for challenge grading). Null when offline. */
-        val sessionId: String? = null
+        val sessionId: String? = null,
+        /** ARMED-mode phase. Defaults to SCORING so existing publishers are unaffected. */
+        val listenState: ListenState = ListenState.SCORING
     )
 
     private val listeners = LinkedHashSet<(Snapshot) -> Unit>()

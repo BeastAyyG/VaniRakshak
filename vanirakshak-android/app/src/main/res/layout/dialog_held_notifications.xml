@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_card"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:padding="22dp">
 
     <TextView
         android:layout_width="wrap_content"
@@ -13,7 +13,7 @@
         android:fontFamily="sans-serif-medium"
         android:text="Shielded Banking Notifications"
         android:textColor="@color/ink"
-        android:textSize="18sp" />
+        android:textSize="19sp" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -21,14 +21,14 @@
         android:layout_marginTop="4dp"
         android:text="These notifications were held to protect you from verbal coercion during high-risk calls."
         android:textColor="@color/mute"
-        android:textSize="12sp" />
+        android:textSize="13sp" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp"
-        android:background="#E5E5DF" />
+        android:layout_marginTop="14dp"
+        android:layout_marginBottom="14dp"
+        android:background="@color/hairline" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -46,8 +46,8 @@
         android:id="@+id/btnCloseHeldDialog"
         style="@style/Widget.Material3.Button.TonalButton"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_marginTop="16dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="18dp"
         android:text="Close Review"
         android:textSize="13sp" />
 

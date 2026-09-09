@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VaniRakshak on Pinterest design system: white canvas, flat surfaces,
-         single red accent for primary CTAs, no chrome shadows. -->
+    <!-- VaniRakshak vibrant pastel theme: white canvas, bold violet accent,
+         lavender surfaces, soft ink text. -->
     <style name="Theme.VaniRakshak" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="colorPrimary">@color/pin_red</item>
         <item name="colorPrimaryVariant">@color/pin_red_pressed</item>
         <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSecondary">@color/ink</item>
-        <item name="colorSecondaryVariant">@color/ink_pressed</item>
+        <item name="colorSecondary">@color/accent_deep</item>
+        <item name="colorSecondaryVariant">@color/pin_red_pressed</item>
         <item name="colorAccent">@color/pin_red</item>
         <item name="android:windowBackground">@color/canvas</item>
         <item name="android:statusBarColor">@color/canvas</item>

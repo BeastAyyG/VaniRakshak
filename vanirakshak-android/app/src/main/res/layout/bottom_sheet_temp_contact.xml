@@ -10,7 +10,7 @@
     android:paddingEnd="24dp"
     android:paddingBottom="28dp">
 
-    <!-- Header: title + circular close -->
+    <!-- Header: title + white pill close -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -26,15 +26,15 @@
             android:letterSpacing="-0.01"
             android:text="Voice profile"
             android:textColor="@color/ink"
-            android:textSize="18sp" />
+            android:textSize="19sp" />
 
         <ImageView
             android:id="@+id/btnSheetClose"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/bg_chip"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_chip_white"
             android:contentDescription="Close"
-            android:padding="10dp"
+            android:padding="11dp"
             android:src="@drawable/ic_close" />
     </LinearLayout>
 
@@ -47,7 +47,7 @@
         android:textColor="@color/mute"
         android:textSize="13sp" />
 
-    <!-- Contact chip -->
+    <!-- Contact chip on lavender card -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -55,7 +55,7 @@
         android:background="@drawable/bg_card"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="14dp">
+        android:padding="16dp">
 
         <TextView
             android:id="@+id/tvSheetContactName"
@@ -65,7 +65,7 @@
             android:fontFamily="sans-serif-medium"
             android:text="Aarav Sharma"
             android:textColor="@color/ink"
-            android:textSize="15sp" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/tvSheetBadge"
@@ -73,16 +73,16 @@
             android:layout_height="wrap_content"
             android:background="@drawable/bg_badge_enrolled"
             android:fontFamily="sans-serif-medium"
-            android:paddingStart="10dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="4dp"
+            android:paddingStart="12dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="5dp"
             android:text="Enrolled"
             android:textColor="@color/success_deep"
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- Prompt card -->
+    <!-- Prompt card on lemon pastel -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -90,14 +90,14 @@
         android:fontFamily="sans-serif-medium"
         android:text="Read this aloud for 15 seconds"
         android:textColor="@color/ink"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="@drawable/bg_chip_white"
-        android:padding="14dp"
+        android:background="@drawable/bg_alert_warning"
+        android:padding="16dp"
         android:text="VaniRakshak safeguards speech and telephony against AI-generated voice cloning attacks."
         android:textColor="@color/body"
         android:textSize="14sp" />
@@ -107,7 +107,7 @@
         android:id="@+id/pbEnrollProgress"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="8dp"
+        android:layout_height="10dp"
         android:layout_marginTop="18dp"
         android:max="100"
         android:progress="0"
@@ -122,7 +122,7 @@
         android:textColor="@color/mute"
         android:textSize="12sp" />
 
-    <!-- Actions -->
+    <!-- Actions: violet record + lavender save -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -133,7 +133,7 @@
             android:id="@+id/btnStartEnroll"
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="52dp"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:background="@drawable/bg_button_primary"
@@ -151,7 +151,7 @@
             android:id="@+id/btnSaveEnroll"
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="52dp"
             android:layout_weight="1"
             android:background="@drawable/bg_button_secondary"
             android:enabled="false"

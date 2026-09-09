@@ -301,6 +301,7 @@ alert payload it already received.
 | `VR_ALERT_WEBHOOK_URL` | *(unset)* | Alert webhook target; unset disables dispatch |
 | `VR_FUSION_W_SEMANTIC` | `0.4` | Fusion weight for the ASR/keyword `semantic_risk` term (§3.1) |
 | `GROQ_API_KEY` | *(unset)* | Enables the `semantic` block; unset degrades it to `available: false` (see `requirements-asr.txt`) |
+| `GEMINI_API_KEY` | *(unset)* | Enables Gemini threat analysis & fact verification; required for the `verify-chunk` and `verify` endpoints (Sotto edition). Missing key raises `ValueError` in `get_gemini_client()`. |
 | `VR_ASV_BACKEND` | `stub` | `ecapa` swaps in real ECAPA-TDNN embeddings (`asv_ecapa.py`); changes the `metrics` distribution and the anchor file loaded (`data/anchor_asv_embedding_ecapa.json`) |
 | `VR_CM_BACKEND` | `stub` | `wavlm` swaps in real self-supervised features (`cm_wavlm.py`) for the countermeasure score |
 | `VR_IMPOSTOR_BLOCK_BELOW` | `0.10` | A **deterministic tier override**: when `metrics.asv_consistency` falls below this, `tier` is forced to `"BLOCK"` regardless of `risk_score` (`risk/fusion.py`'s impostor override). A client deriving its own tier from `risk_score` alone will disagree with the server in exactly this case — see §5 on why the client shouldn't be doing that anyway. |

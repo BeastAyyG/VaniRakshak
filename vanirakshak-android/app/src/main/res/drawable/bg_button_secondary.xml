@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- button-secondary: gray-cream fill, 16dp radius, pressed state per DESIGN.md -->
+<!-- button-secondary: pastel lavender fill, 20dp radius, pressed state -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape>
             <solid android:color="@color/secondary_pressed" />
-            <corners android:radius="16dp" />
+            <corners android:radius="20dp" />
         </shape>
     </item>
     <item>
         <shape>
             <solid android:color="@color/secondary_bg" />
-            <corners android:radius="16dp" />
+            <corners android:radius="20dp" />
         </shape>
     </item>
 </selector>

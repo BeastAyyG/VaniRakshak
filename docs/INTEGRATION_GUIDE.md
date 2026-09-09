@@ -155,23 +155,44 @@ managing session/challenge state over REST separately from the audio socket.
 
 ## 5. Mobile clients that can't stream continuously
 
-`vanirakshak-android/` is the reference for this pattern today: when the
-backend is reachable it holds a live WebSocket open
-(`vanirakshak-android/app/src/main/kotlin/com/vericall/audio/VaniStreamingClient.kt`
-— handshake-first, 16-bit PCM @16kHz,
-server-authoritative `tier`/`interlock_active`, same reconnect backoff as §6
-below) and grades challenges via `POST /v1/sessions/{session_id}/challenge`
-(`vanirakshak-android/app/src/main/kotlin/com/vericall/audio/VaniChallengeGrader.kt`), with `receipt_hash` shown and persisted —
-see `vanirakshak-android/DESIGN.md` §4. When the backend is unreachable it
-falls back to an on-device heuristic clearly labeled as an offline estimate.
-Its one-shot REST call for the enrolled-voice identity check is:
+`vanirakshak-android/` is the reference for this pattern today. It implements
+**two modes**, both using the same server contract:
 
+### Mode A — Keyword-gated ARMED → SCORING (default, battery-efficient)
+1. On call start, the guard service **does not open a WebSocket** yet.
+2. On-device `SpeechRecognizer` (Google on-device ASR, works offline on modern
+   Android) listens for money-talk keywords — English + Hindi:
+   `bank`, `otp`, `upi`, `payment`, `rupee`, `transfer`, `account`, `pin`,
+   `cvv`, `kyc`, `loan`, `emi`, `prize`, `lottery`, `refund`, `deposit`,
+   `withdraw`, `reward`, `bonus`, `invest`, `profit`, `gift card`, `voucher`,
+   `recharge`, `premium`, `policy`, `claim`, `ransom`, `verify`,
+   `customer care`, `rs`, `पैसा`, `बैंक`, `रुपया`, `रुपये`, `भुगतान`, `खाता`, `ओटीपी`.
+   Short tokens (`pin`, `otp`, `upi`, `emi`, `rs`) use word boundaries so
+   "shopping" doesn't trip "pin"; phrases use substring match for partial-result
+   tolerance.
+3. On keyword hit → recognizer stops → **WebSocket opens** → 16-bit PCM @ 16 kHz
+   streams → server verdicts flow (~1/sec).
+4. UI shows `👂 Listening for money-talk…` while armed, then `Server: BLOCK/ALLOW/CHALLENGE`
+   once scoring.
+
+### Mode B — Immediate streaming (keyword-gate OFF)
+- Behaves exactly as before: WebSocket opens immediately on call start,
+  streams continuously, server verdicts from first window.
+
+Both modes:
+- Handshake-first JSON (`sample_rate: 16000`), binary PCM frames, server-authoritative
+  `tier`/`interlock_active`, reconnect backoff 1→2→4→8→15s + jitter (5 attempts).
+- Challenge grading via `POST /v1/sessions/{session_id}/challenge`
+  (`VaniChallengeGrader.kt`), `receipt_hash` shown + persisted.
+- Offline fallback: on any transport failure, falls back to on-device heuristic
+  clearly labeled "On-device fallback (backend unreachable)" with `serverDriven=false`.
+
+One-shot identity check (still available, independent of streaming):
 ```
 POST /v1/verify-speaker
   multipart form field: audio (WAV)
 → { "available": true, "label": "modi_ji", "is_target": true, "llr": 4.74, "prob_target": 0.991 }
 ```
-
 This scores a short recorded chunk against the trained `ml/` identity model
 directly — no acoustic risk pipeline, no tier, no interlock. It answers "is
 this the enrolled voice?", not "is this call safe?". If you need the full
@@ -180,6 +201,13 @@ interlock) from a client that can't hold a long-lived WebSocket open, use
 `POST /v1/analyze` (or `/analyze/audio`) instead — it runs the same
 acoustic+ASV+fusion pipeline as the live stream, one-shot, over a complete
 recorded file. See API_SPEC.md for both.
+
+### Client config
+- Backend host/port stored in `SharedPreferences` (default `127.0.0.1:8000`);
+  on real device use PC's LAN IP, on emulator use `127.0.0.1` + `adb reverse tcp:8000 tcp:8000`.
+- Keyword gate toggle in Contacts screen settings (persisted, default ON).
+- If `SpeechRecognizer.isRecognitionAvailable()` is false (rare), gate auto-bypasses
+  to immediate streaming.
 
 ## 6. Reconnect and failure handling
 

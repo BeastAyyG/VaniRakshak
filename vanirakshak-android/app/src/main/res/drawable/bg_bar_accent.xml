@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- accent bar: violet -> sky underline pill for section headers -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="0"
+        android:endColor="@color/accent_sky"
+        android:startColor="@color/pin_red" />
+    <corners android:radius="999dp" />
+</shape>

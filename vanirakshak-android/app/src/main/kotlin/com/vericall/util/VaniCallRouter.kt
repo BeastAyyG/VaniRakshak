@@ -123,6 +123,10 @@ object VaniCallRouter {
         VaniNotificationHelper.cancelAlert(context)
         context.stopService(Intent(context, VaniCallGuardService::class.java))
         CallStateStore.clear(context)
+        // A new call must never replay the previous call's verdict: without
+        // this, the guard screen sees a cached snapshot and skips starting
+        // the service, so no fresh analysis (and no server session) happens.
+        VaniRiskBus.reset()
     }
 
     /**

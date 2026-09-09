@@ -270,7 +270,10 @@ class TempContactDetailActivity : AppCompatActivity() {
 
     /** Server-driven verdict extras: tier badge + receipt hash + server challenge phrase. */
     private fun renderServerVerdict(snapshot: VaniRiskBus.Snapshot) {
-        if (snapshot.serverDriven && !snapshot.tier.isNullOrEmpty()) {
+        if (snapshot.listenState == VaniRiskBus.ListenState.LISTENING) {
+            binding.tvServerTier.visibility = View.VISIBLE
+            binding.tvServerTier.text = "👂 ${snapshot.message}"
+        } else if (snapshot.serverDriven && !snapshot.tier.isNullOrEmpty()) {
             binding.tvServerTier.visibility = View.VISIBLE
             val mode = if (snapshot.interlockActive) " • interlock ${snapshot.interlockActive}" else ""
             binding.tvServerTier.text = "Server: ${snapshot.tier}$mode"

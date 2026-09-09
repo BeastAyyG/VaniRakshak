@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- pin-card: warm-cream surface, 16dp radius, zero elevation (DESIGN.md {component.pin-card}) -->
+<!-- contact-card: soft lavender surface, 20dp radius -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="@color/surface_card" />
-    <corners android:radius="16dp" />
+    <corners android:radius="20dp" />
 </shape>

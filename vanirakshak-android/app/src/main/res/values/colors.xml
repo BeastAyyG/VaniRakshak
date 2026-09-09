@@ -1,48 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Pinterest Design System Palette (DESIGN.md) -->
+    <!-- VaniRakshak vibrant pastel palette: bold violet accent, pastel washes,
+         deep indigo ink for instant visual hierarchy. -->
 
-    <!-- Brand & Accent: single saturated red, reserved for primary CTAs -->
-    <color name="pin_red">#E60023</color>
-    <color name="pin_red_pressed">#CC001F</color>
+    <!-- Brand & Accent: bold violet, reserved for primary CTAs -->
+    <color name="pin_red">#6C4DF6</color>
+    <color name="pin_red_pressed">#5438E0</color>
+    <color name="accent_deep">#4B2FE0</color>
+    <color name="accent_pale">#E7E1FF</color>
+    <color name="accent_sky">#4D8CFF</color>
+    <color name="accent_sky_pressed">#3E6FE0</color>
+    <color name="info_deep">#1F6FE0</color>
 
     <!-- Surfaces -->
     <color name="canvas">#FFFFFF</color>
-    <color name="surface_soft">#FBFBF9</color>
-    <color name="surface_card">#F6F6F3</color>
-    <color name="secondary_bg">#E5E5E0</color>
-    <color name="secondary_pressed">#C8C8C1</color>
-    <color name="surface_dark">#262622</color>
+    <color name="surface_soft">#F8F7FE</color>
+    <color name="surface_card">#F3F1FD</color>
+    <color name="secondary_bg">#E9E6F8</color>
+    <color name="secondary_pressed">#DCD6F6</color>
+    <color name="surface_dark">#1B1B2F</color>
 
     <!-- Text -->
-    <color name="ink">#000000</color>
-    <color name="ink_pressed">#262622</color>
-    <color name="body">#33332E</color>
-    <color name="mute">#62625B</color>
-    <color name="ash">#91918C</color>
-    <color name="stone">#C8C8C1</color>
+    <color name="ink">#1B1B2F</color>
+    <color name="ink_pressed">#33334A</color>
+    <color name="body">#3A3A4E</color>
+    <color name="mute">#6E6E85</color>
+    <color name="ash">#9C9CB2</color>
+    <color name="stone">#D5D5E3</color>
 
     <!-- Hairlines -->
-    <color name="hairline">#DADAD3</color>
-    <color name="hairline_soft">#E5E5E0</color>
+    <color name="hairline">#E4E2F2</color>
+    <color name="hairline_soft">#EEEDF8</color>
+
+    <!-- Pastel washes -->
+    <color name="pastel_lavender">#E4DBFF</color>
+    <color name="pastel_sky">#D6EBFF</color>
+    <color name="pastel_mint">#D3F6E8</color>
+    <color name="pastel_peach">#FFE3D0</color>
+    <color name="pastel_lemon">#FFF3C4</color>
+    <color name="pastel_rose">#FFDCE6</color>
 
     <!-- Semantic: success / error / warning -->
-    <color name="success_pale">#C7F0DA</color>
-    <color name="success_deep">#103C25</color>
-    <color name="error_tone">#9E0A0A</color>
-    <color name="error_deep">#CC001F</color>
-    <color name="error_pale">#FBE9E9</color>
-    <color name="warning_deep">#7A4E00</color>
-    <color name="warning_pale">#F7ECD2</color>
+    <color name="success_pale">#D9FBE8</color>
+    <color name="success_deep">#0B7A48</color>
+    <color name="error_tone">#D91C4E</color>
+    <color name="error_deep">#B0123C</color>
+    <color name="error_pale">#FFDCE6</color>
+    <color name="warning_deep">#8A6100</color>
+    <color name="warning_pale">#FFF3C4</color>
 
     <!-- Risk levels (notification tint + guard screen) -->
-    <color name="risk_high">#D93025</color>
-    <color name="risk_medium">#E8A33D</color>
-    <color name="risk_low">#1E8E3E</color>
-    <color name="risk_neutral">#91918C</color>
+    <color name="risk_high">#E5325B</color>
+    <color name="risk_medium">#F5A623</color>
+    <color name="risk_low">#12A45C</color>
+    <color name="risk_neutral">#9C9CB2</color>
 
     <!-- Base -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="scrim">#80000000</color>
+    <color name="scrim">#99000000</color>
 </resources>

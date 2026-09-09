@@ -46,20 +46,11 @@ class VaniCallGuardService : Service() {
     private var activePhone: String? = null
     private var keywordTrigger: VaniKeywordTrigger? = null
 
-    /** Sent by the UI "Verify Speaker" button (or a keyword trigger) to ask the
-     *  backend model: "is this the enrolled target voice (Modi ji)?" */
+    /** Sent by the UI "Verify Speaker" button to ask the backend model:
+     *  "is this the enrolled target voice (Modi ji)?" */
     companion object {
         const val ACTION_VERIFY_SPEAKER = "com.vericall.action.VERIFY_SPEAKER"
-        // Pass this extra (true) to also start the on-device keyword listener. NOTE: it
-        // shares the mic with the live analyzer, so enable only when the analyzer is paused
-        // (see startKeywordTrigger). Manual verify via ACTION_VERIFY_SPEAKER always works.
-        const val EXTRA_KEYWORD_TRIGGER = "extra_keyword_trigger"
-        // Best-effort on-device keyword trigger. If SpeechRecognizer is unavailable
-        // (no device speech service / offline), we silently fall back to the button.
-        val TRIGGER_KEYWORDS = setOf(
-            "bank", "banking", "rupee", "rupees", "rupay", "rs ", "rs.", "payment",
-            "transaction", "transfer", "account", "otp", "पैसा", "बैंक", "रुपया", "भुगतान"
-        )
+        private const val TAG = "VaniGuard"
     }
 
     private val verifyReceiver = object : android.content.BroadcastReceiver() {
@@ -78,6 +69,7 @@ class VaniCallGuardService : Service() {
         val enrolled = intent?.getBooleanExtra(VaniNotificationHelper.EXTRA_CALLER_ENROLLED, false) ?: false
 
         callerName = name
+        android.util.Log.i(TAG, "Guard started for $name ($phone), enrolled=$enrolled")
 
         // Initialize Scam-Shield session orchestrator
         VaniScamShieldController.onCallStarted(name, phone)
@@ -143,14 +135,17 @@ class VaniCallGuardService : Service() {
             isVoiceEnrolled = enrolled
         )
 
-        // Server-driven path first (PROTOCOL §1–§5); on-device heuristic is the
-        // offline fallback, not a competing verdict engine.
-        startServerStream(name, phone, enrolled, contact)
-
-        // OPT-IN keyword trigger. SpeechRecognizer also uses the mic, so only enable when the
-        // live analyzer is paused; left off by default to keep the manual verify path reliable.
-        if (intent?.getBooleanExtra(EXTRA_KEYWORD_TRIGGER, false) == true) {
-            startKeywordTrigger()
+        // Keyword-gated wake-up (default): stay ARMED on-device and only open
+        // the server stream once money-talk is heard. Falls back to immediate
+        // streaming when the gate is off or SpeechRecognizer is unavailable.
+        if (VaniBackendConfig.isKeywordGate(this) &&
+            android.speech.SpeechRecognizer.isRecognitionAvailable(this)
+        ) {
+            startArmedMode(name, phone, enrolled, contact)
+        } else {
+            // Server-driven path first (PROTOCOL §1–§5); on-device heuristic is the
+            // offline fallback, not a competing verdict engine.
+            startServerStream(name, phone, enrolled, contact)
         }
 
         return START_NOT_STICKY
@@ -165,8 +160,13 @@ class VaniCallGuardService : Service() {
         name: String, phone: String, enrolled: Boolean, contact: VaniContact
     ) {
         val wsUrl = VaniBackendConfig.wsUrl(this)
+        android.util.Log.i(TAG, "Starting server stream: $wsUrl")
         val client = VaniStreamingClient(wsUrl, callerId = phone).apply {
             onSnapshot = { snapshot ->
+                android.util.Log.i(
+                    TAG, "Server verdict: tier=${snapshot.tier} risk=${snapshot.risk} " +
+                        "interlock=${snapshot.interlockActive} session=${snapshot.sessionId}"
+                )
                 // One-way latch: BLOCK/interlock is sticky for the rest of the call.
                 if (snapshot.interlockActive || snapshot.tier == "BLOCK") latchedBlock = true
                 val effective = if (latchedBlock && snapshot.tier != "BLOCK") {
@@ -184,7 +184,10 @@ class VaniCallGuardService : Service() {
                     tier = effective.tier, receiptHash = effective.receiptHash
                 )
             }
-            onExhausted = { startLocalFallback(name, phone, enrolled, contact) }
+            onExhausted = {
+                android.util.Log.w(TAG, "Server stream unreachable — offline fallback")
+                startLocalFallback(name, phone, enrolled, contact)
+            }
         }
         streamingClient = client
         client.start()
@@ -222,6 +225,7 @@ class VaniCallGuardService : Service() {
                 record = null
             }
             if (record == null) {
+                android.util.Log.w(TAG, "Mic init failed — offline fallback")
                 streaming = false
                 runOnMain { startLocalFallback(name, phone, enrolled, contact) }
                 return@Thread
@@ -306,15 +310,41 @@ class VaniCallGuardService : Service() {
     }
 
     /**
-     * Best-effort: listen for banking/transaction keywords, then auto-verify the speaker.
-     * Because it shares the mic with the analyzer, callers should pause the analyzer first.
+     * ARMED mode: the server stays idle while the phone listens on-device for
+     * money-talk. No AudioRecord is opened here, so the SpeechRecognizer owns
+     * the mic without conflict. On keyword hit the recognizer stops and the
+     * server stream wakes up — scores/verdicts then flow as usual.
      */
-    private fun startKeywordTrigger() {
+    private fun startArmedMode(name: String, phone: String, enrolled: Boolean, contact: VaniContact) {
         if (keywordTrigger != null) return
-        keywordTrigger = VaniKeywordTrigger(this, TRIGGER_KEYWORDS) { _ ->
-            triggerSpeakerVerify()
+        android.util.Log.i(TAG, "Armed: listening for money-talk keywords, server idle")
+        VaniRiskBus.publish(
+            VaniRiskBus.Snapshot(
+                0, 0, 0, RiskLevel.WARNING,
+                "Listening for money-talk (bank, OTP, UPI, payment…) — server wakes on match.",
+                listenState = VaniRiskBus.ListenState.LISTENING
+            )
+        )
+        keywordTrigger = VaniKeywordTrigger(this) { hit ->
+            android.util.Log.i(TAG, "Keyword heard: '$hit' — waking server stream")
+            keywordTrigger?.stop()
+            keywordTrigger = null
+            VaniRiskBus.publish(
+                VaniRiskBus.Snapshot(
+                    0, 0, 0, RiskLevel.WARNING,
+                    "Heard \"$hit\" — contacting server for live scoring…",
+                    listenState = VaniRiskBus.ListenState.LISTENING
+                )
+            )
+            startServerStream(name, phone, enrolled, contact)
         }
         keywordTrigger?.start()
+        if (keywordTrigger?.isRunning != true) {
+            // Recognizer died between check and start — stream immediately.
+            android.util.Log.w(TAG, "Armed mode failed to start — streaming immediately")
+            keywordTrigger = null
+            startServerStream(name, phone, enrolled, contact)
+        }
     }
 
     /**
