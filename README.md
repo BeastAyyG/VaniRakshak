@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="assets/logo.png" alt="VaniRakshak Official Logo" width="360" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);" />
+  <img src="assets/logo.png" alt="VaniRakshak Kavach Official Logo" width="360" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);" />
 
   <br/><br/>
 
@@ -91,7 +91,7 @@ Operating across **Hindi, Hinglish, and English**, VaniRakshak Kavach evaluates 
 ## 🗂️ Repository Architecture
 
 ```
-VaniRakshak/
+VaniRakshak Kavach/
 ├── assets/                                     # Official Branding Suite
 │   ├── logo.png                                # High-res official emblem logo
 │   ├── logo_transparent.png                    # Transparent background emblem
@@ -110,7 +110,28 @@ VaniRakshak/
 │           ├── logo.png                        # Web navbar & favicon emblem
 │           └── samples/                        # Audited threat audio samples
 │
+├── vanirakshak_sotto/                          # Sotto OpenVINO Edition (Port 8082)
+│   ├── run_sotto_server.py                     # Sotto launcher
+│   ├── server.py                               # FastAPI backend (OpenVINO)
+│   └── sotto_engine.py                         # OpenVINO Whisper engine
+│
+├── backend/                                    # Shared ASR Service Layer
+│   └── services/
+│       └── asr/                                # Speech-to-text subsystem
+│           ├── service.py                      # Unified ASR orchestrator
+│           ├── provider.py                     # ASR provider base class & factory
+│           ├── groq_provider.py                # Groq Cloud Whisper provider
+│           ├── indicconformer.py               # AI4Bharat IndicConformer provider
+│           ├── preprocessing.py                # Audio normalization pipeline
+│           ├── transliteration.py              # Hindi ↔ Hinglish romanization
+│           ├── buffer.py                       # Transcript chunk buffer
+│           └── types.py                        # Data models & config types
+│
+├── crawl4ai/                                   # Web Evidence Grounding Engine
+├── tests/                                      # Automated test suite
+├── scripts/                                    # Benchmark & verification scripts
 ├── LIVE_STREAM_INTEGRATION_GUIDE.md            # Mobile Call Stream Integration Guide
+├── DESIGN.md                                   # UI/UX Design System Reference
 ├── package.json                                # Node dev scripts & server runner
 ├── requirements.txt                            # Core Python dependencies
 └── README.md                                   # Platform documentation
