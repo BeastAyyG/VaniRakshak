@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, ShieldAlert, AlertTriangle, UserX, Download, Lock, Unlock, Cpu } from "lucide-react";
+import { ShieldCheck, ShieldAlert, AlertTriangle, UserX, Download, Lock, Unlock, Cpu, MessageSquareWarning } from "lucide-react";
 import { WindowResult } from "./WaveformEvidenceTimeline";
 
 export interface ForensicReportData {
@@ -15,6 +15,15 @@ export interface ForensicReportData {
   windows?: WindowResult[];
   mean_acoustic_anomaly?: number;
   max_acoustic_anomaly?: number;
+  /**
+   * Whether ASV actually ran a real biometric comparison this report (the
+   * backend's `asv_evaluated` / `metrics.asv_evaluated`). When false,
+   * `mean_speaker_sim` is the fusion-neutral 0.5 placeholder, not a
+   * measured similarity — see vanirakshak/detectors/pipeline.py. Optional
+   * so a report built before this field existed still renders (as
+   * "evaluated", matching the old always-render-a-number behavior).
+   */
+  asv_evaluated?: boolean;
   mean_speaker_sim?: number | null;
   mean_micro_tremor?: number | null;
   mean_spectral_flatness?: number | null;
@@ -39,6 +48,34 @@ export interface ForensicReportData {
     is_target: boolean;
     prob_target?: number | null;
     llr?: number | null;
+    reason?: string | null;
+  } | null;
+
+  /**
+   * Parallel ASR + scam-keyword context signal (vanirakshak/semantic/).
+   * Advisory only — a small additive term in the acoustic risk fusion, never
+   * the source of `verdict` itself. See docs/PROTOCOL.md §3.1.
+   */
+  semantic?: {
+    available: boolean;
+    transcript?: string;
+    hinglish_text?: string;
+    matches?: { category: string; term: string }[];
+    categories_hit?: string[];
+    semantic_risk?: number;
+    /** Bag-of-words scam vocabulary score, before claim verification. */
+    keyword_risk?: number;
+    /** Max severity among fired policy-contradiction rules (claims.py). */
+    claim_risk?: number;
+    /** Specific verified contradictions, each citable to an authority. */
+    claim_findings?: {
+      rule_id: string;
+      claim: string;
+      finding: string;
+      authority: string;
+      severity: number;
+      matched_terms?: string[];
+    }[];
     reason?: string | null;
   } | null;
 }
@@ -193,12 +230,18 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
               <div className="rounded-md border border-white/[0.06] bg-[#141414] p-3">
                 <span className="text-[10px] uppercase text-[#888888] block">TARGET ANCHOR ASV</span>
                 <span className="text-sm font-semibold text-white mt-1 block">
-                  {report.mean_speaker_sim !== null && report.mean_speaker_sim !== undefined
+                  {report.asv_evaluated === false
+                    ? "N/A"
+                    : report.mean_speaker_sim !== null && report.mean_speaker_sim !== undefined
                     ? `${(report.mean_speaker_sim * 100).toFixed(1)}%`
                     : "N/A"}
                 </span>
                 <span className="text-[10px] text-[#a1a1a1] block mt-0.5">
-                  {report.mean_speaker_sim && report.mean_speaker_sim >= 0.55 ? "Target match" : "Mismatch"}
+                  {report.asv_evaluated === false
+                    ? "Not evaluated — no claimed identity"
+                    : report.mean_speaker_sim && report.mean_speaker_sim >= 0.55
+                    ? "Target match"
+                    : "Mismatch"}
                 </span>
               </div>
 
@@ -265,7 +308,7 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
                     >
                       {report.target_speaker.available
                         ? report.target_speaker.is_target
-                          ? "MATCH — enrolled voice"
+                          ? "IDENTITY MATCH — not a clone check"
                           : "NO MATCH — not the enrolled voice"
                         : "UNAVAILABLE"}
                     </span>
@@ -282,8 +325,105 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
 
               <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#666666]">
                 {report.target_speaker.available
-                  ? "Identity check only — trained on one enrolled speaker with no cloned audio, so it cannot certify that audio is genuine."
+                  ? "Answers \"is this the enrolled person's voice?\" — NOT \"is this a clone of them?\". The model was trained on one speaker with zero cloned audio, so a good synthetic clone of the enrolled voice would also score IDENTITY MATCH. Clone detection is the separate CM layer; train it on a real spoof corpus (ml/dataset.py::ASVspoofDataset) before relying on it."
                   : (report.target_speaker.reason || "Trained identity model not loaded.")}
+              </p>
+            </div>
+          )}
+
+          {/* Live transcript + scam-keyword flags — the parallel ASR/keyword
+              context signal (vanirakshak/semantic/). Advisory: it nudges the
+              acoustic risk fusion by a small additive term, but the acoustic
+              pipeline stays the sole source of `verdict` above. */}
+          {report.semantic && (
+            <div className="mt-3 rounded-md border border-white/[0.06] bg-[#121212] p-3">
+              <div className="flex items-center gap-2">
+                <MessageSquareWarning
+                  className={`h-4 w-4 shrink-0 ${
+                    report.semantic.available && (report.semantic.categories_hit?.length ?? 0) > 0
+                      ? "text-amber-400"
+                      : "text-[#888888]"
+                  }`}
+                />
+                <span className="text-[#a1a1a1]">Live transcript &amp; claim check: </span>
+                <span
+                  className={`font-mono font-medium ${
+                    !report.semantic.available
+                      ? "text-[#888888]"
+                      : (report.semantic.claim_findings?.length ?? 0) > 0
+                      ? "text-rose-400"
+                      : (report.semantic.categories_hit?.length ?? 0) > 0
+                      ? "text-amber-400"
+                      : "text-emerald-400"
+                  }`}
+                >
+                  {!report.semantic.available
+                    ? "UNAVAILABLE"
+                    : (report.semantic.claim_findings?.length ?? 0) > 0
+                    ? `${report.semantic.claim_findings!.length} false claim${report.semantic.claim_findings!.length === 1 ? "" : "s"} verified`
+                    : (report.semantic.categories_hit?.length ?? 0) > 0
+                    ? `${report.semantic.categories_hit!.length} scam-pattern categor${report.semantic.categories_hit!.length === 1 ? "y" : "ies"} flagged`
+                    : "no scam vocabulary detected"}
+                </span>
+              </div>
+
+              {report.semantic.available ? (
+                <>
+                  {(report.semantic.hinglish_text || report.semantic.transcript) && (
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-[#a1a1a1] bg-[#171717] p-2 rounded border border-white/[0.05] font-mono">
+                      "{report.semantic.hinglish_text || report.semantic.transcript}"
+                    </p>
+                  )}
+                  {(report.semantic.matches?.length ?? 0) > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {report.semantic.matches!.map((m, i) => (
+                        <span
+                          key={`${m.category}-${m.term}-${i}`}
+                          className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono text-amber-400"
+                          title={m.category.replace(/_/g, " ")}
+                        >
+                          {m.term}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Verified policy contradictions. Ranked above the keyword
+                      chips on purpose: a chip means "this word occurred", a
+                      finding means "the caller demanded something that
+                      contradicts a published rule", and names the rule. */}
+                  {(report.semantic.claim_findings?.length ?? 0) > 0 && (
+                    <div className="mt-2.5 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldAlert className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-rose-400">
+                          Verified false claims ({report.semantic.claim_findings!.length})
+                        </span>
+                      </div>
+                      {report.semantic.claim_findings!.map((f) => (
+                        <div
+                          key={f.rule_id}
+                          className="rounded-md border border-rose-500/25 bg-rose-500/[0.07] p-2.5"
+                        >
+                          <div className="text-[11px] font-medium text-rose-300">{f.claim}</div>
+                          <p className="mt-1 text-[10.5px] leading-relaxed text-[#a1a1a1]">{f.finding}</p>
+                          <div className="mt-1 font-mono text-[9.5px] text-[#666666]">
+                            Source: {f.authority}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#666666]">
+                  {report.semantic.reason || "ASR/keyword signal not loaded."}
+                </p>
+              )}
+              <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#666666]">
+                Context signal only — feeds a small term into the risk fusion, never the primary evidence.
+                Claim checks verify demands against published policy (e.g. no bank ever asks for an OTP);
+                they cannot verify case-specific facts like a balance or branch name.
               </p>
             </div>
           )}

@@ -15,6 +15,7 @@ import DemoQuickSelector, { BENCHMARKS, BenchmarkItem } from "./components/DemoQ
 import AudioUploadZone from "./components/AudioUploadZone";
 import WaveformEvidenceTimeline from "./components/WaveformEvidenceTimeline";
 import ForensicVerdictCard, { ForensicReportData } from "./components/ForensicVerdictCard";
+import EnrolledSpeakersPanel from "./components/EnrolledSpeakersPanel";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000/ws/stream";
@@ -45,7 +46,7 @@ function issueLocalChallenge(): LocalChallenge {
   return {
     phrase: `${w1}, ${d1}, ${w2}, ${d2}.`,
     expected_digits: [d1, d2],
-    expected_full: `${d1} ${d2}`,
+    expected_full: `${w1} ${d1} ${w2} ${d2}`,
     instructions: "Now repeat ONLY the digits, in order, quickly.",
     issued_at_ms: Date.now(),
     seed: Math.floor(Math.random() * 1_000_000),
@@ -422,6 +423,7 @@ export default function Home() {
             const tier: string = telemetry.tier || "ALLOW";
             const pSpoof: number = telemetry.p_spoof ?? risk / 100;
             const asv: number | null = telemetry.metrics?.asv_consistency ?? null;
+            const asvEvaluated: boolean = Boolean(telemetry.metrics?.asv_evaluated);
             const snr: number | null = telemetry.metrics?.snr_db ?? null;
             const interlockActive: boolean = Boolean(
               telemetry.interlock_active || tier === "BLOCK" || risk >= 70
@@ -490,7 +492,9 @@ export default function Home() {
                   ? "SUSPICIOUS_SPLICED_AUDIO"
                   : "AUTHENTIC_TARGET",
               mean_acoustic_anomaly: pSpoof,
+              asv_evaluated: asvEvaluated,
               mean_speaker_sim: asv,
+              semantic: telemetry.semantic ?? prev?.semantic ?? null,
               dpdp_compliance: {
                 receipt_sha256: telemetry.receipt_hash || "hash-chain-verified",
                 statutory_act: "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
@@ -589,10 +593,20 @@ export default function Home() {
     : "ALLOW";
 
   const liveTier = micLive ? currentTier : reportTier;
+  // The backend owns the interlock decision (AGENTS.md §2). Once a live
+  // stream is running and the active challenge was issued by the server,
+  // the next WS verdict already reflects whatever the backend's grading
+  // decided — so challengeStatus must never override tier here, or a
+  // caller the server has since re-BLOCKed would show as unlocked. Local
+  // overrides are only for the demo carve-out docs/PROTOCOL.md §5
+  // describes: a manual drill (no server challenge exists to track) or the
+  // backend being unreachable (no live verdict to trust either way).
+  const useLocalChallengeOverride =
+    challengeSourceRef.current === "local" || !backendOnline || !micLive;
   const effectiveTier: string =
-    challengeStatus === "passed"
+    useLocalChallengeOverride && challengeStatus === "passed"
       ? "ALLOW"
-      : challengeStatus === "failed"
+      : useLocalChallengeOverride && challengeStatus === "failed"
       ? "BLOCK"
       : liveTier;
 
@@ -640,6 +654,13 @@ export default function Home() {
       passed = g.passed;
       reason = g.reason;
     }
+
+    // Release the pending-challenge gate now that this one is graded, so a
+    // *second* server challenge in the same session (e.g. risk climbs again
+    // after a pass) can register in ws.onmessage instead of only logging an
+    // event with no UI update — the gate exists to stop this same challenge
+    // from being captured twice, not to block all future ones.
+    challengePendingRef.current = false;
 
     if (passed) {
       setChallengeStatus("passed");
@@ -819,6 +840,23 @@ export default function Home() {
                 <span>Run challenge drill</span>
               </button>
             </div>
+          </div>
+
+          {/* Multi-speaker enrollment — lets the operator switch which
+              enrolled voice is being protected, or enrol a new one, instead
+              of being locked to the single hardcoded anchor. */}
+          <div>
+            <EnrolledSpeakersPanel
+              backendUrl={BACKEND_URL}
+              claimedIdentity={claimedIdentity}
+              disabled={micLive}
+              onSelectIdentity={(id) => {
+                claimedIdentityRef.current = id;
+                setClaimedIdentity(id);
+                addEvent(`Claimed identity set to "${id.replace(/_/g, " ")}"`, "info");
+              }}
+              onEvent={addEvent}
+            />
           </div>
 
           {/* Step 1: Standardized Forensic Benchmark Suite */}
