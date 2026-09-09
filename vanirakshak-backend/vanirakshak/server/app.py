@@ -469,7 +469,7 @@ async def analyze(
     # impostor scoring 67/100 (CHALLENGE) was mislabelled "SUSPICIOUS_SPLICED_AUDIO"
     # even at mean_speaker_sim 0.09.
     #
-    # NOTE — two different impostor cutoffs, deliberately: the 0.40 below is
+    # DECIDED — two different impostor cutoffs, deliberately: the 0.40 below is
     # the report-level identity *label* ("not the enrolled voice"), while the
     # per-window *interlock* override (VR_IMPOSTOR_BLOCK_BELOW, default 0.10
     # in config.py, enforced in risk/fusion.py) only fires on decisive
