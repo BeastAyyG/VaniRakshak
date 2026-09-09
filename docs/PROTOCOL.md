@@ -297,6 +297,12 @@ alert payload it already received.
 | `VR_IMPOSTOR_BLOCK_BELOW` | `0.10` | A **deterministic tier override**: when `metrics.asv_consistency` falls below this, `tier` is forced to `"BLOCK"` regardless of `risk_score` (`risk/fusion.py`'s impostor override). A client deriving its own tier from `risk_score` alone will disagree with the server in exactly this case — see §5 on why the client shouldn't be doing that anyway. |
 | `VR_ANCHOR_EMBEDDING` | *(backend-default path)* | Overrides which anchor JSON is loaded, bypassing the `VR_ASV_BACKEND`-keyed default |
 | `VR_FUSION_PRESET` | *(unset)* | `demo` applies a preset fusion-weight override tuned for the shipped demo clips |
+| `VR_SAMPLE_RATE` | `16000` | Processing sample rate in Hz — independent of the handshake's `sample_rate`, which is per-connection |
+| `VR_WINDOW_SECONDS` | `4.04` | Sliding-window duration each verdict scores |
+| `VR_HOP_SECONDS` | `1.0` | Sliding-window step between verdicts |
+| `VR_ALLOW_THRESHOLD` | `35.0` | Upper `risk_score` bound for the `ALLOW` tier |
+| `VR_CHALLENGE_THRESHOLD` | `70.0` | Upper `risk_score` bound for `CHALLENGE`; `risk_score` at or above this is `BLOCK` |
+| `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker` |
 
 ## 9. Conformance test
 
