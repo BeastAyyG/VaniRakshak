@@ -34,6 +34,7 @@ from ..session import CallSession, SessionContext
 from ..privacy.audit import AuditLog
 from ..alerts import AlertDispatcher, build_alert_payload
 from ..detectors.pipeline import DetectionPipeline
+from ..detectors.voice import vad_stats, zcr_variance
 from ..anchor import load_anchor
 from ..semantic import SEMANTIC_SIGNAL
 
@@ -51,7 +52,10 @@ app = FastAPI(
 # module-level singletons for the demo. In production these would be
 # replaced with a proper dependency-injected pool keyed by tenant.
 SESSIONS: Dict[str, CallSession] = {}
-AUDIT = AuditLog(max_events=10_000)
+# Durable audit chain: VR_AUDIT_PATH (default data/audit_log.jsonl, gitignored)
+# persists every event as JSONL and reloads it on restart. Empty path =
+# in-memory ring only.
+AUDIT = AuditLog(max_events=settings.audit.max_events, path=settings.audit.path or None)
 ALERTS = AlertDispatcher()
 PIPELINE = DetectionPipeline()
 
@@ -342,14 +346,26 @@ async def analyze(
         pad_size = sess.buffer.window_samples - x_analysis.size
         x_analysis = np.pad(x_analysis, (0, pad_size), mode="constant")
 
-    # Feed initial window
-    sess.push_chunk(x_analysis[:sess.buffer.window_samples])
-
-    # Drain subsequent hops
+    # Feed initial window (+ drain subsequent hops), timing each push so
+    # the per-window report carries a measured inference_ms instead of a
+    # hardcoded constant. push_chunk returns None until a hop-window
+    # accumulates, so only pushes that extend sess.history record a timing.
     hop = sess.buffer.hop_samples
+    inference_ms: List[float] = []
+
+    def _timed_push(chunk: np.ndarray) -> None:
+        before = len(sess.history)
+        t0 = time.perf_counter()
+        sess.push_chunk(chunk)
+        dt_ms = (time.perf_counter() - t0) * 1000.0
+        if len(sess.history) > before:
+            inference_ms.append(round(dt_ms, 2))
+
+    _timed_push(x_analysis[:sess.buffer.window_samples])
+
     i = sess.buffer.window_samples
     while i + hop <= x_analysis.size:
-        sess.push_chunk(x_analysis[i : i + hop])
+        _timed_push(x_analysis[i : i + hop])
         i += hop
 
     last = sess.history[-1] if sess.history else None
@@ -360,6 +376,7 @@ async def analyze(
     hop_sec = sess.buffer.cfg.hop_seconds
     win_sec = sess.buffer.cfg.window_seconds
 
+    win_samples = sess.buffer.window_samples
     for idx, cr in enumerate(sess.history):
         start_sec = round(idx * hop_sec, 2)
         end_sec = round(min(file_duration, start_sec + win_sec), 2)
@@ -372,13 +389,21 @@ async def analyze(
         channel_val = float(cr.metrics.get("channel_anomaly", 0.1))
         prosody_val = float(cr.metrics.get("prosody_unnatural", 0.2))
 
+        # Measure VAD + ZCR on this window's actual audio slice
+        # (history[k] scores samples [k*hop, k*hop+window) of x_analysis,
+        # padding included — the same signal the fusion saw).
+        seg_start = idx * hop
+        seg = x_analysis[seg_start : seg_start + win_samples]
+        vad = vad_stats(seg, sr)
+        zcr_var = zcr_variance(seg, sr)
+
         windows.append({
             "window_index": idx + 1,
             "start_sec": start_sec,
             "end_sec": end_sec,
             "duration_sec": round(win_sec, 2),
-            "is_voiced": True,
-            "speech_ratio": 0.95,
+            "is_voiced": vad["is_voiced"],
+            "speech_ratio": vad["speech_ratio"],
             "acoustic_anomaly_score": round(anomaly, 4),
             "speaker_cosine_sim": round(asv_val, 4),
             "speaker_evaluated": asv_evaluated_val,
@@ -386,9 +411,9 @@ async def analyze(
             "micro_tremor_ratio": round(max(0.0, min(1.0, 1.0 - prosody_val)), 4),
             "spectral_flatness_mean": round(channel_val, 4),
             "high_band_flatness": round(channel_val, 4),
-            "zcr_variance": 0.05,
+            "zcr_variance": zcr_var,
             "vocoder_boundary_score": round(anomaly, 4),
-            "inference_ms": 14.5,
+            "inference_ms": inference_ms[idx] if idx < len(inference_ms) else 0.0,
         })
 
     anomalies = [w["acoustic_anomaly_score"] for w in windows]
@@ -403,6 +428,9 @@ async def analyze(
 
     flatness = [w["spectral_flatness_mean"] for w in windows if w["spectral_flatness_mean"] is not None]
     mean_spectral_flatness = round(float(np.mean(flatness)), 4) if flatness else 0.1
+
+    zcr_vars = [w["zcr_variance"] for w in windows if w["zcr_variance"] is not None]
+    mean_zcr_var = round(float(np.mean(zcr_vars)), 4) if zcr_vars else 0.0
 
     boundary_timestamps = [w["start_sec"] for w in windows if w["acoustic_anomaly_score"] >= 0.65]
 
@@ -440,6 +468,14 @@ async def analyze(
     # Previously the impostor check only ran inside the BLOCK band, so an
     # impostor scoring 67/100 (CHALLENGE) was mislabelled "SUSPICIOUS_SPLICED_AUDIO"
     # even at mean_speaker_sim 0.09.
+    #
+    # NOTE — two different impostor cutoffs, deliberately: the 0.40 below is
+    # the report-level identity *label* ("not the enrolled voice"), while the
+    # per-window *interlock* override (VR_IMPOSTOR_BLOCK_BELOW, default 0.10
+    # in config.py, enforced in risk/fusion.py) only fires on decisive
+    # mismatch. A clip in [0.10, 0.40) is therefore labelled IMPOSTOR_SPEAKER
+    # while its tier stays CHALLENGE — label states identity, tier states
+    # interlock action. See docs/RUNBOOK.md Known Limitations.
     if mean_speaker_sim < 0.40:
         verdict = "IMPOSTOR_SPEAKER"
     elif last.tier == "BLOCK" or last.risk >= 70:
@@ -495,7 +531,7 @@ async def analyze(
         mean_micro_tremor=mean_micro_tremor,
         mean_spectral_flatness=mean_spectral_flatness,
         mean_high_band_flatness=mean_spectral_flatness,
-        mean_zcr_variance=0.05,
+        mean_zcr_variance=mean_zcr_var,
         vocoder_phase_discontinuities_detected=len(boundary_timestamps),
         detected_boundary_timestamps=boundary_timestamps,
         dpdp_compliance=dpdp,
@@ -628,6 +664,13 @@ async def stream_endpoint(ws: WebSocket) -> None:
     sess = CallSession(sid, ctx, audit=AUDIT, pipeline=PIPELINE)
     sess.set_sample_rate(sr)
     SESSIONS[sid] = sess
+
+    # Handshake ack: always tell the client the resolved session_id (the
+    # client may have omitted it, in which case sid is server-generated).
+    # Without this, grading a challenge over REST afterwards is impossible.
+    # Clients must accept this non-verdict message before verdicts arrive;
+    # it carries no tier/risk_score so verdict parsers skip it by shape.
+    await ws.send_json({"type": "session_ack", "session_id": sid, "sample_rate": sr})
 
     try:
         while True:

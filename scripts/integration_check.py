@@ -354,6 +354,7 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
         from websockets.sync.client import connect
 
         verdicts: List[Dict[str, Any]] = []
+        ack: Dict[str, Any] = {}
         with connect(url, open_timeout=10) as ws:
             ws.send(
                 json.dumps(
@@ -368,6 +369,18 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
                     }
                 )
             )
+            # Handshake ack arrives before any verdict (PROTOCOL.md §1) —
+            # consume it here so it never lands in the verdict list.
+            try:
+                first = ws.recv(timeout=2.0)
+                if isinstance(first, str):
+                    parsed = json.loads(first)
+                    if parsed.get("type") == "session_ack":
+                        ack = parsed
+                    else:
+                        verdicts.append(parsed)
+            except TimeoutError:
+                pass
             for i in range(0, audio.size, frame):
                 ws.send(audio[i : i + frame].tobytes())
                 try:
@@ -396,6 +409,11 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
         "handshake accepted (no close 1003) + verdicts returned",
         len(verdicts) > 0,
         f"verdicts={len(verdicts)} over 6.0s stream",
+    )
+    checks.record(
+        "session_ack echoes resolved session_id before verdicts",
+        ack.get("type") == "session_ack" and ack.get("session_id") == "integration-check",
+        f"ack={ack}",
     )
     if not verdicts:
         return

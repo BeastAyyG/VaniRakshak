@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 def _env(name: str, default: str) -> str:
@@ -133,6 +134,18 @@ _REAL_BACKEND_OVERRIDES = {
 
 
 @dataclass(frozen=True)
+class AuditConfig:
+    # Durable JSONL path for the hash-chained audit log. Empty disables
+    # persistence (in-memory ring only). The default lives under the repo's
+    # data/ dir and is gitignored — it is a runtime artifact, not source.
+    path: str = _env(
+        "VR_AUDIT_PATH",
+        str(Path(__file__).resolve().parent.parent.parent / "data" / "audit_log.jsonl"),
+    )
+    max_events: int = _env_int("VR_AUDIT_MAX_EVENTS", 10_000)
+
+
+@dataclass(frozen=True)
 class ServerConfig:
     host: str = _env("VR_HOST", "127.0.0.1")
     port: int = _env_int("VR_PORT", 8000)
@@ -149,6 +162,7 @@ class Settings:
     risk: RiskConfig = field(default_factory=RiskConfig)
     fusion: FusionConfig = field(default_factory=FusionConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    audit: AuditConfig = field(default_factory=AuditConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")

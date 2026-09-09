@@ -64,6 +64,11 @@ def test_websocket_stream_e2e() -> None:
         # 1. Text handshake FIRST — the server closes with 1003 otherwise.
         ws.send_text(json.dumps(handshake))
 
+        # 1b. Handshake ack FIRST — carries the resolved session_id.
+        ack = ws.receive_json()
+        assert ack.get("type") == "session_ack", f"expected session_ack, got: {ack}"
+        assert ack.get("session_id") == "e2e-protocol-check", f"ack echoed wrong id: {ack}"
+
         # 2. Stream audio: 3 chunks (each 1.5s @ 16kHz = 4.5s > 4.04s window)
         chunk = pcm_chunk(1.5)
         for _ in range(3):

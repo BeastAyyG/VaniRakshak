@@ -14,29 +14,44 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, asdict
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 
 import numpy as np
 
 from .cm import CMModel
 from .asv import ASVModel
+
+if TYPE_CHECKING:  # only for the _default_cm union; runtime imports stay lazy
+    from .cm_wavlm import CMModelWavLM
+    from .cm_aasist import CMModelAASIST
 from .channel import detect as channel_detect
 from .prosody import prosody_score
 
 logger = logging.getLogger("vanirakshak.detectors.pipeline")
 
 
-def _default_cm() -> CMModel:
+def _default_cm() -> "CMModel | CMModelWavLM | CMModelAASIST":
     """VR_CM_BACKEND=wavlm swaps in real self-supervised features (cm_wavlm.py);
-    default `stub` keeps the zero-dependency numpy/scipy detector. Degrades to
-    the stub on any load failure — never raises past construction."""
-    if os.environ.get("VR_CM_BACKEND", "stub").lower() == "wavlm":
+    `aasist` selects the trained AASIST head (cm_aasist.py — returns None until
+    a checkpoint from docs/08-cm-training-plan.md is pointed at via
+    VR_CM_AASIST_WEIGHTS); default `stub` keeps the zero-dependency
+    numpy/scipy detector. Degrades to the stub on any load failure — never
+    raises past construction."""
+    backend = os.environ.get("VR_CM_BACKEND", "stub").lower()
+    if backend == "wavlm":
         from .cm_wavlm import CMModelWavLM
 
         inst = CMModelWavLM.try_create()
         if inst is not None:
             return inst
         logger.warning("VR_CM_BACKEND=wavlm requested but unavailable; using stub CM")
+    elif backend == "aasist":
+        from .cm_aasist import CMModelAASIST
+
+        inst = CMModelAASIST.try_create()
+        if inst is not None:
+            return inst
+        logger.warning("VR_CM_BACKEND=aasist requested but unavailable; using stub CM")
     return CMModel()
 
 
