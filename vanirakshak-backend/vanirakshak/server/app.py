@@ -12,6 +12,7 @@ Endpoints (see ``docs/07-privacy-compliance-and-apis.md``):
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -34,6 +35,7 @@ from ..privacy.audit import AuditLog
 from ..alerts import AlertDispatcher, build_alert_payload
 from ..detectors.pipeline import DetectionPipeline
 from ..anchor import load_anchor
+from ..semantic import SEMANTIC_SIGNAL
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +61,23 @@ PIPELINE = DetectionPipeline()
 # `vanirakshak/anchor.py` so the benchmark harness loads the same vector into
 # the same pipeline and the two report comparable numbers.
 ANCHOR_STATE: Dict[str, object] = load_anchor(PIPELINE)
+
+
+def _resolve_claimed_identity(raw: str) -> str:
+    """Fall back to the loaded anchor's user_id when the caller sends none.
+
+    `claimed_identity` defaults to `""` in the WS handshake, the `/analyze`
+    form field, and `SessionStartRequest` alike — so on the default path no
+    caller ever set it, and `DetectionPipeline.analyse()` skips ASV entirely
+    (`asv_score` stays a hardcoded 0.5, `asv_enrolled=False`). With exactly
+    one anchor enrolled today, defaulting an unset claim to that anchor's
+    user_id is the only way ASV runs out of the box. A caller that explicitly
+    names a *different* claimed identity is never overridden here.
+    """
+    if raw:
+        return raw
+    anchor_user_id = ANCHOR_STATE.get("user_id")
+    return str(anchor_user_id) if anchor_user_id else raw
 
 # Browser dashboard runs on a different origin (localhost:3001 by default).
 # Origins are configurable via VR_CORS_ORIGINS (comma-separated).
@@ -140,6 +159,11 @@ class EnrollResponse(BaseModel):
     created_at: str
 
 
+class EnrolledSpeakersResponse(BaseModel):
+    enrolled: List[str]
+    asv_backend: str
+
+
 class AnalyzeResponse(BaseModel):
     status: str = "success"
     file_duration_sec: float
@@ -160,6 +184,7 @@ class AnalyzeResponse(BaseModel):
     windows: List[dict] = Field(default_factory=list)
     mean_acoustic_anomaly: Optional[float] = None
     max_acoustic_anomaly: Optional[float] = None
+    asv_evaluated: Optional[bool] = None
     mean_speaker_sim: Optional[float] = None
     mean_micro_tremor: Optional[float] = None
     mean_spectral_flatness: Optional[float] = None
@@ -173,6 +198,10 @@ class AnalyzeResponse(BaseModel):
     # an honest IDENTITY check — "is this the enrolled voice?" — never as a
     # clone/synthetic verdict. None when the checkpoint or torch is absent.
     target_speaker: Optional[dict] = None
+
+    # Parallel ASR + scam-keyword context signal (vanirakshak/semantic/).
+    # Advisory only — see the `semantic` field in docs/PROTOCOL.md.
+    semantic: Optional[dict] = None
 
 
 class SessionStartRequest(BaseModel):
@@ -205,9 +234,14 @@ def health() -> dict:
             "device_name": "CPU (Acoustic Forensic Core)",
         },
         "models": {
-            "wavlm_model": "AASIST / ECAPA Forensic Pipeline",
+            # Honest label: no AASIST (trained anti-spoofing classifier) exists
+            # anywhere in this system — see cm_backend/asv_backend below for
+            # what's actually running (synthetic stub vs real WavLM/ECAPA-TDNN).
+            "wavlm_model": f"{PIPELINE.cm.name} / {PIPELINE.asv.name}",
             "vad_enabled": True,
             "zero_retention": True,
+            "cm_backend": PIPELINE.cm.name,
+            "asv_backend": PIPELINE.asv.name,
         },
         "anchor": {
             "user_id": ANCHOR_STATE.get("user_id"),
@@ -217,6 +251,17 @@ def health() -> dict:
             "error": ANCHOR_STATE.get("error"),
         },
     }
+
+
+@app.get("/v1/enroll", response_model=EnrolledSpeakersResponse)
+@app.get("/api/v1/enroll", response_model=EnrolledSpeakersResponse)
+def list_enrolled() -> EnrolledSpeakersResponse:
+    """Enrolled user_ids (family members / anchors) — lets the dashboard offer
+    a claimed-identity picker instead of a single hardcoded anchor."""
+    return EnrolledSpeakersResponse(
+        enrolled=PIPELINE.asv.enrolled_user_ids(),
+        asv_backend=PIPELINE.asv.name,
+    )
 
 
 @app.post("/v1/enroll", response_model=EnrollResponse)
@@ -265,7 +310,7 @@ async def analyze(
     sid = f"analyze-{uuid.uuid4().hex[:8]}"
     sess = CallSession(
         sid,
-        SessionContext(caller_id=caller_id, claimed_identity=claimed_identity),
+        SessionContext(caller_id=caller_id, claimed_identity=_resolve_claimed_identity(claimed_identity)),
         audit=AUDIT,
         pipeline=PIPELINE
     )
@@ -304,6 +349,7 @@ async def analyze(
 
         anomaly = float(np.clip(cr.p_spoof, 0.0, 1.0))
         asv_val = float(cr.metrics.get("asv_consistency", 0.5))
+        asv_evaluated_val = bool(cr.metrics.get("asv_evaluated", False))
         channel_val = float(cr.metrics.get("channel_anomaly", 0.1))
         prosody_val = float(cr.metrics.get("prosody_unnatural", 0.2))
 
@@ -316,7 +362,8 @@ async def analyze(
             "speech_ratio": 0.95,
             "acoustic_anomaly_score": round(anomaly, 4),
             "speaker_cosine_sim": round(asv_val, 4),
-            "speaker_match": bool(asv_val >= 0.5),
+            "speaker_evaluated": asv_evaluated_val,
+            "speaker_match": bool(asv_evaluated_val and asv_val >= 0.5),
             "micro_tremor_ratio": round(max(0.0, min(1.0, 1.0 - prosody_val)), 4),
             "spectral_flatness_mean": round(channel_val, 4),
             "high_band_flatness": round(channel_val, 4),
@@ -367,6 +414,15 @@ async def analyze(
             "reason": f"verifier error: {type(e).__name__}: {e}",
         }
 
+    # ---- parallel ASR + keyword scam-phrase signal (advisory) --------------
+    # Blocking network call (Groq) — run off the event loop thread. Degrades
+    # to available=False on any failure; never breaks the forensic report.
+    try:
+        pcm_int16_full = (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+        semantic = await asyncio.to_thread(SEMANTIC_SIGNAL.analyze_window, pcm_int16_full, sr)
+    except Exception as e:
+        semantic = {"available": False, "semantic_risk": 0.0, "reason": f"semantic signal error: {type(e).__name__}: {e}"}
+
     # Map tier to forensic verdict recognized by frontend.
     #
     # Speaker identity dominates the label: a clip whose voice does not match the
@@ -410,6 +466,7 @@ async def analyze(
             "codec_guess": last.metrics.get("codec_guess"),
             "cm_score": last.metrics.get("cm_score"),
             "asv_consistency": last.metrics.get("asv_consistency"),
+            "asv_evaluated": last.metrics.get("asv_evaluated", False),
             "channel_anomaly": last.metrics.get("channel_anomaly"),
             "prosody_unnatural": last.metrics.get("prosody_unnatural"),
         },
@@ -423,6 +480,7 @@ async def analyze(
         windows=windows,
         mean_acoustic_anomaly=mean_acoustic_anomaly,
         max_acoustic_anomaly=max_acoustic_anomaly,
+        asv_evaluated=bool(last.metrics.get("asv_evaluated", False)),
         mean_speaker_sim=mean_speaker_sim,
         mean_micro_tremor=mean_micro_tremor,
         mean_spectral_flatness=mean_spectral_flatness,
@@ -432,6 +490,7 @@ async def analyze(
         detected_boundary_timestamps=boundary_timestamps,
         dpdp_compliance=dpdp,
         target_speaker=target_speaker,
+        semantic=semantic,
     )
 
 
@@ -503,7 +562,7 @@ def start_session(req: SessionStartRequest) -> dict:
         sid,
         SessionContext(
             caller_id=req.caller_id,
-            claimed_identity=req.claimed_identity,
+            claimed_identity=_resolve_claimed_identity(req.claimed_identity),
             transaction_value_inr=req.transaction_value_inr,
             origin_country=req.origin_country,
             prior_fraud_score=req.prior_fraud_score,
@@ -551,7 +610,7 @@ async def stream_endpoint(ws: WebSocket) -> None:
     sr = int(handshake.get("sample_rate", 16000))
     ctx = SessionContext(
         caller_id=str(handshake.get("caller_id", "")),
-        claimed_identity=str(handshake.get("claimed_identity", "")),
+        claimed_identity=_resolve_claimed_identity(str(handshake.get("claimed_identity", ""))),
         transaction_value_inr=float(handshake.get("transaction_value_inr", 0.0)),
         origin_country=str(handshake.get("origin_country", "IN")),
         prior_fraud_score=float(handshake.get("prior_fraud_score", 0.0)),
@@ -584,12 +643,32 @@ async def stream_endpoint(ws: WebSocket) -> None:
                     "interlock_active": result.interlock_active,
                     "receipt_hash": result.receipt_hash,
                     "challenge": result.challenge,
+                    "semantic": result.semantic,
                 })
+
+                # Parallel semantic (ASR + keyword) pass on this window's raw
+                # audio — fire-and-forget in a worker thread so a slow/absent
+                # Groq call never blocks the acoustic verdict stream. Its
+                # result lands on the *next* window via sess.update_semantic;
+                # see vanirakshak/semantic/signal.py and session.py.
+                pending = sess.pop_pending_window()
+                if pending is not None:
+                    window_pcm, window_sr = pending
+
+                    async def _run_semantic(sess=sess, window_pcm=window_pcm, window_sr=window_sr) -> None:
+                        try:
+                            semantic_result = await asyncio.to_thread(
+                                SEMANTIC_SIGNAL.analyze_window, window_pcm, window_sr
+                            )
+                            sess.update_semantic(semantic_result)
+                        except Exception:
+                            pass  # advisory signal only — never disrupt the session
+
+                    asyncio.create_task(_run_semantic())
 
                 # Server-side alerting on challenge / block. Best-effort:
                 # a delivery failure must not break the stream.
                 if result.trigger_challenge or result.interlock_active:
-                    import asyncio
                     await asyncio.to_thread(
                         ALERTS.dispatch,
                         build_alert_payload(
