@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VaniRakshak</string>
+    <string name="app_name">VaniRakshak Kavach</string>
     <string name="app_tagline">AI Voice-Clone Impersonation Shield</string>
     <string name="app_sih_code">SIH26104 • AICTE Cyber Security</string>
     
@@ -21,7 +21,7 @@
     <string name="status_not_enrolled">⚠️ Voice Not Enrolled</string>
     
     <!-- Call Screen -->
-    <string name="live_call_header">VaniRakshak Real-Time Voice Guard</string>
+    <string name="live_call_header">VaniRakshak Kavach — Real-Time Voice Guard</string>
     <string name="call_state_ongoing">Call in Progress • Audio Ingesting (16kHz)</string>
     <string name="risk_score_label">CALIBRATED CLONE RISK SCORE</string>
     

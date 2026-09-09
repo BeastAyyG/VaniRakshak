@@ -179,10 +179,14 @@ hard way:
   (`vanirakshak/detectors/voice.py`) — honest signal-energy heuristics, not
   a trained VAD, so treat them as indicative, not ground truth.
 - **The impostor label and the impostor interlock use different
-  thresholds.** `/analyze`'s `IMPOSTOR_SPEAKER` verdict label fires below
-  `mean_speaker_sim < 0.40`; the actual `BLOCK` override
-  (`VR_IMPOSTOR_BLOCK_BELOW`) fires below `0.10`. A clip can be *labelled*
-  `IMPOSTOR_SPEAKER` while its *tier* is only `CHALLENGE`.
+  thresholds (decided).** `/analyze`'s `IMPOSTOR_SPEAKER` verdict label fires below
+  `mean_speaker_sim < 0.40` (report-level identity: "not the enrolled voice");
+  the actual `BLOCK` override (`VR_IMPOSTOR_BLOCK_BELOW`, default `0.10` in
+  `vanirakshak/config.py`, enforced in `risk/fusion.py`) fires only on decisive
+  mismatch. A clip in `[0.10, 0.40)` is therefore *labelled* `IMPOSTOR_SPEAKER`
+  while its *tier* stays `CHALLENGE` — label states identity, tier states
+  interlock action. Kept split deliberately; do not "fix" by aligning the
+  numbers without a product decision.
 - **The audit chain persists to JSONL.** Every event is appended to
   `VR_AUDIT_PATH` (default `data/audit_log.jsonl`, gitignored) and the chain
   is reloaded and re-verified on restart; empty `VR_AUDIT_PATH` opts back
@@ -197,3 +201,15 @@ hard way:
   decoded audio (`decodeAudioData`); the sine fallback shows while decoding
   or for unfetchable (no-CORS) sources. Colors and boundary markers were
   always data-driven.
+- **Standalone prototypes are a different product from the acoustic
+  pipeline above, and none is wired into it.** `vanirakshak_sotto/` —
+  **VaniRakshak SACH** — is now verified working end-to-end (Groq Whisper +
+  Gemini threat detection + Crawl4AI web grounding + Gemini fact
+  verification, `GEMINI_API_KEY` set, `google-genai`/`crawl4ai` installed;
+  run with `cd vanirakshak_sotto && python server.py`, port 8082).
+  `vanirakshak_indic_conformer/` and `ayush_agnihotri/` remain
+  banner-flagged only, never audited or fixed — `indic_conformer/server.py`
+  still has the broken `from google import genai` import SACH's server.py
+  had until this pass. None of the three is wired into the live pipeline,
+  backend, web frontend, or phone-app call flow — cosmetic/documentation
+  correctness for those two, not a running-system gap.

@@ -1,12 +1,16 @@
 # VaniRakshak — Architecture Overview
 
 > Three clients exist: the Next.js web console (below, the fully-wired
-> reference implementation), a native Android call-guard client
-> (`vanirakshak-android/`, see its own `DESIGN.md` — real, working, but with
-> its own separate on-device heuristics not shown here), and two standalone
-> fact-checking prototypes (`vanirakshak_sotto/`, `vanirakshak_indic_conformer/`)
-> that are real code but not currently runnable (missing dependencies, no API
-> key) or wired to anything. This document covers the web console + backend.
+> reference implementation), **VaniRakshak Kavach** — a native Android
+> call-guard client (`vanirakshak-android/`, see its own `DESIGN.md` — real,
+> working, but with its own separate on-device heuristics not shown here) —
+> and a standalone fact-checking prototype, **VaniRakshak SACH**
+> (`vanirakshak_sotto/`), a working Groq Whisper + Gemini + Crawl4AI voice
+> transcription and claim-verification server (port 8082) once
+> `GEMINI_API_KEY` is set — not wired into the acoustic pipeline above.
+> `vanirakshak_indic_conformer/` remains a second, unrelated fact-checking
+> prototype, not currently runnable. This document covers the web console +
+> backend.
 
 ## System Components
 

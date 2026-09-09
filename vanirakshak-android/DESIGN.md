@@ -1,4 +1,4 @@
-# VaniRakshak Android — Design & Architecture
+# VaniRakshak Kavach (Android) — Design & Architecture
 
 > Replaces a stray "Pinterest design-system analysis" that was previously
 > committed under this filename and had nothing to do with VaniRakshak.

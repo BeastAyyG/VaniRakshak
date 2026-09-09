@@ -158,11 +158,14 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
 ├── backend/              # RETIRED standalone server; keeps only shared model-loading
 │                         # modules (real ECAPA/WavLM) + the ASR stack, both imported by
 │                         # vanirakshak-backend — see backend/README.md
-├── vanirakshak-android/  # native call-guard client (real APK) — own on-device heuristics,
-│                         # dev-only backend link (adb reverse) — see its DESIGN.md
-├── vanirakshak_sotto/            # standalone fact-check prototype (Groq + Gemini + Crawl4AI
-├── vanirakshak_indic_conformer/  # live web verification) — real code, NOT currently runnable
-│                                 # (missing deps, no API key, unwired) — see docs/archive/AUDIT_REPORT.md §12
+├── vanirakshak-android/  # VaniRakshak Kavach — native call-guard client (real APK), keyword-
+│                         # gated WS streaming client + own on-device heuristics — see its DESIGN.md
+├── vanirakshak_sotto/            # VaniRakshak SACH — standalone fact-check server (Groq + Gemini
+│                                 # + Crawl4AI live web verification), working end-to-end given
+│                                 # GEMINI_API_KEY — see its own server.py; port 8082
+├── vanirakshak_indic_conformer/  # a second, unrelated fact-check prototype — real code, NOT
+│                                 # currently runnable (missing deps, no API key, unwired) — see
+│                                 # docs/archive/AUDIT_REPORT.md §12
 └── vanirakshak-backend/  # Python FastAPI forensic service
     ├── tests/
     │   └── test_stream_e2e.py  # protocol conformance test

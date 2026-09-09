@@ -1,4 +1,4 @@
-# VaniRakshak — Android call-guard client
+# VaniRakshak Kavach — Android call-guard client
 
 On-device half of the VaniRakshak system. It owns the microphone during a live
 call and enforces the autonomous interlock on the handset. See `DESIGN.md` for
