@@ -4,14 +4,25 @@
 
 VaniRakshak listens to a live audio stream, scores it for synthetic/manipulated speech, and drives a risk decision (`ALLOW` → `CHALLENGE` → `BLOCK`) that can lock a transaction mid-call and fire alerts.
 
-> **Read this before quoting any number.** The trained checkpoint in `ml/checkpoints/` is
-> fine-tuned for **one enrolled identity only — Narendra Modi** (`data/anchor_speaker_profile.json`,
+> **Read this before quoting any number.** The trained checkpoint in `ml/checkpoints/` (`best_model.pt`) is
+> fine-tuned for **one enrolled identity only — Narendra Modi** (`data/anchor_speaker_std/`,
 > `user_id: narendra_modi`), represented by 8 recordings. It answers "is this that one person?",
 > **not** "is this audio synthetic?". It was trained against a single non-target speaker
 > (45 clips cut from one recording) and its training set contains **zero** cloned or synthetic
 > voices, so it has never seen the thing it is marketed as detecting. It is not a general
 > voice-clone detector and its headline `100%` accuracy says nothing about other speakers.
-> See [`ml/README.md`](ml/README.md) for the measured figures and why they do not generalise.
+> **A file that used to sit next to it, `countermeasure_cm.pt`, was byte-identical to this one —
+> there was never a trained countermeasure, only this identity model under a second name.** It
+> has been deleted; a real countermeasure-training path now exists
+> (`ml/dataset.py::ASVspoofDataset`, needs a real ASVspoof corpus, not yet trained).
+> See [`ml/README.md`](ml/README.md) and [`docs/archive/AUDIT_REPORT.md`](docs/archive/AUDIT_REPORT.md) §12.1 for the
+> measured figures and why they do not generalise.
+>
+> **Separately, real speaker verification now exists as an opt-in backend**: `VR_ASV_BACKEND=ecapa`
+> swaps the stub ASV for real speechbrain ECAPA-TDNN embeddings, with measured
+> anchor-vs-impostor separation of 0.845 vs 0.199 (zero overlap) — see `docs/archive/AUDIT_REPORT.md` §12.
+> This is a different, more general mechanism than the `ml/` checkpoint above and is what makes
+> enrolling more than one family member (`POST/GET /v1/enroll`) a real biometric claim.
 
 ## Purpose & Vision
 
@@ -102,7 +113,7 @@ flowchart LR
     H --> I{"ALLOW, CHALLENGE<br/>or BLOCK"}
 ```
 
-> **Architecture Diagrams:** Detailed interactive flowcharts are available in [docs/FLOWCHARTS_CORRECTED.md](docs/FLOWCHARTS_CORRECTED.md) and viewable in your browser at [docs/flowcharts.html](docs/flowcharts.html).
+> **Architecture Diagrams:** Detailed interactive flowcharts are available in [docs/FLOWCHARTS_CORRECTED.md](docs/FLOWCHARTS_CORRECTED.md) and viewable in your browser at [docs/flowcharts.html](docs/flowcharts.html). The diagram above and that doc both show the **default** stub CM/ASV; `VR_CM_BACKEND=wavlm` / `VR_ASV_BACKEND=ecapa` swap in real pretrained models — see the "Notes" section below and `docs/02-technical-strategy-and-architecture.md`'s Production Upgrade Path table. Not shown above: a parallel, advisory ASR/keyword/claim-verification layer (`vanirakshak/semantic/`) that contributes one small term to the fusion — see `docs/PROTOCOL.md` §3.1.
 
 | Risk score | Label | Action |
 |---|---|---|
@@ -139,11 +150,17 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
 │           ├── WaveformEvidenceTimeline.tsx # sliding-window waveform & boundary inspector
 │           ├── DemoQuickSelector.tsx        # standardized forensic benchmark selector
 │           └── AudioUploadZone.tsx          # custom audio drag-and-drop ingestion
-├── ml/                   # 40-dim MFCC target-speaker model; shipped weights cover ONE identity (Modi)
+├── ml/                   # 40-dim MFCC identity model (Modi-only) + real ASVspoof CM training path
 ├── benchmarks/
 ├── data/
-├── backend/              # (legacy)
-├── enroll_target.py
+├── backend/              # RETIRED standalone server; keeps only shared model-loading
+│                         # modules (real ECAPA/WavLM) + the ASR stack, both imported by
+│                         # vanirakshak-backend — see backend/README.md
+├── vanirakshak-android/  # native call-guard client (real APK) — own on-device heuristics,
+│                         # dev-only backend link (adb reverse) — see its DESIGN.md
+├── vanirakshak_sotto/            # standalone fact-check prototype (Groq + Gemini + Crawl4AI
+├── vanirakshak_indic_conformer/  # live web verification) — real code, NOT currently runnable
+│                                 # (missing deps, no API key, unwired) — see docs/archive/AUDIT_REPORT.md §12
 └── vanirakshak-backend/  # Python FastAPI forensic service
     ├── tests/
     │   └── test_stream_e2e.py  # protocol conformance test
@@ -152,6 +169,8 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
         ├── session.py          # per-call state, interlock, challenges
         ├── risk/fusion.py      # calibrated Bayesian risk fusion
         ├── detectors/          # asv, channel, cm (spoof), prosody, pipeline
+        │                       # (+ asv_ecapa.py / cm_wavlm.py — optional real backends)
+        ├── semantic/           # parallel ASR (Groq Whisper) + keyword + claim verification
         ├── challenge/engine.py # dynamic phrase generation + grading
         ├── alerts/             # server-side alert dispatch (webhook)
         └── privacy/            # DPDP-style audit log
@@ -177,7 +196,7 @@ python scripts/integration_check.py --live    # or against a running server
 ```
 
 Full integration status, fixed defects and honest limitations:
-[`INTEGRATION_REPORT.md`](INTEGRATION_REPORT.md).
+[`docs/archive/INTEGRATION_REPORT.md`](docs/archive/INTEGRATION_REPORT.md).
 
 Or run the two halves in separate terminals:
 
@@ -272,12 +291,30 @@ deliberately never triggers a retry.
 
 ## Notes
 
-**The detectors are synthetic stubs.** Per the backend README, `vanirakshak-backend`
-ships *deterministic synthetic "honest stub" models* so the full pipeline — fusion,
+**The detectors default to synthetic stubs.** `vanirakshak-backend` ships
+*deterministic synthetic "honest stub" models* so the full pipeline — fusion,
 challenge engine, privacy layer, WebSocket streaming — runs on any laptop with no GPU
-and no pretrained weights. Real AASIST / ECAPA-TDNN checkpoints can be dropped in later
-by replacing two files in `vanirakshak/detectors/`. Scores are therefore **not** yet
-real detections.
+and no pretrained weights. **Real backends now exist as an opt-in**, not just a
+"drop in later" placeholder: `VR_ASV_BACKEND=ecapa` (real speechbrain ECAPA-TDNN,
+measured 0.845 vs 0.199 anchor/impostor separation) and `VR_CM_BACKEND=wavlm` (real
+WavLM self-supervised features — still a heuristic decision on top, not a trained
+classifier). No trained anti-spoofing classifier (AASIST or otherwise) exists
+anywhere in this repo or fetchable without a labeled spoof corpus — see
+[`docs/archive/AUDIT_REPORT.md`](docs/archive/AUDIT_REPORT.md) §12 for what's real, what's still heuristic,
+and the honest partial fusion-recalibration result (2/4 demo clips match their
+expected tier with real backends active).
+
+**A parallel semantic layer exists** (`vanirakshak/semantic/`): Groq Whisper
+transcribes each window, a keyword scorer flags scam vocabulary, and a rule-based
+claim verifier checks for demands that contradict published policy (e.g. "no bank
+ever asks for an OTP"), each citing the authority it contradicts. Advisory only —
+a small additive term in the fusion, never the primary evidence. See
+[`docs/PROTOCOL.md`](docs/PROTOCOL.md) §3.1.
+
+**Multi-speaker enrollment is real**: `GET/POST /v1/enroll` supports any number of
+enrolled `user_id`s (not one hardcoded anchor), surfaced in the dashboard via
+`EnrolledSpeakersPanel.tsx`. With the stub ASV backend the "voiceprint" is a random
+projection; `VR_ASV_BACKEND=ecapa` makes it a real biometric.
 
 Status of pipeline components:
 

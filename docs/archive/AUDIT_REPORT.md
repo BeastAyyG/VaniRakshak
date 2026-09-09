@@ -1,3 +1,15 @@
+> **ARCHIVED 2026-09-09.** This audit's §0/§5/§7/§9 analyze `backend/app/core/`,
+> `backend/app/main.py`, and `backend/app/engine/` — all deleted when the
+> standalone `backend/` server was retired (see `backend/README.md` and this
+> repo's commit history). Its own §12 records that deletion, so the file is
+> internally contradictory as a current description of the system: read §12
+> ("Remediation applied") as the part that held up, and treat §0/§5/§7/§9 as
+> a historical snapshot of a tree that no longer exists. For the system as it
+> is today, see `docs/PROTOCOL.md`, `docs/API_SPEC.md`, and
+> `docs/ARCHITECTURE.md`. Kept for the audit methodology and the honest
+> measurements it made at the time, not as a current statement of what's
+> built.
+
 # VaniRakshak — Audit: What Is Built vs What Is Claimed
 
 **Audited:** 2026-09-08 · branch `workbuddy/main-df6431a9` (`1d4a8e4`) vs `origin/main` (`d77623a`)
@@ -355,6 +367,210 @@ So the frontend is *not* a source of risk here; the problems are all in measurem
 process items (not rebased, non-conforming branch name) are moot for this branch and should be
 fixed on whatever branch carries the *next* real change. The substantive findings (§1–§10) all
 apply to `main` as it stands today.
+
+---
+
+## §12 — Real ECAPA-TDNN / WavLM backends added; recalibration is partial, not complete
+
+Directly addresses §5's "risk spread 1.8 points" finding and §9's duplicate-`backend/` finding.
+Optional real-model detector backends were added behind `VR_ASV_BACKEND=ecapa` /
+`VR_CM_BACKEND=wavlm` (default remains the zero-dependency stub — nothing changes unless these
+are explicitly set). Status, measured, not asserted:
+
+**What's real:**
+- `detectors/asv_ecapa.py` wraps `speechbrain/spkrec-ecapa-voxceleb` (imported from
+  `backend/app/models/ecapa_verifier.py`, the only genuinely-working piece of the old duplicate
+  `backend/` service — the rest of that service, including its incompatible `WINDOW_ANALYSIS` WS
+  protocol, has been deleted; see `backend/README.md`). Anchor re-enrolled with it
+  (`scripts/enroll_anchor.py --backend ecapa`): real anchor-clip vs. other-speaker separation is
+  **0.845 mean vs. 0.199 mean, zero overlap** (worst anchor clip 0.782 vs. best impostor 0.328) —
+  contrast the stub's own separation check, always ~0.98–0.99 for everyone (§5's root cause).
+- `detectors/cm_wavlm.py` wraps `backend/app/models/wavlm_detector.py`'s real
+  `microsoft/wavlm-base-plus` feature extraction. This is a real self-supervised speech model —
+  but the spoof/genuine decision on top of it (`uniformity_penalty` / `latent_collapse_penalty`)
+  is still a hand-tuned heuristic, not a trained classifier. **No AASIST or any other trained
+  anti-spoofing classifier weights exist anywhere in this repo, or anywhere fetchable without a
+  labeled spoof-detection training corpus this project does not have.** Every place that could
+  imply otherwise (`/api/v1/health`'s `wavlm_model` string, code comments) has been corrected to
+  name the actual backend (`synthetic_cm_v1` / `wavlm_heuristic_v1`) instead of "AASIST".
+
+**Recalibration — honest partial result, documented in `config.py`'s `_REAL_BACKEND_OVERRIDES`:**
+`scripts/fit_fusion_weights.py` fits fusion weights against measured score distributions (real
+synthetic genuine/spoof clips for CM, real anchor/other-speaker recordings for ASV) instead of
+the hand-picked defaults. Two findings from that exercise, both left as open problems rather than
+papered over:
+1. With <200 samples that separate almost perfectly, the unregularized fit diverges toward
+   implausible weights (observed: `w_cm` up to 99, `w_asv` up to 14 depending on L2 strength) —
+   there is no data-driven way to pick "the" regularization strength at this sample size. The
+   deployed weights (`w_cm=1.5`, `w_asv=2.0`) are a conservative judgment call, not the raw fit.
+2. `w_prosody`'s fitted sign flips **negative** at every regularization strength tried, because
+   the real anchor recordings (formal speeches) and other-speaker recordings (casual audio) differ
+   systematically in prosody for reasons unrelated to genuine-vs-spoofed — a recording-condition
+   confound, not a real signal. `w_prosody`/`w_channel` were left at their stub-era values rather
+   than encode that confound.
+
+**Measured result** (`scripts/integration_check.py`'s tier-match gate, real backends active,
+`data/demo/ground_truth.json`'s `expected_tier`): **2 of 4 pass** — the unambiguous cases
+(`demo_01` genuine → ALLOW, `demo_04` impostor → BLOCK) pass; `demo_02` (degraded copy) and
+`demo_03` (splice) land one tier hotter than their hand-labeled expectation. Plausible reading:
+a real anomaly-sensitive detector reacting somewhat to real distortion/splice artifacts is not
+obviously wrong, but it is not validated against real labeled data either — there is no corpus
+in this repo of real genuine-vs-cloned recordings of the same speaker to calibrate against, and
+assembling one is the actual prerequisite for closing this gap further. Do not quote "2/4" or
+"4/4" as a detection-accuracy figure in either direction; both are informational.
+
+### §12.3 — The Android app: real, working, and previously under-documented
+
+The user pointed out this session missed a real piece of the system: a
+compiled Android app (`vanirakshak-android/VaniRakshak_app-debug.apk` exists
+on disk) that already implements most of the live-call flow described at the
+start of this session — keyword trigger → speaker verify → coercion response —
+independently of the Next.js web console and the Python backend's own
+detectors. Read in full; here is what is real and what isn't.
+
+**Real and working:**
+- `audio/VaniKeywordTrigger.kt` — genuine on-device `SpeechRecognizer` listening
+  for banking/transaction keywords (bank, OTP, rupee/rupaya, payment, +Hindi),
+  opt-in (shares the mic with the live analyzer, so only one runs at a time),
+  fires a callback that triggers speaker verification. This is the literal
+  "keyword extractor while the call" the user described at the start of this
+  session — it already existed, on-device, before this session began.
+- `shield/VaniScamShieldController.kt` + `VaniCoercionOverlay.kt` +
+  `VaniOtpShieldService.kt` — a genuinely strong, complete mechanism: detects
+  when the user opens a banking/UPI app (12 packages matched: GPay, PhonePe,
+  Paytm, BHIM, CRED, 5 bank apps) while a call is flagged high-risk, throws a
+  full-screen `SYSTEM_ALERT_WINDOW` warning overlay (falling back to an
+  activity if that permission is absent), and suppresses banking/OTP
+  notifications from appearing on screen during the call via
+  `NotificationListenerService` — preventing a scammer from verbally
+  extracting an OTP they can see the victim just received. This does not
+  depend on any ML detector being right; it's a structural intervention and
+  arguably the most production-ready code in the whole repository.
+- `service/VaniCallScreeningService.kt` — proper Android 7+ telecom
+  integration, correctly never rejects/silences calls (observes and reports
+  only), correct API-level guards for `setSilenceCall`/`getCallDirection`.
+- `audio/VaniSpeakerVerifier.kt` — calls the real, same `/v1/verify-speaker`
+  endpoint documented elsewhere in this report, and its docstring states the
+  identity-only scope **more honestly than most of the rest of this codebase
+  did before this session**: "HONEST SCOPE: ... NOT 'is this a synthetic/clone
+  voice?'... has never seen cloned audio."
+
+**Real, but a duplicate honesty gap:**
+- `audio/VaniLiveVoiceAnalyzer.kt` runs its own independent on-device
+  "clone detector" — hand-tuned Kotlin thresholds on ZCR variance
+  (`isAbnormalZcr`), energy-plateau flatness (`isFlatPlateau`), and spectral
+  diff ratio (`isSpectralArtifact`), producing a `rollingSyntheticScore` and
+  status strings like *"neural voice clone confirmed"*. This is the same
+  category of problem as the Python `cm.py` stub — a plausible-sounding
+  heuristic never validated against real synthetic/cloned audio — but it is a
+  **second, separate implementation** that shares no code, weights, or
+  calibration with the Python backend's CM detectors. The app can show
+  "neural voice clone confirmed" from this local heuristic while the backend's
+  own detector, given the same audio, would say something else. Nothing
+  reconciles the two.
+- The README claimed *"does not compute forensics locally"* — directly
+  contradicted by the above. Corrected in `vanirakshak-android/README.md`.
+
+**Structural limitation, not a bug:** the app reaches the backend via
+`adb reverse tcp:8000 tcp:8000` — a USB-tethered ADB port bridge to a
+developer's machine. This is explicitly a development harness, not a
+deployable client-server path; there is no code here for calling a real
+hosted backend URL. Shipping this to a real user's phone would mean the one
+backend-dependent feature (`/v1/verify-speaker`) simply fails closed.
+
+### §12.1 — `countermeasure_cm.pt` was an identity model wearing a countermeasure's name
+
+Found while auditing whether a trained CM existed. `ml/checkpoints/countermeasure_cm.pt` and
+`ml/checkpoints/best_model.pt` were **byte-identical** (verified by tensor comparison across all
+33 state-dict keys). `train.py` saved the same weights to both filenames on every run:
+
+```python
+ckpt_path = checkpoint_dir / "countermeasure_cm.pt"
+torch.save(model.state_dict(), ckpt_path)
+# Also save best_model.pt alias
+torch.save(model.state_dict(), checkpoint_dir / "best_model.pt")
+```
+
+Both were the 40-dim MFCC **speaker-identity** model (Modi vs. one other speaker, zero cloned
+audio). So the repo appeared to contain a trained anti-spoofing countermeasure, and
+`thresholds.json`'s `EER 0.00% / minDCF 0.0000` read as clone-detection performance. Neither
+was true. This is the single most consequential finding in this report for the product claim,
+because "if Modi asks for money, is it a clone?" is exactly the question this file appeared to
+answer and could not.
+
+Fixed:
+- `countermeasure_cm.pt` deleted; `train.py` now writes exactly one checkpoint per run, named
+  for the task it trained (`best_model.pt` or `countermeasure_asvspoof.pt`).
+- `thresholds.json` gained `task` / `task_note` / `metrics_caveat` fields, so a bare EER can no
+  longer be read without the task it was measured on.
+- **Real CM training path added**: `ml/dataset.py::ASVspoofDataset` loads genuine ASVspoof
+  2019 LA / 2021 / 5 corpora (protocol + flac/wav, MFCC-40 matching the serving path,
+  telephony augmentation applied), wired to `train.py --asvspoof-protocol/--asvspoof-audio-dir`.
+  Verified end-to-end on a staged 4-utterance mini-corpus: parses protocol, skips missing audio
+  with a warning, yields correct `(300, 40)` tensors and `[1,0,1,0]` labels, trains, and writes
+  `countermeasure_asvspoof.pt` + `thresholds_asvspoof.json` without touching `best_model.pt`.
+  It honestly reported `EER 50.00%` on that degenerate 3-sample split rather than a fake 0.00%.
+- Pre-existing crash fixed en route: `AcousticForensicClassifier.fc_embed`'s `BatchNorm1d`
+  raises on a trailing batch of size 1, so any dataset with `len % batch_size == 1` died
+  mid-epoch. `train.py` now drops the ragged tail batch (`_drop_last`).
+- UI: the verdict card's `MATCH — enrolled voice` badge became `IDENTITY MATCH — not a clone
+  check`, with copy stating that a good clone of the enrolled voice would also score MATCH.
+
+Still open: no countermeasure is trained, because that needs the ASVspoof corpus downloaded.
+The path is now built and tested; the data is the remaining input.
+
+**Environment note:** `librosa`/`soundfile` are now installed, so the trained identity model
+actually loads and scores (`label=modi_ji, p_target=0.9913`) instead of reporting
+`available: false` — limitation #4 in `INTEGRATION_REPORT.md` §5 is resolved. This pulled numpy
+to 2.5.3, so `vanirakshak-backend/requirements.txt` no longer hard-pins `numpy==1.26.4`
+(verified 13/13 on both 1.26.4 and 2.5.3).
+
+### §12.2 — Claim verification added (distinct from keyword matching)
+
+The transcript layer previously did one thing: match scam *vocabulary*
+(`semantic/keywords.py`). That is a bag-of-words signal and produces a real
+false-positive class — *"I received an OTP from the bank earlier today"* scores
+`keyword_risk` **0.75** despite containing no demand.
+
+`semantic/claims.py` adds a second, independent reading: does the caller
+**demand something that contradicts published policy**? 11 rules, each firing
+only when *all* required term groups co-occur, and each carrying the specific
+rule broken plus the authority that published it. On that same benign sentence
+it scores **0.00** — no demand, no contradiction.
+
+Measured on real audio, not synthetic fixtures:
+
+| Input | keyword_risk | claim_risk | rule fired |
+|---|---|---|---|
+| `test_audio/sample_60s_scam.wav` (real robocall, via Groq ASR) | 0.30 | **0.75** | `kyc_same_day_blocking_threat` |
+| "I received an OTP from the bank earlier" | 0.75 | **0.00** | none (correct) |
+| "share your OTP with me right now" | 0.95 | **0.95** | `otp_request` |
+| "beta khana kha liya" (family call) | 0.00 | **0.00** | none |
+
+`semantic_risk` (the value fused into the acoustic risk score) is now
+`max(keyword_risk, claim_risk)` — not a sum. One categorical contradiction is
+decisive on its own; summing would let stacked weak vocabulary outweigh it.
+
+**Robustness bug found only by running real audio.** Groq Whisper transcribed
+"KYC" in a Hindi sample as `के YC` ("ke YC"). Every exact-match rule on `kyc`
+missed it — the keyword scorer only fired at all because "expire" happened to be
+in its term list. `normalize_transcript()` now repairs ASR-split acronyms
+(`ke yc`/`k y c` → `kyc`, `o t p` → `otp`, and similar for cvv/upi/cbi/rbi/sbi)
+before matching, shared by both modules. Verified it does not create false
+positives (e.g. "kayak c trip" stays silent).
+
+**Scope, held honestly:** this is rule-based verification against a curated
+knowledge base, **not** open-ended fact-checking. It cannot verify case-specific
+assertions ("your balance is ₹5,000", "I'm from the Andheri branch") — those need
+live data this system does not have. It verifies the categorical class of claim
+that scam scripts structurally depend on, where the contradiction holds
+regardless of caller or account. The UI and `docs/PROTOCOL.md` §3.1 both say so.
+
+**Multi-speaker enrollment** (`GET /v1/enroll`, `EnrolledSpeakersPanel.tsx`) now reaches real
+biometrics: `POST /v1/enroll` was already generic per-`user_id` (§9 did not flag this as broken),
+it just had no UI. With `VR_ASV_BACKEND=ecapa` active, a second enrolled voice is a real
+voiceprint, not a random projection — this is what makes "add a family member" a genuine claim
+rather than a UI mockup.
 
 ---
 

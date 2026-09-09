@@ -150,6 +150,17 @@ $$P(\text{spoof} \mid \mathbf{x}) = \sigma(z) = \frac{1}{1 + e^{-z}}$$
 - ASV verification weight ($w_{\text{asv}}$ / `VR_FUSION_W_ASV`): $1.60$
 - Prosody weight ($w_{\text{prosody}}$ / `VR_FUSION_W_PROSODY`): $0.70$
 - Channel anomaly weight ($w_{\text{channel}}$ / `VR_FUSION_W_CHANNEL`): $0.90$
+
+These apply to the default zero-dependency stub detectors and were hand-picked, not fit to any
+measured distribution — `scripts/fit_fusion_weights.py` says so in its own header. When real
+detector backends are active (`VR_ASV_BACKEND=ecapa`, `VR_CM_BACKEND=wavlm` — see the Production
+Upgrade Path table below), `config.py`'s `_REAL_BACKEND_OVERRIDES` auto-applies $w_{\text{cm}}=1.5$,
+$w_{\text{asv}}=2.0$, refit against measured real/synthetic score distributions via that script.
+$w_{\text{prosody}}$ and $w_{\text{channel}}$ are deliberately left unchanged even then — the
+fitting exercise found those two features confounded with recording-source differences unrelated
+to genuine-vs-spoofed in the available calibration data, not a signal worth encoding. Full
+methodology, the regularization-strength sensitivity found, and the honest partial result (2/4
+demo clips match their expected tier with real backends active) are in `archive/AUDIT_REPORT.md` §12.
 - Context risk weight ($w_{\text{context}}$ / `VR_FUSION_W_CONTEXT`): $0.50$
 
 The raw window risk score is scaled to the standard percentage range:
@@ -216,8 +227,8 @@ To ensure technical integrity and honest engineering reporting, the following ta
 
 | Component | Current Implementation in Codebase | Production Upgrade Path (Drop-in Ready) |
 |---|---|---|
-| **Countermeasure (CM)** | Deterministic spectral Welch PSD feature extraction, pitch zero-crossing CV, and linear log-likelihood scoring (`vanirakshak.detectors.cm.CMModel`). | PyTorch AASIST / AASIST-L graph trained on ASVspoof 5. Drops directly into `CMModel.score(x, sr)` preserving the exact LLR return contract. |
-| **Speaker Verification (ASV)** | 192-dim deterministic random projection from standardized log-mel spectral energy (`vanirakshak.detectors.asv.ASVModel`). | SpeechBrain pretrained `ECAPA-TDNN` (192-dim) or Microsoft `WavLM-base-plus` feature extractor. Drops directly into `ASVModel.embed(x, sr)`. |
+| **Countermeasure (CM)** | Default: deterministic spectral Welch PSD feature extraction, pitch zero-crossing CV, and linear log-likelihood scoring (`vanirakshak.detectors.cm.CMModel`). | **Partially implemented.** `VR_CM_BACKEND=wavlm` → `detectors.cm_wavlm.CMModelWavLM`, real `microsoft/wavlm-base-plus` features via the same `score(x, sr)` LLR contract — but the spoof/genuine decision on top is still a hand-tuned heuristic, not a trained classifier. A trained AASIST/AASIST-L graph is still not implemented anywhere in this repo: it requires a labeled ASVspoof 5-style training corpus this project does not have. Do not cite spoof-detection accuracy for either path. |
+| **Speaker Verification (ASV)** | Default: 192-dim deterministic random projection from standardized log-mel spectral energy (`vanirakshak.detectors.asv.ASVModel`). | **Implemented.** `VR_ASV_BACKEND=ecapa` → `detectors.asv_ecapa.ASVModelECAPA`, real SpeechBrain `ECAPA-TDNN` (192-dim) via `backend/app/models/ecapa_verifier.py`, same `_embed_raw`/`consistency_score` contract. Real anchor: `data/anchor_asv_embedding_ecapa.json` via `scripts/enroll_anchor.py --backend ecapa` — measured separation 0.845 mean anchor vs. 0.199 mean other-speaker, zero overlap (`archive/AUDIT_REPORT.md` §12). |
 | **Channel Detector** | Multi-band Welch power ratio partition (`vanirakshak.detectors.channel`). | Pretrained CNN/ResNet-18 channel codec classifier. |
 | **Prosody Extractor** | IIR Butterworth pitch-band filtering and zero-crossing interval variance (`vanirakshak.detectors.prosody`). | PyWorld / CREPE / TorchAudio pitch and shimmer/jitter estimation. |
 | **Buffering & Fusion** | Fully functional production-grade DPDP-compliant sliding ring buffer and Bayesian fusion engine. | Direct reuse; zero changes required. |

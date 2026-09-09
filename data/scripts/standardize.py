@@ -15,7 +15,7 @@ was deleted when the standalone `backend/` server was retired — it was never
 wired into the serving path this repo ships (see `backend/README.md`), and no
 caller of this script (`batch_standardize.bat`) ever read those fields, only
 `--output-wav`. This script now does exactly what is actually used:
-standardize + hash. See `AUDIT_REPORT.md` §5 / `docs/archive/scripts/` for
+standardize + hash. See `docs/archive/AUDIT_REPORT.md` §5 / `docs/archive/scripts/` for
 the retired forensic-metrics code, and `vanirakshak/detectors/` for the
 DSP that actually runs in production (channel.py, prosody.py, cm.py).
 """

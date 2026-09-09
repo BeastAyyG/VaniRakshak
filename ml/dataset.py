@@ -237,3 +237,143 @@ class FeatureDataset(Dataset):
         tensor_y = torch.tensor(item["label"], dtype=torch.long)
         return tensor_x, tensor_y
 
+
+class ASVspoofDataset(Dataset):
+    """Real ASVspoof corpus loader — the honest path to a countermeasure model.
+
+    Why this exists: every checkpoint currently in ``ml/checkpoints/`` was
+    trained either on ``synthetic_spoofed()`` (numpy-DSP buzz) or on
+    one-speaker-vs-one-speaker identity data. Neither teaches "was this audio
+    produced by a machine", so none of them can detect a real voice clone —
+    see ``docs/archive/AUDIT_REPORT.md`` §12. That requires a corpus of real TTS /
+    voice-conversion attacks, which is what ASVspoof provides.
+
+    Deliberately speaker-independent: a countermeasure should learn vocoder
+    artefacts in general, not one enrolled person's clones. The per-person
+    half of the system is ASV (``detectors/asv_ecapa.py``), which already
+    generalises to any enrolled voice without retraining.
+
+    Protocol format (whitespace-separated), across ASVspoof 2019 LA / 2021 / 5::
+
+        <speaker_id> <utterance_id> [<extra columns>...] <attack_id> <label>
+
+    The column *count* differs between editions, so speaker is read from
+    column 0, utterance id from column 1, and the label from the **last**
+    column — the one invariant that holds for all of them.
+
+    Labels follow this repo's existing convention (``ForensicAudioDataset``):
+    ``1 = bonafide, 0 = spoof``. Note that this is inverted relative to some
+    ASVspoof tooling, which scores spoof as the positive class.
+    """
+
+    def __init__(
+        self,
+        protocol_path: Union[str, Path],
+        audio_dir: Union[str, Path],
+        sample_rate: int = 16000,
+        n_mfcc: int = 40,
+        target_len: int = 300,
+        augment: bool = True,
+        is_train: bool = True,
+        limit: Optional[int] = None,
+    ) -> None:
+        super().__init__()
+        self.protocol_path = Path(protocol_path).resolve()
+        self.audio_dir = Path(audio_dir).resolve()
+        self.sample_rate = sample_rate
+        self.n_mfcc = n_mfcc
+        self.target_len = target_len
+        self.augment = augment
+        self.is_train = is_train
+        self.items: List[Dict[str, Union[str, int]]] = []
+
+        if not self.protocol_path.is_file():
+            raise FileNotFoundError(f"ASVspoof protocol not found: {self.protocol_path}")
+        if not self.audio_dir.is_dir():
+            raise NotADirectoryError(f"ASVspoof audio directory not found: {self.audio_dir}")
+
+        missing = 0
+        for line in self.protocol_path.read_text(encoding="utf-8").splitlines():
+            cols = line.split()
+            if len(cols) < 3:
+                continue
+            utt_id, raw_label = cols[1], cols[-1].lower()
+            if raw_label not in ("bonafide", "spoof"):
+                continue
+            path = self._resolve_audio(utt_id)
+            if path is None:
+                missing += 1
+                continue
+            self.items.append({
+                "id": utt_id,
+                "path": str(path),
+                "speaker_id": cols[0],
+                "attack_id": cols[-2] if len(cols) >= 4 else "-",
+                "label": 1 if raw_label == "bonafide" else 0,
+            })
+            if limit is not None and len(self.items) >= limit:
+                break
+
+        if not self.items:
+            raise ValueError(
+                f"No usable entries from {self.protocol_path}. Checked audio in {self.audio_dir} "
+                f"({missing} protocol rows had no matching .flac/.wav). Is --asvspoof-audio-dir correct?"
+            )
+        if missing:
+            print(f"[ASVspoofDataset] {missing} protocol rows skipped (audio not found in {self.audio_dir})")
+
+        n_bona = sum(1 for i in self.items if i["label"] == 1)
+        print(f"[ASVspoofDataset] {len(self.items)} utterances — {n_bona} bonafide / {len(self.items) - n_bona} spoof")
+
+    def _resolve_audio(self, utt_id: str) -> Optional[Path]:
+        for ext in (".flac", ".wav"):
+            p = self.audio_dir / f"{utt_id}{ext}"
+            if p.is_file():
+                return p
+        return None
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def _load_audio(self, path: str) -> np.ndarray:
+        import soundfile as sf
+
+        x, sr = sf.read(path, always_2d=False)
+        x = np.asarray(x, dtype=np.float32)
+        if x.ndim > 1:
+            x = x.mean(axis=1)
+        if sr != self.sample_rate:
+            from math import gcd
+
+            from scipy.signal import resample_poly
+
+            g = gcd(int(sr), self.sample_rate)
+            x = resample_poly(x, self.sample_rate // g, int(sr) // g).astype(np.float32)
+        return x
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        import librosa
+
+        item = self.items[idx]
+        x = self._load_audio(str(item["path"]))
+
+        # Same telephony codec augmentation the rest of the pipeline uses, so a
+        # CM trained here survives the G.711/AMR-WB path a real call arrives on.
+        if self.augment:
+            x = apply_random_pipeline(x, self.sample_rate)
+
+        # MFCC-40, matching ml/extract_features.py and vanirakshak/ml_bridge.py
+        # exactly — a CM trained on different features could not be served by
+        # the existing inference path.
+        mfcc = librosa.feature.mfcc(y=x, sr=self.sample_rate, n_mfcc=self.n_mfcc)
+        arr = mfcc.T.astype(np.float32)  # (T, n_mfcc)
+
+        t_len = arr.shape[0]
+        if t_len > self.target_len:
+            start = random.randint(0, t_len - self.target_len) if self.is_train else (t_len - self.target_len) // 2
+            arr = arr[start : start + self.target_len]
+        elif t_len < self.target_len:
+            arr = np.pad(arr, ((0, self.target_len - t_len), (0, 0)), mode="constant")
+
+        return torch.from_numpy(arr).float(), torch.tensor(int(item["label"]), dtype=torch.long)
+

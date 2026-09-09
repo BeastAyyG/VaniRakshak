@@ -1,3 +1,11 @@
+> **ARCHIVED 2026-09-09.** This changelog documents the FLOWCHARTS_CORRECTED.md
+> rewrite that first added the (now outdated) "no STT, no claim extraction,
+> no LLM-RAG anywhere in the system" claim. That claim has since been revised
+> in `docs/FLOWCHARTS_CORRECTED.md` itself — a small advisory ASR/keyword
+> layer now exists (`vanirakshak/semantic/`), see that file's "Update
+> (2026-09)" note and `docs/PROTOCOL.md` §3.1. Kept as a record of the
+> original rewrite's intent, not as a current architectural claim.
+
 # VaniRakshak Flowchart Fix - Overview
 
 ## What was done

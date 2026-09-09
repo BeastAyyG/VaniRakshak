@@ -26,9 +26,14 @@ VaniCallReceiver  (PHONE_STATE)  ──or──  VaniCallScreeningService (Andro
       ▼
 VaniCallGuardService  — foreground service, owns the mic (16 kHz mono PCM)
       │
-      ├──► VaniKeywordTrigger      — cheap on-device cue to decide when to sample
-      ├──► VaniLiveVoiceAnalyzer   — windowing + acoustic features
-      └──► VaniSpeakerVerifier     — POST /v1/verify-speaker  (identity only)
+      ├──► VaniKeywordTrigger      — on-device SpeechRecognizer, fires on bank/OTP/payment cues
+      ├──► VaniLiveVoiceAnalyzer   — independent on-device heuristic: ZCR variance, energy-
+      │                              plateau flatness, spectral diff ratio → its OWN synthetic-
+      │                              score/speaker-match/risk-level, published to VaniRiskBus
+      │                              WITHOUT calling the backend (see §5 — this is a full local
+      │                              verdict engine, not just feature extraction)
+      └──► VaniSpeakerVerifier     — POST /v1/verify-speaker  (identity only, the ONE
+                                     backend call this app makes)
       │
       ▼
 VaniRiskBus  — single source of truth for the live risk state
@@ -92,10 +97,25 @@ must degrade to "unavailable" rather than faking a result.
 
 ## 5. Honest scope & limitations
 
-- On-device classes are **heuristic triggers and feature extraction**, not
-  forensics. The forensic decision is the backend's.
-- The backend's CM/ASV detectors are stubs pending real AASIST/ECAPA weights;
-  numbers must not be presented as validated detection performance.
+- **Correction (this bullet previously said on-device code does not compute
+  forensics — that was wrong):** `VaniLiveVoiceAnalyzer` computes a full local
+  forensic verdict — a synthetic-voice score, a speaker-match score, and a
+  SAFE/WARNING/DANGER risk level with messages like *"neural voice clone
+  confirmed"* — entirely on-device, without calling the backend. It is hand-
+  tuned Kotlin thresholds (pitch-jitter/ZCR variance, energy-plateau flatness,
+  spectral diff ratio), never trained or validated against real synthetic/
+  cloned audio — the same category of limitation as the Python `cm.py` stub,
+  but a **separate, unreconciled implementation**: it shares no code, weights,
+  or calibration with `vanirakshak-backend/vanirakshak/detectors/`. The phone
+  and the backend can disagree about the same audio and nothing reconciles it.
+  Full writeup: `docs/archive/AUDIT_REPORT.md` §12.3.
+- The one thing that *is* backend-authoritative is `VaniSpeakerVerifier`'s
+  identity check (`/v1/verify-speaker`) — the server owns that verdict.
+- The backend's CM/ASV detectors default to stubs; `VR_ASV_BACKEND=ecapa` /
+  `VR_CM_BACKEND=wavlm` swap in real pretrained models (not wired into this
+  Android client either way — it only ever calls `/v1/verify-speaker`).
+  Numbers from either path must not be presented as validated anti-spoofing
+  performance — see `docs/archive/AUDIT_REPORT.md` §12.
 - Requires `adb reverse` (or a real network address) to reach the backend —
   `127.0.0.1` on the phone is the phone itself, not the dev machine.
 - Call audio capture is legally sensitive: audio is processed in RAM only and

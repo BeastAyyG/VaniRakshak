@@ -2,9 +2,11 @@
 
 ## WebSocket API
 
-### `WS /ws/stream` (alias `/v1/stream`)
+### `WS /ws/stream` (alias `/v1/stream`, `/api/v1/stream`)
 
-Real-time forensic analysis endpoint. Full contract in [PROTOCOL.md](PROTOCOL.md).
+Real-time forensic analysis endpoint. Full contract in [PROTOCOL.md](PROTOCOL.md) —
+this section only summarizes; PROTOCOL.md is the source of truth for the wire
+format, not this file.
 
 **Connection flow:**
 1. Client opens WebSocket to `ws://<host>:8000/ws/stream`
@@ -19,7 +21,7 @@ Real-time forensic analysis endpoint. Full contract in [PROTOCOL.md](PROTOCOL.md
   "session_id": "string (optional, auto-generated if omitted)",
   "sample_rate": 16000,
   "caller_id": "string (optional)",
-  "claimed_identity": "string (optional)",
+  "claimed_identity": "string (optional — falls back to the loaded anchor's user_id if omitted)",
   "transaction_value_inr": 0,
   "origin_country": "IN",
   "prior_fraud_score": 0
@@ -38,6 +40,7 @@ Real-time forensic analysis endpoint. Full contract in [PROTOCOL.md](PROTOCOL.md
     "cm_score": 0.61,
     "cm_genuine_prob": 0.39,
     "asv_consistency": 0.68,
+    "asv_evaluated": true,
     "channel_anomaly": 0.12,
     "prosody_unnatural": 0.3,
     "snr_db": 18.4,
@@ -47,21 +50,54 @@ Real-time forensic analysis endpoint. Full contract in [PROTOCOL.md](PROTOCOL.md
   "interlock_active": false,
   "receipt_hash": "9f2c...",
   "challenge": {
-    "phrase": "Say: Mango 8 nadi 4 blue",
-    "expected_digits": "84",
-    "expected_full": "Mango 8 nadi 4 blue",
-    "instructions": "Repeat the phrase exactly.",
+    "phrase": "mango, 8, nadi, 4.",
+    "expected_digits": ["8", "4"],
+    "expected_full": "mango 8 nadi 4",
+    "instructions": "Now repeat ONLY the digits, in order, quickly.",
     "issued_at_ms": 1699999999999,
     "seed": 42
+  },
+  "semantic": {
+    "available": true,
+    "transcript": "...",
+    "hinglish_text": "...",
+    "language": "hi",
+    "matches": [{"category": "otp_pin_exfiltration", "term": "otp"}],
+    "categories_hit": ["otp_pin_exfiltration"],
+    "keyword_risk": 0.3,
+    "claim_risk": 0.75,
+    "semantic_risk": 0.75,
+    "claim_findings": [
+      {"rule_id": "otp_request", "claim": "...", "finding": "...", "authority": "RBI ...", "severity": 0.95, "matched_terms": ["otp"]}
+    ],
+    "provider": "groq",
+    "reason": null
   }
 }
 ```
 
+`metrics.asv_evaluated` (bool) — whether ASV ran a real comparison this
+window; when `false`, `asv_consistency` is the fusion-neutral `0.5`
+placeholder, not a measured similarity. `challenge.expected_digits` is a
+`List[str]` of single-digit strings; `expected_full` is the full spoken
+phrase (words and digits), not the digits alone.
+
+`semantic` is the parallel ASR/keyword/claim-verification signal — advisory
+only, a small additive term in the fusion, never the primary evidence, and
+**always present** with the same twelve keys whether idle, degraded, or
+populated. Full schema and the honest scope of `claim_findings` (rule-based
+against known policy, not open-ended fact-checking) in
+[PROTOCOL.md](PROTOCOL.md) §3.1. Degrades to
+`{"available": false, "semantic_risk": 0.0, "reason": "..."}` when
+`GROQ_API_KEY` or the optional ASR stack (`requirements-asr.txt`) is absent —
+every other field is unaffected.
+
 ## REST API
 
-### `GET /api/v1/health`
+### `GET /v1/health` (and `/api/v1/health`)
 
-Returns backend status and hardware information.
+Returns backend status, hardware, active detector backends, and the loaded
+speaker anchor.
 
 ```json
 {
@@ -70,44 +106,207 @@ Returns backend status and hardware information.
   "version": "0.1.0-sprint1",
   "active_sessions": 0,
   "hardware": { "device": "cpu", "device_name": "CPU (Acoustic Forensic Core)" },
-  "models": { "wavlm_model": "AASIST / ECAPA Forensic Pipeline", "vad_enabled": true, "zero_retention": true }
+  "models": {
+    "wavlm_model": "synthetic_cm_v1 / synthetic_asv_v1",
+    "vad_enabled": true,
+    "zero_retention": true,
+    "cm_backend": "synthetic_cm_v1",
+    "asv_backend": "synthetic_asv_v1"
+  },
+  "anchor": {
+    "user_id": "narendra_modi",
+    "enrolled": true,
+    "calibrated": true,
+    "source_clips": 5,
+    "error": null
+  }
 }
 ```
 
+`wavlm_model` is named for whatever is actually running (`cm_backend` /
+`asv_backend` duplicated for clarity) — never asserts "AASIST" or "ECAPA"
+unless the real backends (`VR_CM_BACKEND=wavlm`, `VR_ASV_BACKEND=ecapa`) are
+active, in which case it reports `wavlm_heuristic_v1` / `ecapa_tdnn_voxceleb`.
+
+`anchor` describes the single enrolled target speaker loaded at server
+startup (`vanirakshak/anchor.py::load_anchor`) — `user_id` is `null` and
+`error` is set when the anchor file is missing, corrupt, or was embedded by a
+different ASV backend than the one currently running (loading a mismatched
+vector space is refused, not silently misinterpreted). This is also the
+identity the WS handshake and `/analyze`'s `claimed_identity` fall back to
+when the caller sends none — see PROTOCOL.md §1.
+
+### `GET /v1/enroll` (and `/api/v1/enroll`)
+
+Lists enrolled speakers — the multi-user/"family" surface.
+
+```json
+{ "enrolled": ["narendra_modi"], "asv_backend": "synthetic_asv_v1" }
+```
+
+Empty `enrolled` doesn't mean broken; it means nobody has been enrolled on
+this running instance yet.
+
 ### `POST /v1/enroll` (and `/api/v1/enroll`)
 
-Speaker enrollment with user_id + audio file.
+Form fields: `user_id` (string, required), `audio` (file, required, ≥0.5s).
 
-### `POST /v1/analyze` (and `/api/v1/analyze`, `/v1/analyze/audio`, `/api/v1/analyze/audio`)
+```json
+{
+  "status": "enrolled",
+  "user_id": "narendra_modi",
+  "embedding_dimension": 192,
+  "audio_retained": false,
+  "created_at": "2026-09-09T02:20:18Z"
+}
+```
 
-One-shot forensic file analysis.
+Any number of distinct `user_id`s may be enrolled (`EnrolledSpeakersPanel.tsx`
+is the dashboard UI for this). With the stub ASV backend (default) the
+resulting "voiceprint" is a random projection, not real biometrics — real
+multi-speaker verification requires `VR_ASV_BACKEND=ecapa`.
+
+### `POST /v1/analyze` / `/v1/analyze/audio` (and `/api/v1/` variants)
+
+One-shot forensic file analysis. Form fields: `file` or `audio` (either name
+accepted), `caller_id` (optional), `claimed_identity` (optional, same anchor
+fallback as the WS handshake).
+
+Response (`AnalyzeResponse`) — abbreviated to the fields not already covered
+by the verdict schema above:
+
+```json
+{
+  "status": "success",
+  "file_duration_sec": 10.0,
+  "calibrated_risk": 33.9,
+  "p_spoof": 0.34,
+  "tier": "ALLOW",
+  "receipt_hash": "...",
+  "breakdown": {
+    "codec_guess": "wideband",
+    "cm_score": 1.2,
+    "asv_consistency": 0.73,
+    "asv_evaluated": true,
+    "channel_anomaly": 0.1,
+    "prosody_unnatural": 0.2
+  },
+  "session_id": "analyze-abc123",
+  "audio_sha256": "...",
+  "duration_sec": 10.0,
+  "device_used": "CPU (Pure NumPy Forensic Pipeline)",
+  "windows_count": 6,
+  "overall_risk_score": 33.9,
+  "verdict": "AUTHENTIC_TARGET",
+  "windows": ["... per-window breakdown, see ForensicVerdictCard.tsx ..."],
+  "mean_acoustic_anomaly": 0.33,
+  "max_acoustic_anomaly": 0.35,
+  "asv_evaluated": true,
+  "mean_speaker_sim": 0.73,
+  "mean_micro_tremor": 0.8,
+  "mean_spectral_flatness": 0.24,
+  "mean_high_band_flatness": 0.24,
+  "mean_zcr_variance": 0.05,
+  "vocoder_phase_discontinuities_detected": 0,
+  "detected_boundary_timestamps": [],
+  "dpdp_compliance": {
+    "receipt_sha256": "...",
+    "statutory_act": "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
+    "zero_retention_verified": true,
+    "timestamp": "2026-09-09T02:20:18Z"
+  },
+  "target_speaker": {
+    "available": true,
+    "label": "modi_ji",
+    "is_target": true,
+    "prob_target": 0.991,
+    "llr": 4.74,
+    "reason": null
+  },
+  "semantic": { "...": "same shape as the WS verdict's semantic block" }
+}
+```
+
+`asv_evaluated` (top-level and in `breakdown`) mirrors the WS path's
+`metrics.asv_evaluated`. `target_speaker` is the trained `ml/` identity model
+— an **identity check** ("is this the enrolled voice?"), explicitly **not** a
+clone/synthetic detector; reported alongside the acoustic `verdict`, never
+folded into it, so a missing checkpoint degrades to `available: false`
+without breaking the rest of the report. `semantic` is computed once for the
+whole file and fed into every window's fusion pass (unlike the WS path, where
+it necessarily lags one window — see PROTOCOL.md §3.1).
+
+### `POST /v1/verify-speaker` (and `/api/v1/verify-speaker`)
+
+The **only** endpoint the Android client calls (`VaniSpeakerVerifier.kt`).
+Form fields: `audio` or `file` (either name accepted, WAV). Scores against the
+trained `ml/` identity model directly — the same model `/analyze`'s
+`target_speaker` block reports, without running the acoustic pipeline.
+
+```json
+{
+  "available": true,
+  "label": "modi_ji",
+  "is_target": true,
+  "llr": 4.74,
+  "prob_target": 0.991,
+  "reason": null
+}
+```
+
+Never returns HTTP 500 for a missing checkpoint or missing `torch`/`librosa`
+— degrades to `{"available": false, "label": "unavailable", "reason": "..."}`.
 
 ### `POST /v1/sessions` (and `/api/v1/sessions`)
 
-Initialize call session with caller metadata.
+Initialize a call session with caller metadata (the REST equivalent of the WS
+handshake, for clients that grade challenges over REST without streaming
+audio through this same connection). Body matches the WS handshake schema.
+Returns `{"session_id": "call-..."}`.
 
 ### `POST /v1/sessions/{sid}/challenge` (and `/api/v1/sessions/{sid}/challenge`)
 
-Grade challenge response.
+Grade a challenge response. Body: `{"response_text": "...", "response_latency_ms": 1200}`.
+
+```json
+{ "ok": true, "reason": "ok", "confidence": 0.6, "blocked": false }
+```
+
+`404` if `sid` doesn't match an active session; `{"ok": false, "reason": "no_active_challenge"}`
+if the session has no challenge outstanding. Every graded response (pass or
+fail) is now recorded in the audit chain. **A failed challenge always
+escalates the session to `BLOCK`, permanently.** Whether a *passed* challenge
+un-blocks the session or re-arms a future challenge is an open decision —
+see PROTOCOL.md §3's "Challenge outcomes and the interlock" note and the
+`TODO(human)` in `vanirakshak/session.py::grade_challenge`. As shipped today,
+it does not: `blocked` in the response reflects the session's one-way latch,
+not a reversible state.
 
 ### `GET /v1/audit` (and `/api/v1/audit`)
 
-Tail SHA-256 audit log.
+Tail the SHA-256 hash-chained audit log. Query param `n` (default 50).
+
+```json
+{ "chain_valid": true, "events": [ { "session_id": "...", "receipt_hash": "...", "prev_hash": "...", "risk_score": 43.2, "tier": "CHALLENGE", "features": {}, "timestamp_iso": "..." } ] }
+```
+
+The log is **in-memory only** (a ring buffer, default 10,000 events) — a
+server restart loses the chain. Feature-only: no raw audio or embeddings are
+ever logged.
 
 ## Environment Variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `VR_PORT` | `8000` | Backend listen port |
-| `VR_HOST` | `127.0.0.1` | Backend bind host |
-| `VR_CORS_ORIGINS` | `http://localhost:3001,http://127.0.0.1:3001` | Allowed browser CORS origins |
-| `VR_ALERT_WEBHOOK_URL` | *(unset)* | Alert webhook target; unset disables dispatch |
-| `NEXT_PUBLIC_BACKEND_WS` | `ws://localhost:8000/ws/stream` | Dashboard WebSocket target |
+See [PROTOCOL.md](PROTOCOL.md) §8 for the complete, current table — this file
+does not duplicate it to avoid the two drifting apart again.
 
-## Error Codes
+## WebSocket Close Codes
 
-| WebSocket Close Code | Meaning |
+| Code | Meaning |
 |---|---|
 | `1000` | Normal closure |
-| `1003` | First frame was binary instead of JSON handshake |
-| `4000` | Pipeline error |
+| `1003` | First frame was binary instead of a JSON handshake |
+
+`stream_endpoint`'s only `ws.close(code=...)` call in the codebase is the
+`1003` above. There is no `4000`/pipeline-error close code — an exception
+during streaming is caught, logged, and the connection falls through to
+cleanup rather than closing with a distinct code.

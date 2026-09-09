@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Rebuild the standardized benchmark suite from real, documented audio.
 
-Why this exists: the previous `demo_0*.wav` files were unverifiable. AUDIT_REPORT.md
+Why this exists: the previous `demo_0*.wav` files were unverifiable. docs/archive/AUDIT_REPORT.md
 found they correlate +0.9965 / +0.9814 with each other (derived by `tanh(x*1.5)`,
 resampling and copy-paste), and after the anchor was enrolled this tool showed the
 "genuine" clip scoring 0.9880 — squarely in the non-target range — while the "clone"

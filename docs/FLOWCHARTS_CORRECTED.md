@@ -7,14 +7,29 @@
 
 **Why these were rewritten:** the two original flowcharts described a
 *semantic scam-classification system* (Speech-to-Text -> claim extraction ->
-web-search fact-checking -> LLM-RAG). That does **not** match the VaniRakshak
-codebase. VaniRakshak (per `README.md`, `docs/PROTOCOL.md`,
-`vanirakshak-backend/README.md`, `CHANGELOG.md`) is a **Target-Conditioned
-Recorded-Audio Forensic System** for **real-time detection of voice-cloning /
-deepfake-audio fraud on live calls**, ending in an **autonomous transaction
-interlock**. There is **no STT, no claim extraction, no web search, and no
-LLM-RAG anywhere in the system.** Detection is purely **acoustic + biometric +
-Bayesian**.
+web-search fact-checking -> LLM-RAG) as the PRIMARY detector. That does
+**not** match the VaniRakshak codebase. VaniRakshak (per `README.md`,
+`docs/PROTOCOL.md`, `vanirakshak-backend/README.md`) is a
+**Target-Conditioned Recorded-Audio Forensic System** for **real-time
+detection of voice-cloning / deepfake-audio fraud on live calls**, ending in
+an **autonomous transaction interlock**. Detection is **acoustic + biometric
++ Bayesian**, and the acoustic pipeline (CM/ASV/channel/prosody -> fusion)
+remains the **sole authority** for `risk_score`/`tier`.
+
+> **Update (2026-09):** an optional advisory layer now exists —
+> `vanirakshak/semantic/` runs ASR (Groq Whisper) on the same audio window
+> the acoustic detectors score, then a rule-based scorer over the transcript
+> for known scam vocabulary and claims that contradict published bank/RBI
+> policy (`docs/PROTOCOL.md` §3.1). This is **not** what the original
+> flowcharts described: there is still **no web search, no LLM-RAG, and no
+> semantic *classifier* deciding the verdict** — the transcript never
+> reaches an LLM, and the whole signal contributes one small additive term
+> (`VR_FUSION_W_SEMANTIC`, default `0.4`, versus `2.4` for the CM
+> anti-spoofing term) that the acoustic pipeline can always outweigh. The
+> corrections below have been updated to say so exactly where they used to
+> claim no transcript or text processing exists at all — that claim is now
+> false; the "acoustic pipeline is the sole *decision* authority" claim
+> remains true and is the point that actually matters.
 
 ---
 
@@ -38,8 +53,8 @@ flowchart TD
     D --> E
 
     subgraph Score["Multi-Layer Forensic Scoring"]
-        F["CM anti-spoofing<br/>AASIST stub<br/>CM score and genuine probability"]
-        G["ASV speaker verification<br/>ECAPA-TDNN stub<br/>similarity to claimed identity"]
+        F["CM anti-spoofing<br/>heuristic DSP stub by default;<br/>VR_CM_BACKEND=wavlm swaps in<br/>real self-supervised features<br/>CM score and genuine probability"]
+        G["ASV speaker verification<br/>numpy stub by default;<br/>VR_ASV_BACKEND=ecapa swaps in<br/>real ECAPA-TDNN embeddings<br/>similarity to claimed identity"]
         H["Channel and codec detector<br/>channel anomaly, codec and SNR"]
         I["Prosody detector<br/>pitch jitter and micro-tremor"]
     end
@@ -48,8 +63,17 @@ flowchart TD
     E --> H
     E --> I
 
+    subgraph Semantic["Advisory Semantic Signal (optional)"]
+        S1["Groq Whisper ASR on the<br/>same audio window"]
+        S2["Scam-keyword + published-policy<br/>claim scoring over the transcript"]
+        S3["semantic_risk: max of the two,<br/>one small additive fusion term"]
+    end
+    E -.-> S1
+    S1 --> S2
+    S2 --> S3
+
     subgraph Fusion["Calibrated Risk Fusion"]
-        J["Evidence vector<br/>CM spoof, ASV mismatch,<br/>prosody, channel and context"]
+        J["Evidence vector<br/>CM spoof, ASV mismatch,<br/>prosody, channel, context<br/>and semantic (small weight)"]
         K["Bayesian sigmoid fusion<br/>EMA smoothing and fast-rise override"]
         L["Risk score from 0 to 100<br/>ALLOW, CHALLENGE or BLOCK"]
     end
@@ -57,6 +81,7 @@ flowchart TD
     G --> J
     H --> J
     I --> J
+    S3 -.->|small additive term, VR_FUSION_W_SEMANTIC| J
     J --> K
     K --> L
 
@@ -128,8 +153,8 @@ flowchart TD
     C5 --> D
 
     subgraph Models["Detector Models"]
-        E1["CM anti-spoofing<br/>AASIST stub"]
-        E2["ASV speaker verification<br/>ECAPA-TDNN stub"]
+        E1["CM anti-spoofing<br/>heuristic DSP stub (default)"]
+        E2["ASV speaker verification<br/>numpy stub (default)"]
         E3["Channel and codec detector"]
         E4["Prosody micro-tremor detector"]
         E5["Calibrated Bayesian fusion<br/>sigmoid plus EMA"]
@@ -172,9 +197,9 @@ flowchart TD
 | Original node | Problem | Correction |
 |---|---|---|
 | Audio Capture (Live call, Recorded file, Screen-captured) | VaniRakshak captures live mic via AudioWorklet AND accepts recorded file uploads via POST /v1/analyze; no screen-captured path. | Live mic PCM capture at 16 kHz via Web Audio API, streamed over WebSocket |
-| Speech-to-Text Service (Whisper / ASR) | **No STT exists** in the system | Removed - operates on raw waveform, never transcripts |
-| Transcript Preprocessing / Speaker & time segmentation | No transcript is produced | Removed |
-| Claim Extraction (payments, KYC, prizes, threats, urgency) | Detection is **acoustic**, not semantic/NLP | Replaced by Multi-Layer Forensic Scoring (CM, ASV, channel, prosody) |
+| Speech-to-Text Service (Whisper / ASR) | STT exists but is **advisory, not primary** — Groq Whisper transcribes the same window the acoustic detectors score, contributing one small additive fusion term | Kept as an optional advisory signal (`vanirakshak/semantic/`), never the primary evidence — see `docs/PROTOCOL.md` §3.1 |
+| Transcript Preprocessing / Speaker & time segmentation | A transcript is produced, but there is still no speaker diarization or time segmentation of it | Partially kept: transcript + Hinglish transliteration exist; segmentation does not |
+| Claim Extraction (payments, KYC, prizes, threats, urgency) | Primary detection is still **acoustic**; a rule-based (not NLP/LLM) claim-matching layer now runs advisory-only over the transcript | Kept as `semantic/claims.py` — a curated rule set matched against published policy, not open-ended NLP; fused at weight 0.4 vs 2.4 for the acoustic CM term |
 | Web Search / Scraping (RBI, NPCI, banks, news, fact-checkers) | **No web/LLM fact-checking** | Removed - replaced by calibrated Bayesian fusion over acoustic evidence |
 | Fact Comparison Engine (Rules + LLM) | Not present | Removed |
 | Risk Scoring (# contradictory urgent claims, scam patterns) | Risk is **Bayesian fusion** of cm/asv/prosody/channel + context | Calibrated Bayesian fusion (Layer 5) |
@@ -190,14 +215,14 @@ flowchart TD
 | Synthetic scam dialogues (GPT-2 / LLM) | No LLM text dialogues; audio is DSP-synthesized | Removed |
 | Synthetic audio (xTTS / TTS models) | Synthetic audio is **numpy DSP** (vocoded-style) | Replaced with synthetic_speech / synthetic_spoofed generators |
 | Public scam transcripts / forums | N/A | Removed |
-| Audio preprocessing: Noise reduction, VAD | Sliding buffer + per-window analysis; no VAD/ASR stage | Replaced with sliding-window buffering + per-window detection |
-| ASR/STT (WhisperX), Diarization, Text cleaning | None (single-stream, no transcript) | Removed |
-| NER, Regex urgency, BERT embeddings | No text features | Removed; features are acoustic |
-| Speaker embeddings (Resemblyzer / ECAPA-TDNN) | ASV uses **ECAPA-TDNN stub (192-dim)** for speaker **verification** vs claimed_identity | Kept ECAPA, reframed as enrolment + verification vs claimed identity |
+| Audio preprocessing: Noise reduction, VAD | Sliding buffer + per-window analysis; no VAD stage in the trained-model pipeline this diagram covers | Replaced with sliding-window buffering + per-window detection |
+| ASR/STT (WhisperX), Diarization, Text cleaning | Groq Whisper ASR now runs (advisory, outside this trained-model pipeline); no diarization or text cleaning | Not part of this diagram's trained models — it is a separate, untrained, rule-based advisory layer (`vanirakshak/semantic/`), fused at a small fixed weight |
+| NER, Regex urgency, BERT embeddings | No BERT/NER; a curated regex/keyword scorer now exists for scam vocabulary and urgency framing | Kept as `semantic/keywords.py` — hand-written categories, not learned embeddings; advisory only |
+| Speaker embeddings (Resemblyzer / ECAPA-TDNN) | ASV is a **numpy stub by default**; `VR_ASV_BACKEND=ecapa` swaps in real ECAPA-TDNN (192-dim) for speaker **verification** vs claimed_identity | Kept ECAPA as an opt-in real backend, reframed as enrolment + verification vs claimed identity |
 | Prosodic features + Emotion cues | Prosody = **pitch jitter + micro-tremor consistency** (not emotion) | Prosody definition corrected |
 | Call metadata, User history | Context = origin_country, transaction_value_inr, prior_fraud_score (from CRM) | Context inputs corrected |
-| Text classifier (BERT / RoBERTa) | No text classifier; CM is AASIST, ASV is ECAPA | Replaced with CM (AASIST) + ASV (ECAPA) |
-| Audio classifier (CNN / XVector) | CM is an AASIST stub | Replaced |
+| Text classifier (BERT / RoBERTa) | No text classifier; the advisory semantic layer is rule-based, not a trained model | Replaced with CM (heuristic DSP / optional WavLM) + ASV (numpy stub / optional ECAPA-TDNN) |
+| Audio classifier (CNN / XVector) | CM is a hand-tuned heuristic — no trained anti-spoofing classifier (AASIST or otherwise) exists anywhere in this repo | Replaced; see `docs/02-technical-strategy-and-architecture.md`'s Production Upgrade Path for what training one would take |
 | Hybrid Fusion (weighted average) | Real fusion is **calibrated Bayesian** (sigmoid + EMA) | Fusion corrected |
 | LLM-RAG Module | None | Removed |
 | Risk bands Low / Medium / High / Critical | Bands are LOW / SUSPICIOUS / CRITICAL (<35 / 35-69 / >=70) | Corrected |
@@ -211,7 +236,7 @@ flowchart TD
 2. **SHA-256 audit + DPDP Act 2023 privacy** - append-only hash-chained audit receipts; RAM-only buffer, raw audio never persisted. Absent from both.
 3. **WebSocket streaming contract & server-owned decision** - ws://host:8000/ws/stream, JSON handshake then binary PCM; the server owns ALLOW/CHALLENGE/BLOCK (client thresholds exist only for demo mode). Absent from both.
 4. **Augmentation stack (R1)** and the **ASVspoof-5 evaluation harness** - central to Flowchart 2, missing there.
-5. **Honest-reporting standard** - all CM/ASV scores are explicitly synthetic until real AASIST/ECAPA weights are dropped in.
+5. **Honest-reporting standard** - all CM/ASV scores are explicitly synthetic/heuristic until real weights are opted into (`VR_CM_BACKEND=wavlm`, `VR_ASV_BACKEND=ecapa`) — and even then, CM's spoof decision stays a hand-tuned heuristic; no trained anti-spoofing classifier exists anywhere in this repo.
 
 ## Status of Repository Gaps & Implementation State
 
@@ -223,6 +248,18 @@ All major previously identified gaps have been addressed:
 - `Makefile` and `docker-compose.yml`: Fully written and operational.
 - WebSocket reconnect logic: Implemented with 5-attempt exponential backoff and jitter in `frontend/app/page.tsx`.
 - Server-side alerting: Implemented in `vanirakshak/alerts/dispatcher.py` and invoked on `CHALLENGE`/`BLOCK`.
+- Real detector backends (optional): the CM/ASV nodes in both flowcharts above show the
+  **default** zero-dependency stubs, which remain the default. `VR_ASV_BACKEND=ecapa` /
+  `VR_CM_BACKEND=wavlm` swap in real speechbrain ECAPA-TDNN / WavLM features
+  (`vanirakshak/detectors/{asv_ecapa,cm_wavlm}.py`) — real embeddings/features, but CM's
+  spoof decision is still heuristic, not a trained classifier. See
+  `docs/02-technical-strategy-and-architecture.md`'s Production Upgrade Path table and
+  `docs/archive/AUDIT_REPORT.md` §12 for the honest, partial calibration result this produces.
+- Advisory semantic signal (optional): `vanirakshak/semantic/` — Groq Whisper ASR plus a
+  rule-based keyword/claim scorer, fused at a small fixed weight
+  (`VR_FUSION_W_SEMANTIC`). This is genuinely new since the "no STT anywhere" claim above
+  was first written; see the "Update (2026-09)" note at the top of this file and
+  `docs/PROTOCOL.md` §3.1 for what it does and, just as importantly, does not do.
 
 ---
 
@@ -231,16 +268,21 @@ All major previously identified gaps have been addressed:
 > **Heads-up:** a diagram titled **"VaniRakshak - ML Pipeline (Fixed Mermaid
 > Syntax)"** has been circulating. It is **syntactically valid** (it renders) but
 > it describes a **different product** - a *semantic scam-call classifier*
+> where transcription and text classification are the primary decision path
 > (Whisper STT -> NER/BERT -> CNN/XVector -> LLM-RAG -> weighted scam-score 0-1).
-> VaniRakshak's real ML side **never transcribes audio** and **never scores
-> "scam probability."** Do **not** paste that diagram into the README as this
-> system's design. The correct ML-side architecture is Flowchart 1 above; the
-> condensed ML-only view is below.
+> VaniRakshak's real ML side does now run ASR (see the Semantic subgraph in
+> Flowchart 1 above), but **never as the decision path** — there is no
+> BERT/CNN/XVector classifier, no LLM-RAG, and no "scam probability" score;
+> the transcript only ever contributes one small additive term to a
+> fusion that acoustic evidence dominates. Do **not** paste that diagram into
+> the README as this system's design. The correct ML-side architecture is
+> Flowchart 1 above; the condensed acoustic-side view is below (the semantic
+> layer is omitted here for clarity — see Flowchart 1's Semantic subgraph).
 
 ```mermaid
 flowchart LR
-    A["Raw 16 kHz PCM<br/>sliding audio window"] --> B["CM anti-spoofing<br/>AASIST stub"]
-    A --> C["ASV speaker verification<br/>ECAPA-TDNN stub"]
+    A["Raw 16 kHz PCM<br/>sliding audio window"] --> B["CM anti-spoofing<br/>heuristic stub / optional WavLM"]
+    A --> C["ASV speaker verification<br/>numpy stub / optional ECAPA-TDNN"]
     A --> D["Channel and codec detector"]
     A --> E["Prosody micro-tremor detector"]
     B --> B1["CM score and genuine probability"]
@@ -252,6 +294,7 @@ flowchart LR
     D1 --> F
     E1 --> F
     G["Context risk<br/>country, value and prior fraud"] --> F
+    S["Advisory semantic_risk<br/>small additive term, see Flowchart 1"] -.-> F
     F --> H["Risk score from 0 to 100<br/>fast-rise override"]
     H --> I{"ALLOW, CHALLENGE or BLOCK"}
 ```
@@ -260,9 +303,9 @@ flowchart LR
 
 | "Fixed" diagram claims | What the repo actually has |
 |---|---|
-| S1 Whisper/WhisperX STT -> transcript + speaker tags | No STT anywhere; raw PCM flows straight into detectors |
-| S2 text NER / regex / BERT embeddings | No text processing at all |
-| S2 audio: Resemblyzer/ECAPA embeddings, prosody (pitch/energy/rate), emotion | ECAPA is a **verification** stub vs `claimed_identity`; prosody = **pitch-jitter + micro-tremor** (a spoof cue), **no emotion**; missing the AASIST CM and channel/codec branches entirely |
+| S1 Whisper/WhisperX STT -> transcript + speaker tags feeding the primary decision | ASR now runs (Groq Whisper, `vanirakshak/semantic/`), but only as a small advisory term — not a step in the primary decision path, and no speaker-tagging/diarization |
+| S2 text NER / regex / BERT embeddings | A curated regex/keyword scorer exists (`semantic/keywords.py`), not NER or learned BERT embeddings |
+| S2 audio: Resemblyzer/ECAPA embeddings, prosody (pitch/energy/rate), emotion | ASV (numpy stub / optional ECAPA) is a **verification** signal vs `claimed_identity`, not a bare embedding; prosody = **pitch-jitter + micro-tremor** (a spoof cue), **no emotion**; missing the CM anti-spoofing and channel/codec branches entirely |
 | S3 BERT text classifier, CNN/XVector audio classifier, LLM-RAG -> P_text/P_audio/P_pattern | No classifiers, no LLM; outputs are `cm_score`, `asv_consistency`, `channel_anomaly`, `prosody_unnatural`, `snr_db` |
 | S4 weighted avg of scam probs (0-1) | Calibrated **Bayesian** fusion of **spoof** evidence, EMA + fast-rise override, output **risk 0-100** |
 | S5/S6 bands 0.3/0.6/0.85 + "block payment apps"; retrain from feedback | Tiers **ALLOW/CHALLENGE/BLOCK** at <35/35-69/>=70; **CHALLENGE** (dynamic phrase) is the signature; logging is SHA-256 audit + ASVspoof-5 eval, **no live feedback loop / auto-retrain** |

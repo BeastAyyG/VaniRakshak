@@ -24,6 +24,10 @@ Risk tiers mapped to colors:
 - `AudioUploadZone`
 - `ForensicVerdictCard`
 - `WaveformEvidenceTimeline`
+- `EnrolledSpeakersPanel` — multi-speaker enrollment UI (`GET`/`POST /v1/enroll`);
+  shows a "Real ECAPA-TDNN biometric" badge only when the backend reports
+  `asv_backend: ecapa_tdnn_voxceleb`, otherwise an honest "Demo biometric
+  (not real voiceprint)" badge
 
 ## Interlock UI States
 - Normal

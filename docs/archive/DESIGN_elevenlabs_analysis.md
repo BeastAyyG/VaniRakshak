@@ -1,3 +1,13 @@
+<!--
+ARCHIVED 2026-09-09. This is NOT a VaniRakshak design document — it is a
+third-party brand/design-system analysis of ElevenLabs, previously committed
+at the repo root under the filename `DESIGN.md` where it could be mistaken
+for this project's own design spec. VaniRakshak's actual current UI is a
+dark theme on Geist Sans/Mono (`bg-black`, `frontend/app/layout.tsx`) —
+see `docs/DESIGN.md`. Kept only because it may have informed some styling
+choices in `frontend/`, not because the two ever shared a design language.
+-->
+
 ---
 version: alpha
 name: ElevenLabs-design-analysis

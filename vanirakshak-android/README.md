@@ -1,11 +1,23 @@
 # VaniRakshak — Android call-guard client
 
 On-device half of the VaniRakshak system. It owns the microphone during a live
-call, ships audio to the VaniRakshak forensic backend, and enforces the
-autonomous interlock on the handset.
+call and enforces the autonomous interlock on the handset. See `DESIGN.md` for
+architecture.
 
-The **server owns the verdict**. This app renders and enforces it; it does not
-compute forensics locally. See `DESIGN.md` for architecture.
+**Correction (this line previously said "does not compute forensics locally" —
+that was wrong and is fixed here):** this app runs its OWN independent
+real-time forensic heuristic, `VaniLiveVoiceAnalyzer` — pure Kotlin, on-device,
+computing zero-crossing-rate variance, energy-plateau flatness, and spectral
+diff ratio every ~1s of speech to produce a synthetic-voice score, a speaker-
+match score, and a dynamic risk level (SAFE/WARNING/DANGER), entirely without
+calling the backend. It does not share code, weights, or calibration with the
+Python backend's `vanirakshak/detectors/{cm,cm_wavlm}.py` — two separate,
+unreconciled "is this fake" heuristics exist in the system. Like the Python
+CM stub, this Kotlin heuristic is hand-tuned thresholds, never trained or
+validated against real synthetic/cloned audio — see docs/archive/AUDIT_REPORT.md §12.3.
+
+The backend is used for exactly one thing: `POST /v1/verify-speaker`, the
+identity check below. The server owns *that* verdict; the app renders it.
 
 ## Build
 

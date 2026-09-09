@@ -1,3 +1,15 @@
+> **ARCHIVED 2026-09-09.** An early hackathon planning document. Its stated
+> scope ("deliberately limited to forensic analysis of uploaded/recorded
+> audio files, rather than ... live telephone infrastructure, Android payment
+> interception, or emergency-keyword detection") has since been superseded by
+> what actually shipped: live WS streaming (`docs/PROTOCOL.md`), Android
+> payment-app interception (`vanirakshak-android/`), and keyword-triggered
+> detection (`VaniKeywordTrigger.kt`). The file also has a corrupted section
+> (a duplicated block starting around "Recommended Project Definition") from
+> its original drafting — left as-is rather than silently cleaned up, since
+> this is a historical artifact, not living documentation. For the current
+> scope and architecture, see `docs/ARCHITECTURE.md`.
+
 # VaniRakshak — Project Context and Practical Build Plan
 
 > **Purpose:** Consolidated project context from this discussion for a hackathon-ready, technically honest, recorded-audio voice-clone detection prototype.

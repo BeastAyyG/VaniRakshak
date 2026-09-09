@@ -205,7 +205,7 @@ def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> 
     """Do the four benchmark clips actually score differently?
 
     With the stub detectors (default, zero-dependency) this stays purely
-    informational — AUDIT_REPORT.md §5 documents why the stubs don't
+    informational — docs/archive/AUDIT_REPORT.md §5 documents why the stubs don't
     separate these clips, and asserting on them would just be a flaky test
     dressed up as an accuracy claim.
 
@@ -225,7 +225,7 @@ def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> 
         print(
             "    NOTE: spread < 5 pts — the stub detectors do not separate these\n"
             "          clips. Treat the benchmark table as a UI/API smoke test,\n"
-            "          NOT as measured detection accuracy. See AUDIT_REPORT.md §5."
+            "          NOT as measured detection accuracy. See docs/archive/AUDIT_REPORT.md §5."
         )
 
     backends = _real_backends_active()
