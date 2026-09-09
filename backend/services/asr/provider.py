@@ -1,5 +1,5 @@
 """
-ASR Provider Base Class and Factory for VaniRakshak
+ASR Provider Base Class and Factory for VaniRakshak Kavach
 
 Implements the ASRProvider interface to ensure:
 - IndicConformer is the primary Hindi/Hinglish ASR provider
@@ -19,7 +19,7 @@ logger = logging.getLogger("vanirakshak.asr.provider")
 
 
 class ASRProvider(ABC):
-    """Abstract base class for all ASR engines in VaniRakshak."""
+    """Abstract base class for all ASR engines in VaniRakshak Kavach."""
 
     def __init__(self, config: Optional[ASRConfig] = None):
         self.config = config or ASRConfig()

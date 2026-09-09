@@ -1,5 +1,5 @@
 """
-Unit Tests for VaniRakshak ASR Subsystem
+Unit Tests for VaniRakshak Kavach ASR Subsystem
 
 Tests:
 1. Audio preprocessing (stereo -> mono, 8kHz -> 16kHz, 16kHz -> unchanged, error handling)

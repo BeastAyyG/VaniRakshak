@@ -1,5 +1,5 @@
 """
-VaniRakshak Sotto Edition — Local OpenVINO Dictation & Scam Shield Server
+VaniRakshak Kavach Sotto Edition — Local OpenVINO Dictation & Scam Shield Server
 Engine: Sotto OpenVINO Hardware Accelerated Whisper (Intel CPU/GPU/NPU)
 Port: 8082 (Runs side-by-side with original Faster-Whisper on 8080)
 """
@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(
-    title="VaniRakshak Sotto Edition — OpenVINO Voice Scam Shield",
+    title="VaniRakshak Kavach Sotto Edition — OpenVINO Voice Scam Shield",
     version="2.1.0",
     description="Local Sotto OpenVINO Whisper Speech Recognition & Crawl4AI Fact Grounding",
     lifespan=lifespan

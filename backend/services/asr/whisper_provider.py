@@ -1,5 +1,5 @@
 """
-Existing Faster-Whisper ASR Provider for VaniRakshak
+Existing Faster-Whisper ASR Provider for VaniRakshak Kavach
 
 Preserves the existing Whisper implementation behind the common ASRProvider interface.
 Does NOT modify or replace the legacy whisper scripts or files.

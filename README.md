@@ -4,10 +4,10 @@
 
   <br/><br/>
 
-  <h1>VaniRakshak (वाणी रक्षक)</h1>
+  <h1>VaniRakshak Kavach (वाणी रक्षक कवच)</h1>
   <p><strong>Next-Gen Real-Time Voice Scam Shield &amp; Live Evidence Grounding System</strong></p>
 
-  <p><em>"Vani" = Voice/Speech | "Rakshak" = Guardian/Protector &bull; Autonomous real-time defense against digital arrest coercion, financial KYC extortion, and synthetic voice fraud.</em></p>
+  <p><em>"Vani" = Voice/Speech | "Rakshak" = Guardian/Protector | "Kavach" = Shield/Armor &bull; Autonomous real-time defense against digital arrest coercion, financial KYC extortion, and synthetic voice fraud.</em></p>
 
   <p>
     <a href="#-quickstart"><img src="https://img.shields.io/badge/Status-Active%20v2.4-emerald?style=flat-square" alt="Version"></a>
@@ -31,22 +31,22 @@
 | **Repository** | [BeastAyyG/VaniRakshak](https://github.com/BeastAyyG/VaniRakshak) |
 | **Project Focus** | Real-Time Voice Threat Intelligence, Scam Heuristics & Ground-Truth Verification |
 
-> **VaniRakshak** is conceptualized, engineered, and designed by **Ayush Agnihotri** to provide citizens and enterprises with real-time immunity against escalating voice fraud, digital arrest intimidation, and financial extortion.
+> **VaniRakshak Kavach** is conceptualized, engineered, and designed by **Ayush Agnihotri** to provide citizens and enterprises with real-time immunity against escalating voice fraud, digital arrest intimidation, and financial extortion.
 
 ---
 
 ## 📖 Executive Summary
 
-**VaniRakshak** is an AI-powered speech intelligence and threat defense system. It intercepts, transcribes, and forensically audits live phone calls and voice recordings in real time.
+**VaniRakshak Kavach** is an AI-powered speech intelligence and threat defense system. It intercepts, transcribes, and forensically audits live phone calls and voice recordings in real time.
 
-Operating across **Hindi, Hinglish, and English**, VaniRakshak evaluates multi-dialect conversational acoustics against an extensive threat matrix, detects coercion markers, and autonomously cross-references claims against live authoritative web evidence in sub-seconds.
+Operating across **Hindi, Hinglish, and English**, VaniRakshak Kavach evaluates multi-dialect conversational acoustics against an extensive threat matrix, detects coercion markers, and autonomously cross-references claims against live authoritative web evidence in sub-seconds.
 
 ```
        Incoming Phone Call / Intercepted Audio Stream
                             │
                             ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                   VaniRakshak Speech & Scam Pipeline                   │
+│                VaniRakshak Kavach Speech & Scam Pipeline                │
 │                                                                        │
 │  1. 🎙️ Stream Ingestion   — Real-time WebSocket or 1-minute audio chunk │
 │  2. ⚡ Acoustic ASR Engine — IndicConformer / Groq Whisper LPU (<1.1s) │
@@ -216,7 +216,7 @@ GET /api/health
 
 ## 📱 Mobile App Ingestion Architecture
 
-VaniRakshak is designed to pair directly with an active call recording service on Android or iOS.
+VaniRakshak Kavach is designed to pair directly with an active call recording service on Android or iOS.
 
 ```kotlin
 // Android AudioRecord WebSocket Streamer snippet (Kotlin)
@@ -259,5 +259,5 @@ Distributed under the **MIT License**. Copyright &copy; 2024–2026 **Ayush Agni
   <img src="assets/logo_icon.png" width="48" height="48" style="border-radius: 8px; vertical-align: middle;" />
   <br/><br/>
   <strong>Built with pride by <a href="https://github.com/ayushagnihotrii">Ayush Agnihotri</a></strong><br/>
-  <em>VaniRakshak — Defending speech integrity and safeguarding lives.</em>
+  <em>VaniRakshak Kavach (कवच) — Defending speech integrity and safeguarding lives.</em>
 </div>

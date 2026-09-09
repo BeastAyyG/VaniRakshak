@@ -1,5 +1,5 @@
 """
-VaniRakshak ASR - Data Models and Configuration Types
+VaniRakshak Kavach ASR - Data Models and Configuration Types
 """
 
 from dataclasses import dataclass, field

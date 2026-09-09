@@ -1,5 +1,5 @@
 """
-Unified ASR Service for VaniRakshak
+Unified ASR Service for VaniRakshak Kavach
 
 Orchestrates:
 Audio Preprocessing -> 4-second Chunks -> ASRProvider (IndicConformer / Whisper) -> Hinglish Transliteration -> TranscriptBuffer
@@ -25,7 +25,7 @@ logger = logging.getLogger("vanirakshak.asr.service")
 
 class ASRService:
     """
-    High-level ASR Service consumed by the rest of VaniRakshak.
+    High-level ASR Service consumed by the rest of VaniRakshak Kavach.
     Hides internal provider and decoding details.
     """
     _instance: Optional["ASRService"] = None

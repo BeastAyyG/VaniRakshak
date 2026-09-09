@@ -1,5 +1,5 @@
 """
-Groq Whisper ASR Provider for VaniRakshak
+Groq Whisper ASR Provider for VaniRakshak Kavach
 Powered by Groq Cloud LPU Inference (model: whisper-large-v3-turbo)
 
 Delivers state-of-the-art multi-lingual speech-to-text with sub-second latency

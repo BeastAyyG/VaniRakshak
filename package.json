@@ -1,7 +1,7 @@
 {
-  "name": "vanirakshak",
+  "name": "vanirakshak-kavach",
   "version": "2.2.0",
-  "description": "VaniRakshak — Voice Scam Shield & Live Fact Grounding",
+  "description": "VaniRakshak Kavach (कवच) — Voice Scam Shield & Live Fact Grounding",
   "scripts": {
     "dev": "crawl4ai\\.venv\\Scripts\\python.exe vanirakshak_indic_conformer/run_indic_server.py",
     "start": "crawl4ai\\.venv\\Scripts\\python.exe vanirakshak_indic_conformer/run_indic_server.py",

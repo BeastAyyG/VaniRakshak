@@ -1,5 +1,5 @@
 """
-AI4Bharat IndicConformer ASR Provider for VaniRakshak
+AI4Bharat IndicConformer ASR Provider for VaniRakshak Kavach
 
 Official Reference:
 - AI4Bharat IndicConformerASR: https://github.com/AI4Bharat/IndicConformerASR

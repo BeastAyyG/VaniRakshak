@@ -1,5 +1,5 @@
 """
-VaniRakshak ASR Subsystem - AI4Bharat IndicConformer & Hinglish Normalization
+VaniRakshak Kavach ASR Subsystem - AI4Bharat IndicConformer & Hinglish Normalization
 """
 
 from .types import TranscriptionResult, AudioChunk, ASRConfig

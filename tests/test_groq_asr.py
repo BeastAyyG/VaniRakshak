@@ -1,5 +1,5 @@
 """
-Automated Integration and Unit Tests for Groq Whisper ASR Subsystem in VaniRakshak
+Automated Integration and Unit Tests for Groq Whisper ASR Subsystem in VaniRakshak Kavach
 Powered by Groq Cloud LPU (whisper-large-v3-turbo)
 """
 

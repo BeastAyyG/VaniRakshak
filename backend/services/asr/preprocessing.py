@@ -1,5 +1,5 @@
 """
-Audio Preprocessing Pipeline for VaniRakshak ASR
+Audio Preprocessing Pipeline for VaniRakshak Kavach ASR
 
 Converts incoming call audio (WAV, MP3, M4A, FLAC) into:
 - Sample rate: 16000 Hz

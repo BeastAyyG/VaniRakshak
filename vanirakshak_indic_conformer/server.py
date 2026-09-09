@@ -1,5 +1,5 @@
 """
-VaniRakshak IndicConformer Edition — AI4Bharat ASR Voice Scam & Fact Shield Server
+VaniRakshak Kavach IndicConformer Edition — AI4Bharat ASR Voice Scam & Fact Shield Server
 Engine: AI4Bharat IndicConformer (22+ Indian Languages + Hinglish)
 Port: 8084 (Runs side-by-side with 8080 & 8082)
 """
@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(
-    title="VaniRakshak IndicConformer Edition — AI4Bharat Voice Scam Shield",
+    title="VaniRakshak Kavach IndicConformer Edition — AI4Bharat Voice Scam Shield",
     version="2.2.0",
     description="AI4Bharat IndicConformer Speech Recognition & Crawl4AI Fact Grounding",
     lifespan=lifespan
