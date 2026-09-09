@@ -77,6 +77,30 @@ type EventLog = {
   hash?: string;
 };
 
+// The wire contract (docs/PROTOCOL.md) is 16 kHz mono int16. We request
+// 16 kHz on getUserMedia and the AudioContext, but a browser may honor a
+// different hardware rate — sending that through while claiming 16000 in
+// the handshake silently corrupts every downstream detector. Resample to
+// the contract rate (linear interpolation is fine for speech) whenever
+// the context rate disagrees.
+const STREAM_RATE = 16000;
+
+function resampleToStreamRate(input: Float32Array, fromRate: number): Float32Array {
+  if (fromRate === STREAM_RATE || input.length === 0) return input;
+  const ratio = fromRate / STREAM_RATE;
+  const outLen = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * ratio;
+    const i0 = Math.floor(src);
+    const frac = src - i0;
+    const a = input[i0];
+    const b = input[Math.min(i0 + 1, input.length - 1)];
+    out[i] = a + (b - a) * frac;
+  }
+  return out;
+}
+
 export default function Home() {
   // Backend health & system state
   const [backendOnline, setBackendOnline] = useState(false);
@@ -327,7 +351,7 @@ export default function Home() {
           ws.send(
             JSON.stringify({
               session_id: sessionId,
-              sample_rate: 16000,
+              sample_rate: STREAM_RATE,
               caller_id: "+91-STREAM-MIC",
               claimed_identity: claimedIdentityRef.current || CLAIMED_IDENTITY_FALLBACK,
               transaction_value_inr: 0,
@@ -342,8 +366,19 @@ export default function Home() {
           mediaStreamRef.current = stream;
 
           const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-          const audioContext = new AudioContextClass({ sampleRate: 16000 });
+          const audioContext = new AudioContextClass({ sampleRate: STREAM_RATE });
           audioContextRef.current = audioContext;
+
+          // The browser may ignore the requested rate (hardware constraints,
+          // Safari). Everything downstream is resampled to STREAM_RATE so the
+          // handshake's sample_rate claim stays truthful.
+          const contextRate = audioContext.sampleRate;
+          if (contextRate !== STREAM_RATE) {
+            addEvent(
+              `Audio hardware runs at ${contextRate} Hz — resampling to ${STREAM_RATE} Hz in-client`,
+              "warning"
+            );
+          }
 
           const source = audioContext.createMediaStreamSource(stream);
 
@@ -355,7 +390,7 @@ export default function Home() {
 
             workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
               if (ws.readyState !== WebSocket.OPEN) return;
-              const input = e.data;
+              const input = resampleToStreamRate(e.data, contextRate);
 
               let sum = 0;
               for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
@@ -383,7 +418,7 @@ export default function Home() {
 
             processor.onaudioprocess = (e) => {
               if (ws.readyState !== WebSocket.OPEN) return;
-              const input = e.inputBuffer.getChannelData(0);
+              const input = resampleToStreamRate(e.inputBuffer.getChannelData(0), contextRate);
 
               let sum = 0;
               for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
@@ -417,6 +452,14 @@ export default function Home() {
       ws.onmessage = (msg) => {
         try {
           const telemetry = JSON.parse(msg.data);
+          // Handshake ack (docs/PROTOCOL.md §2): the server echoes the
+          // resolved session_id first — adopt it so REST challenge-grading
+          // targets the right session even if we omitted session_id.
+          if (telemetry.type === "session_ack" && typeof telemetry.session_id === "string") {
+            sessionIdRef.current = telemetry.session_id;
+            addEvent(`Stream session acknowledged (${telemetry.session_id})`, "info");
+            return;
+          }
           // Backend telemetry contract (docs/PROTOCOL.md)
           if (telemetry.risk_score !== undefined || telemetry.tier !== undefined) {
             const risk = Math.round(telemetry.risk_score ?? 0);

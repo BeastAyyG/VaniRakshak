@@ -46,7 +46,55 @@ export default function WaveformEvidenceTimeline({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Per-bar peak amplitudes decoded from the actual audio (140 bars, 0..1).
+  // null = not decoded yet or decode failed — the canvas falls back to the
+  // old synthetic pattern so the timeline still renders without audio.
+  const [peaks, setPeaks] = useState<number[] | null>(null);
+
   const hasAudio = Boolean(audioUrl || audioBlob);
+
+  // Decode the real waveform once per audio source and reduce channel 0 to
+  // per-bar peaks. OfflineAudioContext is decode-only (no autoplay gesture
+  // needed). Cross-origin URLs without CORS fail the fetch and keep peaks
+  // null — colors and boundary markers stay data-driven regardless.
+  useEffect(() => {
+    let cancelled = false;
+    setPeaks(null);
+    if (!audioUrl && !audioBlob) return;
+    const BAR_COUNT = 140;
+    (async () => {
+      try {
+        const raw: ArrayBuffer = audioBlob
+          ? await audioBlob.arrayBuffer()
+          : await (await fetch(audioUrl as string)).arrayBuffer();
+        const Ctx = window.OfflineAudioContext || window.AudioContext;
+        const decoder = new Ctx(1, 1, 44100);
+        const decoded = await decoder.decodeAudioData(raw.slice(0));
+        if (cancelled) return;
+        const ch = decoded.getChannelData(0);
+        const out = new Array<number>(BAR_COUNT);
+        let peak = 0;
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const start = Math.floor((i / BAR_COUNT) * ch.length);
+          const end = Math.max(start + 1, Math.floor(((i + 1) / BAR_COUNT) * ch.length));
+          let m = 0;
+          for (let j = start; j < end; j += 4) {
+            const a = Math.abs(ch[j]);
+            if (a > m) m = a;
+          }
+          out[i] = m;
+          if (m > peak) peak = m;
+        }
+        if (peak > 0) for (let i = 0; i < BAR_COUNT; i++) out[i] /= peak;
+        setPeaks(out);
+      } catch {
+        if (!cancelled) setPeaks(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audioBlob, audioUrl]);
 
   useEffect(() => {
     const audioElement = audioRef.current;
@@ -161,10 +209,17 @@ export default function WaveformEvidenceTimeline({
         }
       }
 
-      const baseAmp = Math.sin((i / barCount) * Math.PI * 4) * 0.3 + 0.5;
-      const noise = (Math.sin(i * 12.3) * 0.5 + 0.5) * 0.4;
-      const amp = Math.max(0.12, Math.min(0.92, baseAmp + noise));
-      const barH = amp * (height * 0.72);
+      // Real decoded peaks when available; synthetic sine fallback only
+      // while decoding or when the source can't be fetched/decoded.
+      let amp: number;
+      if (peaks) {
+        amp = Math.max(0.03, Math.min(1, peaks[i] ?? 0));
+      } else {
+        const baseAmp = Math.sin((i / barCount) * Math.PI * 4) * 0.3 + 0.5;
+        const noise = (Math.sin(i * 12.3) * 0.5 + 0.5) * 0.4;
+        amp = Math.max(0.12, Math.min(0.92, baseAmp + noise));
+      }
+      const barH = Math.max(1.5, amp * (height * 0.72));
       const y = (height - barH) / 2;
 
       const isPast = barTime <= currentTime;
@@ -198,7 +253,7 @@ export default function WaveformEvidenceTimeline({
     ctx.moveTo(scrubberX, 0);
     ctx.lineTo(scrubberX, height);
     ctx.stroke();
-  }, [windows, durationSec, currentTime, detectedBoundaryTimestamps]);
+  }, [windows, durationSec, currentTime, detectedBoundaryTimestamps, peaks]);
 
   const formatSec = (s: number) => {
     const mins = Math.floor(s / 60);
