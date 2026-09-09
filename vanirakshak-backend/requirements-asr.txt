@@ -1,0 +1,21 @@
+# VaniRakshak — OPTIONAL ASR + scam-keyword semantic signal.
+#
+# The forensic service runs WITHOUT this file: vanirakshak-backend/requirements.txt
+# is enough for the whole REST + WebSocket surface, and the `semantic` block
+# in verdicts degrades to {"available": false, "reason": ...} instead of
+# failing — see vanirakshak/semantic/signal.py.
+#
+# Install this to enable live transcript + scam-keyword scoring (feeds the
+# `semantic_risk` term in risk/fusion.py alongside — never instead of — the
+# acoustic detectors):
+#
+#   pip install -r requirements-asr.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu
+#   set GROQ_API_KEY=...   (or add to a .env file at the repo root)
+#
+# torch is shared with requirements-ml.txt (the target-speaker identity
+# check) — installing both is safe, pip will just see it already satisfied.
+
+torch>=2.1
+groq>=1.3
+python-dotenv>=1.0

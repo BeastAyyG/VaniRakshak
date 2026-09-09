@@ -90,6 +90,11 @@ class ASVModel:
     def is_enrolled(self, user_id: str) -> bool:
         return user_id in self._enrolments
 
+    def enrolled_user_ids(self) -> list[str]:
+        """All enrolled user_ids — lets API/UI layers list enrolled family members
+        without reaching into `_enrolments` directly."""
+        return sorted(self._enrolments.keys())
+
     def similarity(self, user_id: str, x: np.ndarray, sr: int) -> float:
         if user_id not in self._enrolments:
             return 0.0

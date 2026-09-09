@@ -11,6 +11,8 @@ Returns a :class:`WindowResult` that the risk fusion engine consumes.
 
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass, asdict
 from typing import Dict, Optional
 
@@ -20,6 +22,36 @@ from .cm import CMModel
 from .asv import ASVModel
 from .channel import detect as channel_detect
 from .prosody import prosody_score
+
+logger = logging.getLogger("vanirakshak.detectors.pipeline")
+
+
+def _default_cm() -> CMModel:
+    """VR_CM_BACKEND=wavlm swaps in real self-supervised features (cm_wavlm.py);
+    default `stub` keeps the zero-dependency numpy/scipy detector. Degrades to
+    the stub on any load failure — never raises past construction."""
+    if os.environ.get("VR_CM_BACKEND", "stub").lower() == "wavlm":
+        from .cm_wavlm import CMModelWavLM
+
+        inst = CMModelWavLM.try_create()
+        if inst is not None:
+            return inst
+        logger.warning("VR_CM_BACKEND=wavlm requested but unavailable; using stub CM")
+    return CMModel()
+
+
+def _default_asv() -> ASVModel:
+    """VR_ASV_BACKEND=ecapa swaps in real ECAPA-TDNN embeddings (asv_ecapa.py);
+    default `stub` keeps the zero-dependency numpy/scipy detector. Degrades to
+    the stub on any load failure — never raises past construction."""
+    if os.environ.get("VR_ASV_BACKEND", "stub").lower() == "ecapa":
+        from .asv_ecapa import ASVModelECAPA
+
+        inst = ASVModelECAPA.try_create()
+        if inst is not None:
+            return inst
+        logger.warning("VR_ASV_BACKEND=ecapa requested but unavailable; using stub ASV")
+    return ASVModel()
 
 
 @dataclass
@@ -41,8 +73,8 @@ class DetectionPipeline:
     """Stateless wrapper around the four detectors."""
 
     def __init__(self, cm: Optional[CMModel] = None, asv: Optional[ASVModel] = None) -> None:
-        self.cm = cm or CMModel()
-        self.asv = asv or ASVModel()
+        self.cm = cm or _default_cm()
+        self.asv = asv or _default_asv()
 
     def enrol(self, user_id: str, x: np.ndarray, sr: int) -> np.ndarray:
         return self.asv.enrol(user_id, x, sr)

@@ -1,5 +1,10 @@
 {
   "calibrated_at": "2026-09-08T02:23:24Z",
+  "task": "speaker_identity",
+  "task_note": "Answers 'is this the enrolled speaker?' - NOT clone detection. This run saw no cloned or synthetic-TTS audio, so a good clone of the enrolled voice would very likely score as a MATCH. Do not cite these metrics as anti-spoofing performance.",
+  "trained_on": "one target speaker (narendra_modi, 8 recordings) vs one non-target speaker (45 chunks of a single recording)",
+  "checkpoint": "best_model.pt",
+  "metrics_caveat": "The 0.00% EER / 0.0 minDCF below measure separation of two unrelated recordings from different sessions, which is close to trivially separable. They say nothing about performance on other speakers or on cloned speech. See AUDIT_REPORT.md and ml/README.md.",
   "input_feature_dim": 40,
   "best_min_dcf": 0.0,
   "validation_eer_pct": 0.0,

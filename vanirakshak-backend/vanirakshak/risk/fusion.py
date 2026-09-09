@@ -23,8 +23,20 @@ def _sigmoid(x: float) -> float:
     return float(1.0 / (1.0 + np.exp(-x)))
 
 
-def calibrate(window: WindowResult, context_risk: float, fusion: FusionConfig) -> float:
-    """Return P(spoof | features, context) in [0, 1]."""
+def calibrate(
+    window: WindowResult,
+    context_risk: float,
+    fusion: FusionConfig,
+    semantic_risk: float = 0.0,
+) -> float:
+    """Return P(spoof | features, context) in [0, 1].
+
+    ``semantic_risk`` is the ASR/keyword scam-phrase signal from
+    ``vanirakshak/semantic/`` (see docs/PROTOCOL.md's ``semantic`` verdict
+    field) — an advisory context term, not an acoustic detector. It defaults
+    to 0.0 so a caller that never supplies it reproduces the original
+    acoustic-only fusion exactly.
+    """
     cm_spoof = 1.0 - window.features.get("cm_genuine_prob", 0.5)
     asv_mismatch = 1.0 - window.asv_score  # high when not enrolled or not matching
     prosody_unn = window.prosody_unnatural
@@ -36,6 +48,7 @@ def calibrate(window: WindowResult, context_risk: float, fusion: FusionConfig) -
         + fusion.w_prosody * prosody_unn
         + fusion.w_channel * chan_anom
         + fusion.w_context * context_risk
+        + fusion.w_semantic * max(0.0, min(1.0, semantic_risk))
     )
     return _sigmoid(z)
 
@@ -78,8 +91,13 @@ class RiskFusionEngine:
     def reset(self) -> None:
         self._ema = None
 
-    def update(self, window: WindowResult, context_risk: float = 0.0) -> RiskDecision:
-        p = calibrate(window, context_risk, self.fusion_cfg)
+    def update(
+        self,
+        window: WindowResult,
+        context_risk: float = 0.0,
+        semantic_risk: float = 0.0,
+    ) -> RiskDecision:
+        p = calibrate(window, context_risk, self.fusion_cfg, semantic_risk)
         # fast-rise override: if the posterior is decisively spoof, ignore the EMA
         if p > self.risk_cfg.fast_rise_threshold:
             risk = 100.0 * p
@@ -115,5 +133,5 @@ class RiskFusionEngine:
             tier=tier,
             raw_window=window,
             ema_risk=round(self._ema if self._ema is not None else risk, 2),
-            features=window.features,
+            features={**window.features, "semantic_risk": round(float(max(0.0, min(1.0, semantic_risk))), 4)},
         )

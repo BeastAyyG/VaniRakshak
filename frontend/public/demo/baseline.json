@@ -1,5 +1,5 @@
 {
-  "measured_at": "2026-09-08T05:42:04Z",
+  "measured_at": "2026-09-09T02:20:18Z",
   "spread": 36.1,
   "files": {
     "demo_01_genuine.wav": {
@@ -8,7 +8,7 @@
       "tier": "ALLOW",
       "mean_speaker_sim": 0.7282,
       "mean_acoustic_anomaly": 0.3267,
-      "target_speaker": "UNAVAILABLE"
+      "target_speaker": "None p=0.000"
     },
     "demo_02_degraded_copy.wav": {
       "risk": 34.1,
@@ -16,7 +16,7 @@
       "tier": "ALLOW",
       "mean_speaker_sim": 0.7026,
       "mean_acoustic_anomaly": 0.334,
-      "target_speaker": "UNAVAILABLE"
+      "target_speaker": "None p=0.000"
     },
     "demo_03_partial_splice.wav": {
       "risk": 51.4,
@@ -24,7 +24,7 @@
       "tier": "CHALLENGE",
       "mean_speaker_sim": 0.5584,
       "mean_acoustic_anomaly": 0.4435,
-      "target_speaker": "UNAVAILABLE"
+      "target_speaker": "None p=0.000"
     },
     "demo_04_impostor.wav": {
       "risk": 70.0,
@@ -32,7 +32,7 @@
       "tier": "BLOCK",
       "mean_speaker_sim": 0.0903,
       "mean_acoustic_anomaly": 0.6818,
-      "target_speaker": "UNAVAILABLE"
+      "target_speaker": "None p=0.000"
     }
   }
 }

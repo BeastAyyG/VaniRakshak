@@ -1,0 +1,30 @@
+# VaniRakshak — OPTIONAL real speaker-verification + anti-spoofing features.
+#
+# The forensic service runs WITHOUT this file: the CM/ASV detectors default
+# to the pure numpy/scipy stubs in detectors/{cm,asv}.py, and everything else
+# (fusion, challenge, audit, WS) works identically either way.
+#
+# Install this to enable:
+#   - VR_ASV_BACKEND=ecapa — real ECAPA-TDNN speaker embeddings
+#     (speechbrain/spkrec-ecapa-voxceleb) in detectors/asv_ecapa.py. This is
+#     what makes multi-speaker ("family") enrollment a real biometric rather
+#     than a random projection — see docs/PROTOCOL.md.
+#   - VR_CM_BACKEND=wavlm — real self-supervised WavLM features
+#     (microsoft/wavlm-base-plus) in detectors/cm_wavlm.py. NOTE: this is
+#     real features with a still-heuristic decision, NOT a trained
+#     anti-spoofing classifier — see that file's docstring before citing it
+#     as "spoof-detection accuracy" anywhere.
+#
+#   pip install -r requirements-asv.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu
+#   set VR_ASV_BACKEND=ecapa
+#   set VR_CM_BACKEND=wavlm
+#
+# torch is shared with requirements-ml.txt / requirements-asr.txt — installing
+# more than one of these files is safe, pip just sees it already satisfied.
+# Both models download their pretrained weights from Hugging Face on first
+# use (no weights are committed to this repo) — needs network access once.
+
+torch>=2.1
+speechbrain>=1.0
+transformers>=4.40
