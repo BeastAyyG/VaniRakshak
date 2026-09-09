@@ -1,4 +1,15 @@
-"""Phase 4: score the component the published benchmark NEVER measures.
+"""ARCHIVED 2026-09-09 — no longer runnable as-is.
+
+`backend.app.core.forensic_signal.ForensicSignalProcessor`, which this script
+scores, was deleted when the standalone `backend/` server was retired (see
+`backend/README.md`). The DSP it measured was never wired into the serving
+path this repo actually ships (see `vanirakshak-backend/`), so nothing today
+depends on this script running. Kept for historical reference alongside
+`AUDIT_REPORT.md` §5, which this script's output supported.
+
+--- Original docstring below ---
+
+Phase 4: score the component the published benchmark NEVER measures.
 
 `benchmarks/run_benchmarks.py` imports only `vanirakshak.*` (the deterministic
 stubs). It never imports `backend.app.*` — so the 429-line real DSP
