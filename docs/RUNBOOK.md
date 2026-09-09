@@ -70,6 +70,50 @@ including the challenge object shape, `metrics.asv_evaluated`, the
 Pass `--live --base-url http://127.0.0.1:8000` to run it against an
 already-running server instead.
 
+### Real detector backends (optional, verified working)
+
+```bash
+cd vanirakshak-backend
+pip install -r requirements-asv.txt --extra-index-url https://download.pytorch.org/whl/cpu
+set VR_ASV_BACKEND=ecapa
+set VR_CM_BACKEND=wavlm
+python ..\scripts\integration_check.py
+```
+
+This swaps the zero-dependency stubs for real SpeechBrain ECAPA-TDNN
+embeddings and WavLM features (weights download from Hugging Face once).
+Measured on the demo corpus (first 4.04 s window, anchor `narendra_modi`):
+genuine `asv=0.854`, impostor `asv=0.044` — clean target/impostor
+separation, versus the stub's uninformative projection. Two caveats this
+surfaced, both by design: (1) the tier-match gates in
+`integration_check.py` are calibrated for stub-era operating points and
+currently fail under real backends (`degraded_copy` → CHALLENGE,
+`partial_splice` → BLOCK — the system gets *more* sensitive, not less;
+recalibrate the gates before treating them as pass/fail under `ecapa`);
+(2) the WavLM CM decision on top of the real features is still a
+hand-tuned heuristic (`cm` scored the impostor clip *higher* than the
+genuine one), not a trained anti-spoofing classifier — do not cite
+spoof-detection accuracy for either backend.
+
+### Demo → working system (activation checklist)
+
+```powershell
+# 1. Real detectors (verified working — see above)
+pip install -r vanirakshak-backend/requirements-asv.txt
+$env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="wavlm"
+# 2. Trained countermeasure — NOT available: needs an ASVspoof-style
+#    labeled corpus + GPU training; nothing in-repo substitutes for it.
+# 3. Enroll real speakers (10–20 s genuine 16 kHz mono WAV each)
+#    Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/enroll `
+#      -Form @{ user_id="alice"; audio=[IO.File]::OpenRead("alice_20s.wav") }
+#    then pass "claimed_identity": "alice" in the WS handshake (PROTOCOL.md §1).
+# 4. Semantic layer: pip install groq; $env:GROQ_API_KEY="gsk-..."
+# 5. Android: needs Android Studio (SDK + JDK 17); point
+#    VaniBackendConfig at the LAN host, e.g. ws://192.168.1.10:8000/v1/stream.
+# 6. Harden: behind gateway/VPN + auth (none built in); VR_HOST / VR_PORT
+#    to bind, VR_AUDIT_PATH to durable storage (default data/audit_log.jsonl).
+```
+
 ### Doc/Code Drift Check
 
 ```bash
@@ -108,7 +152,7 @@ npm run build
 
 ## Monitoring
 
-- **Audit log**: SHA-256 hash-chained events in `AuditLog` (in-memory; export via `/api/v1/audit`)
+- **Audit log**: SHA-256 hash-chained events in `AuditLog` (in-memory ring + durable `VR_AUDIT_PATH` JSONL; export via `/api/v1/audit`)
 - **Event log**: Frontend displays last 20 events with severity badges
 - **Alert delivery**: Logged at WARNING level on failure; best-effort, never breaks the stream
 
@@ -117,32 +161,39 @@ npm run build
 Recorded here rather than silently carried, so nobody rediscovers these the
 hard way:
 
-- **Challenge recovery semantics are undecided.** A failed challenge always
-  escalates to `BLOCK` permanently; whether a *passed* challenge un-blocks a
-  session or re-arms a future challenge is an open `TODO(human)` in
-  `vanirakshak/session.py::grade_challenge`. As shipped, it does neither —
-  `_blocked` and the one-challenge-per-session gate are both one-way.
-- **Auto-generated `session_id` is never returned to the client.** If a WS
-  handshake omits `session_id`, the server assigns one internally but never
-  sends it back — grading a challenge over REST afterward is impossible
-  without it. Always set your own `session_id` (see `docs/INTEGRATION_GUIDE.md`).
-- **The `/analyze` response has several fabricated fields**, kept exactly as
-  named for frontend compatibility rather than removed outright:
-  `inference_ms` is a constant `14.5`, not a measurement; `speech_ratio` is a
-  constant `0.95`; `is_voiced` is always `true` (no VAD runs in the serving
-  path); `zcr_variance` is a constant `0.05`. Do not treat these as real
-  telemetry.
+- **Challenge is a one-shot gate, not a recovery path (decided).** A failed
+  challenge always escalates to `BLOCK` permanently; a *passed* challenge
+  never un-blocks a session or re-arms a future challenge — `_blocked` and
+  the one-challenge-per-session gate are both one-way by design
+  (`grade_challenge()`), because grading is digit-order + latency only with
+  no voice biometrics. Each challenge is single-use: re-grading returns
+  `no_active_challenge`.
+- **WS handshake `session_id` handling.** The server always opens with a
+  `session_ack` (`docs/PROTOCOL.md` §1) echoing the resolved `session_id`,
+  so an omitted id is recoverable for REST challenge-grading. Supplying
+  your own id still works (see `docs/INTEGRATION_GUIDE.md`).
+- **The `/analyze` per-window report fields are lightweight measurements.**
+  `inference_ms` is a real per-`push_chunk` wall-clock timing;
+  `speech_ratio`/`is_voiced` come from a simple short-time-energy VAD and
+  `zcr_variance` from per-frame zero-crossing variance
+  (`vanirakshak/detectors/voice.py`) — honest signal-energy heuristics, not
+  a trained VAD, so treat them as indicative, not ground truth.
 - **The impostor label and the impostor interlock use different
   thresholds.** `/analyze`'s `IMPOSTOR_SPEAKER` verdict label fires below
   `mean_speaker_sim < 0.40`; the actual `BLOCK` override
   (`VR_IMPOSTOR_BLOCK_BELOW`) fires below `0.10`. A clip can be *labelled*
   `IMPOSTOR_SPEAKER` while its *tier* is only `CHALLENGE`.
-- **The audit chain is in-memory only.** A server restart loses it entirely;
-  there is no persistence layer.
-- **No client-side audio resampling.** The client requests 16 kHz on
-  `getUserMedia` and `AudioContext`, but if a browser honors a different
-  hardware rate, nothing downstream corrects for it — the handshake's
-  `sample_rate` is trusted, not verified.
-- **`WaveformEvidenceTimeline`'s waveform display is synthetic.** Bar
-  heights come from a fixed sine pattern, not decoded audio — only the
-  colors and boundary markers are data-driven.
+- **The audit chain persists to JSONL.** Every event is appended to
+  `VR_AUDIT_PATH` (default `data/audit_log.jsonl`, gitignored) and the chain
+  is reloaded and re-verified on restart; empty `VR_AUDIT_PATH` opts back
+  out to the in-memory ring only. The process never truncates the file —
+  rotate it with normal log tooling.
+- **Client resampling is linear-interpolation only.** A hardware rate
+  mismatch is detected and corrected in-client, but the resampler is a
+  simple interpolator, not a proper anti-aliased filter — fine for keeping
+  detectors on-rate, not lab-grade.
+- **`WaveformEvidenceTimeline` falls back to a synthetic pattern only when
+  audio can't be decoded.** Bar heights come from per-bar peaks of the real
+  decoded audio (`decodeAudioData`); the sine fallback shows while decoding
+  or for unfetchable (no-CORS) sources. Colors and boundary markers were
+  always data-driven.

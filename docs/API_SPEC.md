@@ -238,7 +238,7 @@ it necessarily lags one window — see PROTOCOL.md §3.1).
 
 ### `POST /v1/verify-speaker` (and `/api/v1/verify-speaker`)
 
-The **only** endpoint the Android client calls (`VaniSpeakerVerifier.kt`).
+The one-shot REST call the Android client makes (`VaniSpeakerVerifier.kt`).
 Form fields: `audio` or `file` (either name accepted, WAV). Scores against the
 trained `ml/` identity model directly — the same model `/analyze`'s
 `target_speaker` block reports, without running the acoustic pipeline.
@@ -273,13 +273,12 @@ Grade a challenge response. Body: `{"response_text": "...", "response_latency_ms
 ```
 
 `404` if `sid` doesn't match an active session; `{"ok": false, "reason": "no_active_challenge"}`
-if the session has no challenge outstanding. Every graded response (pass or
-fail) is now recorded in the audit chain. **A failed challenge always
-escalates the session to `BLOCK`, permanently.** Whether a *passed* challenge
-un-blocks the session or re-arms a future challenge is an open decision —
-see PROTOCOL.md §3's "Challenge outcomes and the interlock" note and the
-`TODO(human)` in `vanirakshak/session.py::grade_challenge`. As shipped today,
-it does not: `blocked` in the response reflects the session's one-way latch,
+if the session has no challenge outstanding (including after a challenge has
+already been graded — each challenge is single-use). Every graded response
+(pass or fail) is recorded in the audit chain. **A failed challenge always
+escalates the session to `BLOCK`, permanently. A passed challenge never
+un-blocks or re-arms** (see PROTOCOL.md §3 "Challenge outcomes and the
+interlock"): `blocked` in the response reflects the session's one-way latch,
 not a reversible state.
 
 ### `GET /v1/audit` (and `/api/v1/audit`)
@@ -290,8 +289,9 @@ Tail the SHA-256 hash-chained audit log. Query param `n` (default 50).
 { "chain_valid": true, "events": [ { "session_id": "...", "receipt_hash": "...", "prev_hash": "...", "risk_score": 43.2, "tier": "CHALLENGE", "features": {}, "timestamp_iso": "..." } ] }
 ```
 
-The log is **in-memory only** (a ring buffer, default 10,000 events) — a
-server restart loses the chain. Feature-only: no raw audio or embeddings are
+The log is a capped in-memory ring (default 10,000 events) backed by a
+durable JSONL file (`VR_AUDIT_PATH`, default `data/audit_log.jsonl`) that is
+reloaded and re-verified on restart. Feature-only: no raw audio or embeddings are
 ever logged.
 
 ## Environment Variables

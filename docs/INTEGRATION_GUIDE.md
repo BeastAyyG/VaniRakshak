@@ -50,12 +50,14 @@ own gateway/VPN before exposing it beyond a trusted network.
    (`caller_id`, `claimed_identity`, `transaction_value_inr`,
    `origin_country`, `prior_fraud_score`) and what each does to risk scoring.
 
-   **Always set your own `session_id`** rather than omitting it. If you
-   don't, the server generates one internally (`ws-<8 hex chars>`) but never
-   sends it back to you anywhere in the verdict stream — there is currently
-   no way to recover an auto-generated id, which means you can't grade a
-   challenge over REST (§4 below needs a `session_id` you actually know)
-   unless you supplied it yourself.
+    Supplying your own `session_id` is recommended, but no longer required.
+    If you omit it, the server generates one internally (`ws-<8 hex chars>`)
+    and returns it in the first message back — a `session_ack`
+    (`{"type": "session_ack", "session_id": ..., "sample_rate": ...}`),
+    which arrives before any verdict and carries no `tier`/`risk_score`, so
+    verdict parsers skip it by shape. Adopt the acked id: §4 below needs a
+    `session_id` you actually know to grade a challenge over REST. Full
+    contract in PROTOCOL.md §1.
 3. Stream raw 16-bit signed little-endian mono PCM as **binary** WebSocket
    frames, at the sample rate you declared. Any frame size works — the
    server buffers internally and only emits a verdict once it has
@@ -153,10 +155,16 @@ managing session/challenge state over REST separately from the audio socket.
 
 ## 5. Mobile clients that can't stream continuously
 
-`vanirakshak-android/` is the reference for this pattern today: it does
-**not** run a WebSocket client at all (no live-stream integration exists in
-the shipped Android app — see `vanirakshak-android/DESIGN.md` §4 for what's
-deferred). Its one integration point is a single one-shot REST call:
+`vanirakshak-android/` is the reference for this pattern today: when the
+backend is reachable it holds a live WebSocket open
+(`vanirakshak-android/app/src/main/kotlin/com/vericall/audio/VaniStreamingClient.kt`
+— handshake-first, 16-bit PCM @16kHz,
+server-authoritative `tier`/`interlock_active`, same reconnect backoff as §6
+below) and grades challenges via `POST /v1/sessions/{session_id}/challenge`
+(`vanirakshak-android/app/src/main/kotlin/com/vericall/audio/VaniChallengeGrader.kt`), with `receipt_hash` shown and persisted —
+see `vanirakshak-android/DESIGN.md` §4. When the backend is unreachable it
+falls back to an on-device heuristic clearly labeled as an offline estimate.
+Its one-shot REST call for the enrolled-voice identity check is:
 
 ```
 POST /v1/verify-speaker

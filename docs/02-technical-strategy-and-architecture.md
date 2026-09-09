@@ -238,6 +238,7 @@ The banking transaction interlock (`vanirakshak.session.CallSession`) operates a
 - Once an analysis window triggers the **BLOCK** tier ($\text{risk} \ge 70$), `self._blocked` is set to `True`.
 - It remains latched for the remainder of the session; subsequent lower scores cannot release the interlock.
 - A failed challenge (`grade_challenge` failure) immediately escalates the session to **BLOCK** and triggers the latch.
+- A passed challenge never releases the latch or re-arms a further challenge (one-shot gate: grading is digit-order + latency only, no voice biometrics).
 - Outbound alert payload is automatically generated with cryptographic receipt hash and dispatched via `AlertDispatcher` to `VR_ALERT_WEBHOOK_URL`.
 
 ---
