@@ -1,4 +1,4 @@
-.PHONY: setup dev backend lint test eval bench benchmarks clean
+.PHONY: setup dev backend lint test integration-check check-docs eval bench benchmarks clean
 
 # Installs everything `make test` needs (15 tests) plus the real ECAPA-TDNN /
 # WavLM detector backends and the trained ml/ identity model -- see
@@ -17,6 +17,12 @@ lint:
 
 test:
 	pytest -v
+
+integration-check:
+	python scripts/integration_check.py
+
+check-docs:
+	python scripts/check_docs.py
 
 eval:
 	cd vanirakshak-backend && python -m vanirakshak eval
