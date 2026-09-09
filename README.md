@@ -138,6 +138,8 @@ The landing experience is a scroll-driven canvas animation (220 pre-rendered fra
 .
 ├── package.json          # workspace wrapper — delegates to frontend/
 ├── docs/PROTOCOL.md      # frontend <-> backend WebSocket contract (read this first)
+├── docs/API_SPEC.md      # full REST + WS reference
+├── docs/INTEGRATION_GUIDE.md  # for third-party (mobile/PBX) integrators, not the bundled dashboard
 ├── frontend/             # Next.js 16 (App Router) dashboard
 │   ├── public/worklets/pcm-capture.js   # AudioWorklet PCM capture
 │   └── app/
