@@ -1,251 +1,523 @@
-# 08 — Trained countermeasure plan (AASIST)
+# 08 — Trained countermeasure: build runbook (AASIST)
 
 **Status: plan, not implementation.** No trained anti-spoofing weights exist
-anywhere in this repo. This document is the executable recipe for producing
-them the moment GPU access + a labeled corpus are available. Until a
-checkpoint with a *measured* dev-set EER is loaded via `VR_CM_BACKEND=aasist`,
-every claim in `docs/02-technical-strategy-and-architecture.md` about the CM
-being heuristic-only remains the truth — see the honesty guardrails in §10.
+anywhere in this repo. Until a checkpoint with a *measured* dev EER loads via
+`VR_CM_BACKEND=aasist`, every "the CM is heuristic-only" statement in
+`docs/02-technical-strategy-and-architecture.md` remains the truth — see §12.
 
-## 0. Goal
+This document is written to be **followed without asking anyone**. It states
+the target hardware, the exact VRAM arithmetic, the failure modes in the
+order you will hit them, and honest wall-clock estimates. Where a decision
+has two defensible answers it says which to take and why, rather than
+listing options.
 
-Replace the hand-tuned spoof/genuine decision (DSP stub in
-`vanirakshak-backend/vanirakshak/detectors/cm.py`, WavLM-feature heuristic in
-`vanirakshak-backend/vanirakshak/detectors/cm_wavlm.py`) with a trained
-AASIST-L classifier head on frozen WavLM features, behind the existing
-`score(x, sr) -> float` LLR contract so fusion (`VR_FUSION_W_CM`,
-`VR_FUSION_BIAS`), the `VR_IMPOSTOR_BLOCK_BELOW` override, and the WS verdict
-shape in `docs/PROTOCOL.md` all keep working unchanged.
+---
 
-**Measured baseline it must beat:** on the demo corpus the WavLM heuristic
-scored the impostor clip *higher* (more genuine) than the genuine clip
-(RUNBOOK, "Real detector backends"). Any trained head that cannot separate
-bonafide from spoof on every attack family in §6 is a failed run, not a
-shippable checkpoint.
+## 0. Goal, and what "done" means
 
-## 1. Corpus
+Replace the hand-tuned spoof/genuine decision (`detectors/cm.py` DSP stub,
+`detectors/cm_wavlm.py` WavLM-feature heuristic) with a **trained** classifier
+behind the existing `score(x, sr) -> float` LLR contract, so fusion
+(`VR_FUSION_W_CM`, `VR_FUSION_BIAS`), the `VR_IMPOSTOR_BLOCK_BELOW` override
+and the WS verdict shape in `docs/PROTOCOL.md` all keep working untouched.
+
+**The baseline it must beat is embarrassing, and that is the point.** On the
+demo corpus the current WavLM heuristic scored the *impostor* clip as more
+genuine than the *genuine* clip (RUNBOOK, "Real detector backends"). Any
+trained head that cannot separate bonafide from spoof on every attack family
+is a failed run, not a shippable checkpoint.
+
+**"Perfect" is not on the table — do not aim for it.** §5.4 explains why:
+published systems at sub-1% EER in-domain routinely degrade to 30–60% EER on
+real-world audio [R6][R7]. The realistic goal is a checkpoint that is
+*measured*, *honestly documented*, and *better than the heuristic*. Define
+success as §10's checklist, not as a number you hoped for.
+
+---
+
+## 1. Target hardware and what it permits
+
+Written for the intended training box:
+
+| Component | Assumed |
+|---|---|
+| GPU | **RTX 5060 Ti 16 GB** (Blackwell, `sm_120`) |
+| RAM | **64 GB** |
+| CPU | Modern Ryzen, 8–16 cores |
+| Storage | NVMe SSD, **≥ 500 GB free** (1 TB comfortable) |
+| Cooling | Desktop, sustained load OK |
+
+> **This is not the machine this repo currently sits on.** The dev laptop
+> measured here is an RTX 5060 **Laptop** with **8 GB** VRAM, 31.7 GB RAM,
+> i7-14700HX. Everything in §4 Recipe C is impossible on 8 GB. If you ever
+> run this on the laptop, you get Recipe A only. Check with `nvidia-smi`
+> before assuming which box you are on.
+
+**The 16 GB is what makes this project viable.** At 8 GB you can only train a
+small head on frozen features (Recipe A), which is the configuration the
+literature says underperforms [R3]. At 16 GB you can fine-tune a 300 M-param
+SSL front-end with gradient checkpointing — that is the recipe that produced
+the field's headline results.
+
+### VRAM arithmetic (do this before you trust any batch size)
+
+For a model of *P* parameters trained in bf16 with AdamW and fp32 master
+weights, the fixed cost before activations is roughly:
+
+```
+bf16 weights      2P bytes
+bf16 gradients    2P bytes
+fp32 master       4P bytes
+AdamW m, v        8P bytes
+                 ------
+                 16P bytes
+```
+
+| Model | *P* | Fixed (16P) | Activations @ batch 8 + grad-ckpt | Total | Fits 16 GB? |
+|---|---|---|---|---|---|
+| AASIST-L head only | 85 k | ~1 MB | negligible | < 1 GB | trivially |
+| WavLM-base-plus | 94 M | ~1.5 GB | ~2–3 GB | ~5 GB | comfortably |
+| **XLS-R-300m** | **300 M** | **~4.8 GB** | **~3–5 GB** | **~9–10 GB** | **yes, with checkpointing** |
+| XLS-R-1B | 1 B | ~16 GB | — | — | no |
+
+Gradient checkpointing is mandatory for the 300 M row. It trades ~30–40 %
+extra compute for roughly a 3–4× activation-memory reduction, and without it
+batch 8 will OOM.
+
+---
+
+## 2. Phase 0 — Environment (do this first; budget 2–4 h)
+
+**The single most likely thing to waste your first day** is a CPU-only or
+pre-Blackwell PyTorch. Blackwell is compute capability `sm_120`; a wheel
+built without it fails at the first CUDA kernel with
+`no kernel image is available for execution on the device` [R9]. PyTorch 2.7
+was the first stable release with `sm_120`; anything ≥ 2.7 on a CUDA 12.8+
+build is fine.
+
+For reference, the torch installed in this repo right now is
+**`2.14.0+cpu`** — a CPU-only build that will silently never touch the GPU.
+Do not assume the training box is different; check.
+
+```bash
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
+```
+
+If it prints `+cpu`, `None`, or `False`, install a CUDA build into a
+dedicated venv (do not reuse the repo's inference venv):
+
+```bash
+python -m venv ~/cm-train && source ~/cm-train/bin/activate   # Windows: ~\cm-train\Scripts\activate
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install transformers datasets soundfile librosa numpy scipy pandas tqdm tensorboard
+```
+
+**Gate — do not proceed until all four print correctly:**
+
+```bash
+python - <<'PY'
+import torch
+assert torch.cuda.is_available(), "no CUDA device visible"
+maj, minr = torch.cuda.get_device_capability(0)
+print("device      :", torch.cuda.get_device_name(0))
+print("capability  : sm_%d%d" % (maj, minr))
+print("vram GB     :", round(torch.cuda.get_device_properties(0).total_memory/1024**3, 1))
+print("arch list   :", torch.cuda.get_arch_list())
+x = torch.randn(4096, 4096, device="cuda", dtype=torch.bfloat16)
+print("matmul ok   :", bool(torch.isfinite(x @ x).all()))   # this is the real test
+PY
+```
+
+You want `sm_120` present in `arch_list` and the matmul to succeed. The
+matmul line matters: `cuda.is_available()` can return `True` on a wheel that
+still has no kernels for your card, and you will only discover it 40 minutes
+into feature extraction.
+
+**Thermal sanity (5 minutes, saves days).** Before committing to a multi-day
+run, load the GPU for 15 minutes and watch for clock throttling:
+
+```bash
+nvidia-smi --query-gpu=timestamp,temperature.gpu,clocks.sm,power.draw --format=csv -l 5
+```
+
+Sustained SM clock should stay near boost. If temps sit above ~83 °C and
+clocks sag, fix airflow now — Recipe C in §4 runs for two days straight.
+
+---
+
+## 3. Phase 1 — Corpus (budget 1–2 days, mostly download)
+
+### 3.1 What to get
 
 - **Primary: ASVspoof 5** [R4][R5] — crowdsourced speech from ~2 000
   speakers, 20+ spoofing attacks, and (a first for the series) seven
-  adversarial attacks. Distributed via Zenodo; **read the README and LICENSE
-  files bundled with the download before downloading and before publishing
-  any number from it** — the licence, not this document, governs what you
-  may do with the data and how it must be cited. Mirror also on Hugging
-  Face [R8].
-  Use the shipped train / dev / eval partitions untouched — no re-splitting,
-  no speaker overlap across partitions. Follow the Phase-2 evaluation plan
-  [R4] if you want numbers comparable to the literature; deviating is
-  allowed but must then be stated next to every figure.
-- **Fallback: ASVspoof 2019 LA** if ASVspoof 5 access is slow. Smaller and
-  older vocoders, so expect optimistic numbers; re-run on ASVspoof 5 before
-  any production claim.
-- **Held-out generalization set: In-the-Wild** [R6] — ~20.8 h bonafide and
-  ~17.2 h spoofed audio scraped from social media and video platforms
-  (English-speaking public figures, real background noise). Never train or
-  tune on it. It exists solely to answer "does this checkpoint survive
-  contact with audio nobody curated?" — see §4.4.
-- **Location: outside the repo** (e.g. `~/cm-corpus/`). `AGENTS.md` keeps
-  datasets out of git; the corpus never enters `data/`. Build a manifest TSV
-  (`path<TAB>label`, label in `{bonafide, spoof}` + attack id) from the
-  corpus protocol files — the training script reads the manifest, never a
-  hardcoded file list.
+  adversarial attacks. Distributed via Zenodo; a Hugging Face mirror also
+  exists [R8]. **Read the README and LICENSE shipped inside the download
+  before you download and before you publish any number from it** — the
+  licence, not this document, governs what you may do with the data and how
+  it must be cited.
+- **Fallback: ASVspoof 2019 LA** if ASVspoof 5 access is slow. Much smaller,
+  older vocoders — expect optimistic numbers, and re-run on ASVspoof 5
+  before any production claim. Useful for getting the pipeline working in an
+  afternoon.
+- **Held-out generalization set: In-the-Wild** [R6] — ~20.8 h bonafide,
+  ~17.2 h spoofed, scraped from social media and video platforms with real
+  background noise. **Never train or tune on it.** It answers the only
+  question that matters in production: does this survive audio nobody
+  curated?
 
-## 2. Front-end contract (must match inference exactly)
+### 3.2 Where to put it
 
-Train / inference mismatch here silently voids the whole run. These values
-mirror the constants in
-`vanirakshak-backend/vanirakshak/detectors/cm_aasist.py`:
+Outside the repo. `AGENTS.md` keeps datasets out of git and the corpus never
+enters `data/`. Use e.g. `~/cm-corpus/asvspoof5/`.
 
-- Resample everything to **16 000 Hz mono int16→float32** first (same
-  `resampleToStreamRate` semantics as the frontend; training data at other
-  rates is resampled, never trusted).
-- Slice/pad to **4.0 s windows** (64 000 samples) — the production analysis
-  window is 4.04 s; 4.0 s is the model aperture, the extra 0.04 s is pipeline
-  framing, not model input.
-- Features: **frozen microsoft/wavlm-base-plus** (Hugging Face model id), last hidden state
-  (768-dim), no fine-tuning. Freezing is deliberate: it keeps training to a
-  single-GPU job and keeps the production dependency identical to what
-  `VR_CM_BACKEND=wavlm` already loads.
-- Normalize per-utterance (mean/zero, unit variance) before the head.
+Plan disk before downloading:
 
-## 3. Model + training recipe
-
-- **Head: AASIST-L** (light variant, **85 k params** per the original paper
-  [R1]): spectral + temporal graph-attention branches over the WavLM frame
-  sequence, graph pooling, single genuine logit. Port from the official
-  implementation [R2] and pin it by commit hash in the run log.
-- **Loss:** weighted cross-entropy (spoof weight = bonafide/spoof train
-  ratio). OC-Softmax is an accepted substitute — record the choice, don't
-  mix results across choices.
-- **Optimizer:** AdamW, lr 1e-4, cosine decay, weight decay 1e-4, batch 32
-  (gradient-accumulate to 32 if VRAM forces smaller micro-batches), fp16
-  mixed precision, ~100 epochs, **early-stop on dev EER** (patience 10).
-- **Augmentation (on the fly, probability each):** codec sims from the
-  repo's own `vanirakshak-backend/vanirakshak/data/augment.py` (G.711 a/μ-law,
-  AMR-WB simulation) — this is why that module exists, see
-  `docs/03-codec-augmentation-and-telephony.md` — plus MUSAN-style noise at
-  5–20 dB SNR and telephony bandpass (300–3400 Hz) on a fraction of batches.
-  Never augment the dev/eval partitions.
-- **Hardware:** 1× 24 GB card (RTX 4090) is enough with a frozen frontend;
-  40 GB (A100) is comfortable. Budget **12–48 h** wall-clock incl. one
-  restart for a bad seed. Log every run (git hash of this repo + training
-  repo, seed, loss curves, dev EER per epoch).
-
-> **Known weakness of this recipe — read before running it.** §2 freezes the
-> WavLM front-end. That is a deliberate cost/complexity trade (single-GPU
-> job, production dependency identical to `VR_CM_BACKEND=wavlm`), but it is
-> *not* the configuration that produced the field's headline results. Tak et
-> al. [R3] fine-tuned an SSL front-end (wav2vec 2.0 / XLS-R) jointly with an
-> AASIST back-end and reported ~90% relative improvement over their
-> baseline, and state explicitly that fine-tuning the front-end was
-> necessary — the SSL model is pre-trained on bonafide speech only, so a
-> frozen version has never been asked to represent spoofing artefacts.
-> Expect the frozen variant here to underperform published numbers. If §8
-> acceptance fails, unfreezing the front-end (§9) is the first thing to try,
-> not the last; budget a larger GPU for it.
-
-## 4. Eval protocol (report all of it, not just the headline)
-
-Conventions follow `docs/04-metrics-and-honest-evaluation.md`:
-
-1. **minDCF** — the **primary** metric, matching the ASVspoof 5 evaluation
-   plan's Track 1 (stand-alone bonafide-vs-spoof detection) [R4][R5]. Report
-   it with the challenge's own cost parameters so the number is comparable
-   to published work. This repo's earlier framing made EER primary; that was
-   wrong relative to the challenge protocol and is corrected here.
-2. **EER, pooled and per-attack** — secondary but non-negotiable for
-   shipping: a head at 2% pooled EER that collapses on one attack family is
-   not shippable, and pooled EER hides exactly that.
-3. **Calibration: Cllr and actDCF** at the exported threshold vs minDCF.
-   ASVspoof 5 Track 1 scores Cllr and actDCF alongside minDCF precisely to
-   catch systems that discriminate well but are badly calibrated [R4]. If
-   actDCF and minDCF diverge, the `eer_threshold` export in §5 is
-   miscalibrated — fix, don't ship.
-   (Track 2's a-DCF / t-EER metrics apply to spoofing-robust ASV, i.e. a
-   CM+ASV tandem. This system does fuse CM with ASV, so a-DCF is the more
-   honest end-to-end number *if* you evaluate the fused pipeline rather than
-   the CM alone — worth doing, out of scope for this checkpoint's gate.)
-4. **Cross-dataset generalization — the gate that matters most in
-   production.** Evaluate the frozen checkpoint, unchanged, on a corpus it
-   was not trained on: In-the-Wild [R6] is the standard choice. Published
-   surveys report models at sub-1% EER on ASVspoof degrading to **30–60%
-   EER** on in-the-wild audio [R6][R7] — i.e. from usable to worse than a
-   coin flip on some systems. Record this number even when it is
-   embarrassing; it is the honest predictor of behaviour on a real call,
-   and a checkpoint that is excellent in-domain and useless out-of-domain
-   must be documented as such rather than shipped on its in-domain figure.
-5. **In-repo gates after integration (§6):** recalibrate with
-   `scripts/fit_fusion_weights.py` under `VR_ASV_BACKEND=ecapa`
-   `VR_CM_BACKEND=aasist`, then `scripts/integration_check.py` — its
-   tier-match gates were calibrated for stub-era operating points and will
-   need recalibration (same as happened under `ecapa`/`wavlm`); record the
-   new gates, don't delete them.
-6. **Demo-clip sanity:** genuine must outscore impostor on the shipped demo
-   set — the minimum bar the heuristic failed.
-
-## 5. Checkpoint export (schema is contractual)
-
-The training run must write exactly what
-`vanirakshak-backend/vanirakshak/detectors/cm_aasist.py::_validate_checkpoint`
-accepts — a torch.save dict with keys `architecture` (`aasist-l`),
-`frontend` (microsoft/wavlm-base-plus), `sample_rate` (16000), `window_s`
-(4.0), `state_dict`, `eer_threshold` (dev-set EER operating point on the
-genuine logit — `score()` centers on this, so export it from the *dev*
-partition, never eval), `dev_eer`, `dev_min_dcf` (measured numbers, surfaced
-in the health report so any operator can see what the weights proved).
-
-Name the file data/cm_aasist.pt in prose only here: `*.pt` is gitignored
-(`.gitignore`), so it can never be committed — transfer it to the inference
-host out of band and point `VR_CM_AASIST_WEIGHTS` at it (or drop it at the
-default location). Keep the run log + eval report next to it; weights
-without the report are unverifiable and will not be merged into any claim.
-
-## 6. Integration (the day the weights land)
-
-1. Place the checkpoint, set `VR_CM_BACKEND=aasist` (and
-   `VR_CM_AASIST_WEIGHTS` if off-default).
-2. Health endpoint must report the `aasist` CM name with the measured
-   `dev_eer` — if it reports the stub, the weights didn't load; verdicts are
-   unchanged by design, so this step is silent-failure-proof only if you
-   check the label.
-3. Recalibrate fusion (`scripts/fit_fusion_weights.py`), update the
-   integration-check tier gates, run the full battery (pytest,
-   integration_check, check_docs).
-4. Update docs to the measured numbers: RUNBOOK real-backend section,
-   `docs/02-technical-strategy-and-architecture.md` CM row, and this file's
-   status line. The "heuristic-only" statements get retired *then*, with the
-   EER attached — not before.
-
-## 7. Budget
-
-| Item | Estimate |
+| Item | Approx |
 |---|---|
-| Corpus access + download (~50 GB) | 1–2 days wall-clock |
-| GPU (1× A100 40 GB cloud) | 12–48 h compute, ~$50–150 |
-| Eval + calibration + report | 1 day |
-| In-repo integration + recalibration (§6) | 1–2 days |
-| **Total** | **~1–2 weeks, ~$50–150** |
+| ASVspoof 5 audio (all partitions, FLAC) | 100–150 GB — **verify against the actual release** |
+| Cached WavLM features, train+dev, fp16 (§4.1) | ~93 GB |
+| In-the-Wild | ~5 GB |
+| Checkpoints, logs, scores | ~10 GB |
+| **Working total** | **~250–300 GB** |
 
-## 8. Acceptance criteria
+Do **not** cache eval-partition features: at ~680 k utterances that is a
+further ~197 GB for no benefit, since you pass over eval once. Stream it.
 
-- [ ] Eval EER + minDCF + per-attack breakdown published in the run report.
-- [ ] actDCF ≈ minDCF (threshold calibrated).
-- [ ] Beats the heuristic baseline on every attack family and on demo clips.
-- [ ] Checkpoint loads via `VR_CM_BACKEND=aasist`; health shows measured EER.
-- [ ] Fusion recalibrated; full test battery green; docs updated to numbers.
+### 3.3 Manifest
 
-## 9. If training fails
+Build one TSV per partition from the corpus protocol files — the training
+script reads the manifest, never a hardcoded file list:
 
-A trained head that doesn't beat the heuristic is a result, not a waste:
-record the EER, keep `VR_CM_BACKEND=wavlm` as the production setting, and do
-not lower the bar (no shipping dev-tuned thresholds, no eval-peeking). The
-next step would be unfreezing the frontend or more attack-diverse data —
-a new run, not a reinterpretation of this one.
+```
+path<TAB>label<TAB>attack_id
+/abs/path/x.flac	bonafide	-
+/abs/path/y.flac	spoof	A07
+```
 
-## 10. Honesty guardrails
+`attack_id` is not optional bookkeeping: §5.2's per-attack breakdown is a
+shipping gate, and you cannot reconstruct it later without this column.
 
-- Never cite spoof-detection accuracy for any backend until §8 is checked
-  off with a named checkpoint + report.
+**Gate:** counts per partition and per label match the official protocol
+files. A silent partial download that leaves you 12 % short of the spoof
+class produces a model that looks fine and is not.
+
+---
+
+## 4. Phase 2 — Two recipes, run in this order
+
+Run **A first even though B is the real target.** A is cheap, exercises the
+whole pipeline end to end, and gives you a floor. If A's plumbing is broken
+you find out in an hour instead of two days into a fine-tune.
+
+### Front-end contract (identical for both — mismatch here silently voids the run)
+
+Mirrors the constants in `vanirakshak-backend/vanirakshak/detectors/cm_aasist.py`:
+
+- Resample everything to **16 000 Hz mono**, float32 in [-1, 1].
+- Slice/pad to **4.0 s** (64 000 samples). Production analyses a 4.04 s
+  window; 4.0 s is the model aperture, the extra 0.04 s is pipeline framing.
+- Per-utterance normalization (zero mean, unit variance) before the head.
+- Crop policy: **random 4 s crop during training, centre crop at eval.**
+  Random crop is free augmentation; a fixed crop at train time teaches the
+  model where in the file the artefacts live, which is not a real signal.
+
+### Recipe A — frozen WavLM + AASIST-L head (the smoke test)
+
+Front-end: **frozen `microsoft/wavlm-base-plus`**, last hidden state
+(768-dim, ~199 frames for 4 s). Head: **AASIST-L, 85 k params** [R1], ported
+from the official implementation [R2] — pin it by commit hash in the run log.
+
+Because the front-end is frozen, its output never changes: **extract features
+once, then train the head on cached tensors.** This is what makes A fast.
+
+```
+Extraction throughput (5060 Ti, fp16, batch 64):  ~100 utt/s
+  train 182 k  →  ~30 min
+  dev   141 k  →  ~24 min
+  eval  680 k  →  ~1.9 h   (do this at eval time, not now)
+  ------------------------------------------------
+  one-time cost before training:  ~1 h  (train+dev only)
+```
+
+Store fp16: `199 × 768 × 2 B ≈ 0.29 MB` per utterance. With 64 GB RAM the OS
+page cache will hold a large slice of the hot set, so epoch 2 onward is much
+faster than epoch 1.
+
+Head training: batch 128, AdamW lr 1e-3 (a tiny head tolerates a much higher
+LR than a fine-tune), cosine decay, weighted cross-entropy with
+`spoof_weight = n_bonafide / n_spoof` — ASVspoof is heavily spoof-imbalanced
+and unweighted CE will happily predict "spoof" for everything and report a
+flattering accuracy.
+
+```
+~45–60 s/epoch (dataloader-bound), 60 epochs, early-stop on dev minDCF
+  →  ~1 hour total
+```
+
+**Expect A to underperform.** That is not a bug; §4's Recipe C exists because
+of it.
+
+### Recipe C — fine-tuned XLS-R-300m + AASIST (the real target)
+
+This is the configuration behind the published results. Tak et al. [R3]
+fine-tuned an SSL front-end (wav2vec 2.0 / XLS-R) jointly with an AASIST
+back-end and reported **~90 % relative improvement** over their baseline,
+stating explicitly that fine-tuning the front-end was *necessary* — the SSL
+model is pre-trained on bonafide speech only, so a frozen copy has never been
+asked to represent spoofing artefacts at all.
+
+```
+Model      : facebook/wav2vec2-xls-r-300m  (300 M) + AASIST back-end
+Precision  : bf16 autocast, fp32 master weights
+Batch      : 8 micro-batch  ×  4 grad-accum  =  32 effective
+Grad ckpt  : ON  (mandatory — batch 8 OOMs without it)
+Optimizer  : AdamW, lr 1e-6 front-end / 1e-4 head, cosine, warmup 5 % steps
+Epochs     : 8–15, early-stop on dev minDCF, patience 3
+```
+
+The **two-speed learning rate is not optional**. A single 1e-4 LR across a
+pre-trained 300 M front-end destroys the representation in the first few
+hundred steps — you get a model that trains smoothly and generalizes worse
+than Recipe A. Front-end gets 1e-6 to 1e-5; the randomly-initialised head
+gets 1e-4.
+
+```
+Throughput (5060 Ti 16 GB, bf16 + grad-ckpt, batch 8):  ~0.3–0.5 s/step
+  182 k utts / 8  =  22 750 steps/epoch  →  ~2.5 h/epoch
+  10 epochs  →  ~25 h
+  realistic with one restart for a bad seed  →  2–3 days
+```
+
+> **Checkpoint-schema constraint — read before you start Recipe C.**
+> `cm_aasist.py` hard-validates `frontend == "microsoft/wavlm-base-plus"`
+> and `architecture == "aasist-l"` (`_FRONTEND`, `_ARCHITECTURE` at lines
+> 52–53). A Recipe C checkpoint **will be rejected at load** until you update
+> those two constants and the `docs/PROTOCOL.md` / health-report strings that
+> name the backend. Do that as part of §8, not as a surprise on integration
+> day. Also update `_validate_checkpoint`'s expectations if you change the
+> feature dimension (XLS-R-300m is 1024-dim, not 768).
+
+### Augmentation (both recipes, on-the-fly, train partition only)
+
+Use this repo's own `vanirakshak-backend/vanirakshak/data/augment.py` — G.711
+A-law/μ-law and AMR-WB simulation. **This is why that module exists** (see
+`docs/03-codec-augmentation-and-telephony.md`), and it is the single most
+relevant augmentation for VaniRakshak specifically, because production audio
+arrives over telephony codecs and a model trained only on clean studio audio
+will treat codec artefacts as spoofing artefacts.
+
+Suggested per-sample probabilities: codec sim 0.5, additive noise (MUSAN-style,
+5–20 dB SNR) 0.3, telephony bandpass 300–3400 Hz 0.3, RawBoost-style signal
+augmentation 0.3.
+
+**Never augment dev or eval.** Augmented dev makes early stopping lie.
+
+---
+
+## 5. Phase 3 — Evaluation (report all of it, not just the headline)
+
+Conventions follow `docs/04-metrics-and-honest-evaluation.md`.
+
+### 5.1 minDCF — primary
+
+Matches the ASVspoof 5 evaluation plan's Track 1, stand-alone
+bonafide-vs-spoof detection [R4][R5]. Use the challenge's own cost parameters
+so the number is comparable to published work. *(An earlier revision of this
+file made EER primary; that inverted the challenge's protocol and is
+corrected here.)*
+
+### 5.2 EER, pooled **and per-attack** — a shipping gate
+
+A head at 2 % pooled EER that collapses on one attack family is not
+shippable, and pooled EER hides exactly that. This is what `attack_id` in the
+manifest is for.
+
+### 5.3 Calibration: Cllr and actDCF
+
+ASVspoof 5 Track 1 scores these alongside minDCF precisely to catch systems
+that discriminate well but are calibrated badly [R4]. If actDCF and minDCF
+diverge, the `eer_threshold` you are about to export (§6) is wrong — fix it,
+don't ship it.
+
+*(Track 2's a-DCF / t-EER apply to spoofing-robust ASV, i.e. a CM+ASV tandem.
+This system does fuse CM with ASV, so a-DCF is the more honest end-to-end
+number if you evaluate the fused pipeline. Worth doing; out of scope for this
+checkpoint's gate.)*
+
+### 5.4 Cross-dataset generalization — the number that predicts production
+
+Evaluate the frozen checkpoint, unchanged, on **In-the-Wild** [R6]. Published
+surveys report models at sub-1 % EER on ASVspoof degrading to **30–60 % EER**
+on in-the-wild audio [R6][R7] — from usable to worse than a coin flip.
+
+**Record this number even when it is embarrassing.** It is the honest
+predictor of behaviour on a real call, and a checkpoint that is excellent
+in-domain and useless out-of-domain must be documented as such rather than
+shipped on its in-domain figure. If the gap is severe, that is a finding
+about the whole approach, not a reason to quietly report only the good
+number.
+
+### 5.5 In-repo gates after integration
+
+Recalibrate with `scripts/fit_fusion_weights.py` under
+`VR_ASV_BACKEND=ecapa VR_CM_BACKEND=aasist`, then run
+`scripts/integration_check.py` — its tier-match gates were calibrated for
+stub-era operating points and **will** need recalibration (exactly as
+happened when `ecapa`/`wavlm` landed). Record the new gates; don't delete
+them.
+
+### 5.6 Demo-clip sanity
+
+Genuine must outscore impostor on the shipped demo set. This is the minimum
+bar the current heuristic fails.
+
+---
+
+## 6. Phase 4 — Checkpoint export (schema is contractual)
+
+Write exactly what `cm_aasist.py::_validate_checkpoint` accepts — a
+`torch.save` dict with keys:
+
+| Key | Value |
+|---|---|
+| `architecture` | `"aasist-l"` (must equal `_ARCHITECTURE`) |
+| `frontend` | `"microsoft/wavlm-base-plus"` (must equal `_FRONTEND` — see the Recipe C constraint in §4) |
+| `sample_rate` | `16000` |
+| `window_s` | `4.0` |
+| `state_dict` | the head (and front-end, if fine-tuned) |
+| `eer_threshold` | dev-set EER operating point on the genuine logit — `score()` centers on this. **Export from dev, never eval.** |
+| `dev_eer` | measured, surfaced in the health report |
+| `dev_min_dcf` | measured, surfaced in the health report |
+
+`*.pt` is gitignored, so the checkpoint can never be committed — move it to
+the inference host out of band and point `VR_CM_AASIST_WEIGHTS` at it. Keep
+the run log and eval report beside it. **Weights without a report are
+unverifiable and will not be merged into any claim.**
+
+---
+
+## 7. Phase 5 — Integration (the day the weights land)
+
+1. Place the checkpoint; set `VR_CM_BACKEND=aasist` (and
+   `VR_CM_AASIST_WEIGHTS` if off-default).
+2. **Check the health endpoint reports the `aasist` CM name with the measured
+   `dev_eer`.** If it still says stub, the weights didn't load — and because
+   the fallback is deliberately silent (§12), verdicts will look normal while
+   nothing changed. This label check is the only thing standing between you
+   and a phantom deployment.
+3. Recalibrate fusion, update the integration-check tier gates, run the full
+   battery: `pytest`, `scripts/integration_check.py`, `scripts/check_docs.py`.
+4. Update docs to the measured numbers: RUNBOOK's real-backend section,
+   `docs/02`'s CM row, this file's status line. **The "heuristic-only"
+   statements get retired then, with the EER attached — not before.**
+
+---
+
+## 8. Realistic timeline
+
+Assumes the §1 desktop, competent-but-not-expert operator, working through
+this document without external help.
+
+| Phase | Elapsed | Attended? |
+|---|---|---|
+| 0 — environment + thermal check | 2–4 h | yes |
+| 1 — corpus download + verify + manifest | 1–2 days | mostly waiting |
+| 2A — feature extraction (train+dev) | ~1 h | no |
+| 2A — Recipe A train + dev eval | ~1 h | no |
+| 2C — Recipe C fine-tune | **2–3 days** | no (monitor 2×/day) |
+| 3 — full eval: ASVspoof eval partition + In-the-Wild + calibration | ~4–6 h | partly |
+| 4/5 — export, integrate, recalibrate fusion, update docs, PR | 1–2 days | yes |
+| **Total to a first honest checkpoint** | **≈ 7–10 days elapsed** | **~15–25 h hands-on** |
+
+**Add 3–5 days for the things that will actually happen:** a truncated
+download discovered at manifest time, one diverged run from a bad LR, an OOM
+at hour 6 of a fine-tune, a schema mismatch on integration day.
+
+**Planning number: 2–3 weeks calendar to a properly measured, integrated,
+documented checkpoint.** Roughly 3–4 days of that is unattended GPU time.
+
+Cost: **₹0 in cloud spend**, ~30–50 kWh of electricity. For comparison, the
+same Recipe C on a rented A100 40 GB is ~8–15 h at roughly $1–2/h — about
+$15–30 to save two days. Worth it if you need a second run fast; not worth it
+for the first.
+
+---
+
+## 9. When things go wrong — in the order you will hit them
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `no kernel image is available` | torch wheel lacks `sm_120` | §2 — install cu128 build, verify `arch_list` |
+| `torch.cuda.is_available()` True but every op fails | CPU wheel shadowing, or PTX-JIT gap | run §2's matmul gate, not just `is_available()` |
+| OOM at step ~1 of Recipe C | gradient checkpointing off | enable it; then reduce micro-batch to 4, accum to 8 |
+| OOM at hour 6, not at step 1 | memory fragmentation | `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` |
+| Loss drops, dev minDCF flat/worse | front-end LR too high — representation destroyed | §4 two-speed LR; front-end 1e-6 |
+| Near-perfect train, terrible dev | augmenting dev, or speaker leakage across partitions | never augment dev; use official partitions untouched |
+| ~100 % accuracy, useless model | class imbalance, unweighted CE | `spoof_weight = n_bonafide / n_spoof` |
+| Good dev, catastrophic In-the-Wild | the expected generalization gap [R6][R7] | this is a finding to document (§5.4), not a bug to hide |
+| Checkpoint rejected at load | `frontend`/`architecture` mismatch | §4 Recipe C constraint — update `_FRONTEND`/`_ARCHITECTURE` |
+| Health still shows stub after integration | weights didn't load; fallback is silent by design | §7 step 2 |
+
+---
+
+## 10. Acceptance checklist
+
+- [ ] Eval minDCF + pooled EER + **per-attack** EER published in the run report
+- [ ] Cllr and actDCF reported; actDCF ≈ minDCF (threshold calibrated)
+- [ ] **In-the-Wild EER measured and published**, however bad
+- [ ] Beats the heuristic baseline on every attack family and on the demo clips
+- [ ] Checkpoint loads via `VR_CM_BACKEND=aasist`; health shows the measured EER
+- [ ] Fusion recalibrated; `pytest` + `integration_check` + `check_docs` green
+- [ ] Docs updated to the measured numbers; "heuristic-only" claims retired
+- [ ] Run log retained: git hashes, seed, LR schedule, loss curves, per-epoch dev minDCF
+
+## 11. If training fails
+
+A trained head that doesn't beat the heuristic is a **result, not a waste**.
+Record the numbers, keep `VR_CM_BACKEND=wavlm` as the production setting, and
+do not lower the bar — no shipping dev-tuned thresholds, no eval-peeking, no
+reporting the best of five seeds as if it were the expected one.
+
+Escalation order if Recipe C fails acceptance:
+1. More attack-diverse training data (ASVspoof 5 + 2019 LA + 2021 DF pooled).
+2. Larger front-end (XLS-R-1B) — needs ≥ 24 GB, so cloud, not this box.
+3. Score-level ensemble of two seeds/architectures — cheap, usually worth
+   0.5–1 point of EER, and honest as long as you report it as an ensemble.
+
+Each of these is a **new run with a new report**, never a reinterpretation of
+the old one.
+
+## 12. Honesty guardrails
+
+- Never cite spoof-detection accuracy for any backend until §10 is fully
+  checked off against a named checkpoint and report.
 - `cm_aasist.py` reports `aasist_missing_weights` and the factory falls back
   to the stub while weights are absent — `VR_CM_BACKEND=aasist` without a
-  checkpoint changes nothing but a log line. That is intentional.
+  checkpoint changes nothing but a log line. That is intentional, and it is
+  why §7 step 2 exists.
+- Landing this checkpoint does **not** make VaniRakshak trustworthy against
+  arbitrary real calls (§5.4). See `docs/09-post-cm-roadmap.md` for what
+  remains after it — several items there matter more than this one.
 - This file is a plan. Its existence improves nothing by itself.
 
-## 11. References
+---
 
-Verified by web search on 2026-09-10. Where a claim in this document rests
-on one of these, it is cited inline as `[Rn]`. Anything not cited here is
-this repo's own reasoning or measurement, not an external result — the
-distinction matters, because the whole point of this file is that we do not
-yet have our own numbers.
+## 13. References
+
+Verified by web search on 2026-09-10. Claims resting on these are cited
+inline as `[Rn]`. Anything uncited is this repo's own reasoning or
+measurement — the distinction matters, because the entire point of this file
+is that we do not yet have our own numbers.
 
 | # | Reference | Used for |
 |---|---|---|
-| R1 | Jung, Heo, Tak, Shim, Chung, Lee, Yu, Evans — *AASIST: Audio Anti-Spoofing using Integrated Spectro-Temporal Graph Attention Networks*, ICASSP 2022. [PDF](https://www.eurecom.fr/publication/6696/download/sec-publi-6696.pdf) · [Semantic Scholar](https://www.semanticscholar.org/paper/83ed100306b892da76a7468e6eca6f99074fbd02) | The architecture. AASIST-L = **85 k params**; the paper reports ~20% relative improvement over the then-SOTA on ASVspoof 2019 LA. |
-| R2 | Official PyTorch implementation, NAVER/Clova — [github.com/clovaai/aasist](https://github.com/clovaai/aasist) | The reference code to port. Pin by commit hash (§3). |
-| R3 | Tak, Todisco, Wang, Jung, Yamagishi, Evans — *Automatic Speaker Verification Spoofing and Deepfake Detection Using Wav2vec 2.0 and Data Augmentation*, Odyssey 2022. [ISCA](https://www.isca-archive.org/odyssey_2022/tak22_odyssey.pdf) · [arXiv:2202.12233](https://arxiv.org/abs/2202.12233) | The SSL-front-end + AASIST combination, and the finding that **fine-tuning the front-end was necessary** — the basis for §3's warning that our frozen recipe is the weaker configuration. |
-| R4 | *ASVspoof 5 Evaluation Plan (Phase 2)* — [asvspoof.org](https://www.asvspoof.org/file/ASVspoof5___Evaluation_Plan_Phase2.pdf) | The protocol and metrics. **Track 1 primary metric = minDCF**, with Cllr and actDCF scored alongside to catch miscalibration. Track 2 (spoofing-robust ASV) uses min a-DCF, with min t-DCF / t-EER as supplements. |
-| R5 | Wang, Yamagishi, Todisco, Delgado, Nautsch, Evans et al. — *ASVspoof 5: Crowdsourced Speech Data, Deepfakes, and Adversarial Attacks at Scale*, ASVspoof Workshop 2024. [arXiv:2408.08739](https://arxiv.org/pdf/2408.08739) · [journal version](https://www.sciencedirect.com/science/article/pii/S0885230825000506) | The corpus itself: ~2 000 crowdsourced speakers, 20+ attacks, 7 adversarial attacks. |
-| R6 | Müller, Czempin, Diekmann, Froghyar, Böttinger — *Does Audio Deepfake Detection Generalize?* (the **In-the-Wild** dataset), Interspeech 2022. [arXiv:2203.16263](https://arxiv.org/abs/2203.16263) | The held-out generalization set (§1) and the generalization-gap figure in §4.4. |
-| R7 | *Audio Anti-Spoofing Detection: A Survey* — [arXiv:2404.13914](https://arxiv.org/html/2404.13914v1); and *Robustness in deepfake speech detection: a survey of failure mechanisms* — [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0885230826001002) | Corroboration for the sub-1% → 30–60% EER in-the-wild degradation, and the taxonomy of *why* it happens. |
-| R8 | ASVspoof 5 on Hugging Face — [huggingface.co/datasets/jungjee/asvspoof5](https://huggingface.co/datasets/jungjee/asvspoof5) | Alternate download mirror. Licence still governs; check it there too. |
-
-### What these references change about this plan
-
-Three corrections landed from reading them, recorded rather than silently
-folded in:
-
-1. **AASIST-L is 85 k parameters**, not the ~0.3 M this document previously
-   claimed (R1).
-2. **minDCF is the primary metric, not EER** (R4). The earlier framing here
-   inverted the challenge's own protocol.
-3. **Freezing the front-end is the weaker recipe** (R3). Kept anyway for
-   cost reasons, but now labelled as a known handicap with an explicit
-   escalation path, instead of being presented as the natural choice.
-
-And one thing they confirm that should temper expectations for everyone
-reading this repo: a countermeasure that scores beautifully on ASVspoof can
-still be near-useless on real-world audio (R6, R7). Landing this checkpoint
-is a real step forward, but it is **not** the point at which VaniRakshak
-becomes trustworthy against arbitrary real calls. See `docs/09-post-cm-roadmap.md`
-for what remains after it.
+| R1 | Jung, Heo, Tak, Shim, Chung, Lee, Yu, Evans — *AASIST: Audio Anti-Spoofing using Integrated Spectro-Temporal Graph Attention Networks*, ICASSP 2022. [PDF](https://www.eurecom.fr/publication/6696/download/sec-publi-6696.pdf) | The architecture. AASIST-L = **85 k params**; ~20 % relative improvement over then-SOTA on ASVspoof 2019 LA. |
+| R2 | Official PyTorch implementation, NAVER/Clova — [github.com/clovaai/aasist](https://github.com/clovaai/aasist) | Reference code to port. Pin by commit hash. |
+| R3 | Tak, Todisco, Wang, Jung, Yamagishi, Evans — *Automatic Speaker Verification Spoofing and Deepfake Detection Using Wav2vec 2.0 and Data Augmentation*, Odyssey 2022. [ISCA](https://www.isca-archive.org/odyssey_2022/tak22_odyssey.pdf) · [arXiv:2202.12233](https://arxiv.org/abs/2202.12233) | The SSL-front-end + AASIST recipe, ~90 % relative gain, and the finding that **fine-tuning the front-end is necessary** — the basis for Recipe C. |
+| R4 | *ASVspoof 5 Evaluation Plan (Phase 2)* — [asvspoof.org](https://www.asvspoof.org/file/ASVspoof5___Evaluation_Plan_Phase2.pdf) | Protocol and metrics. **Track 1 primary = minDCF**, with Cllr and actDCF alongside. Track 2 = min a-DCF, t-DCF/t-EER supplementary. |
+| R5 | Wang, Yamagishi, Todisco, Delgado, Nautsch, Evans et al. — *ASVspoof 5: Crowdsourced Speech Data, Deepfakes, and Adversarial Attacks at Scale*, 2024. [arXiv:2408.08739](https://arxiv.org/pdf/2408.08739) · [journal](https://www.sciencedirect.com/science/article/pii/S0885230825000506) | The corpus: ~2 000 speakers, 20+ attacks, 7 adversarial attacks. |
+| R6 | Müller, Czempin, Diekmann, Froghyar, Böttinger — *Does Audio Deepfake Detection Generalize?* (**In-the-Wild**), Interspeech 2022. [arXiv:2203.16263](https://arxiv.org/abs/2203.16263) | Held-out generalization set and the generalization-gap figure. |
+| R7 | *Audio Anti-Spoofing Detection: A Survey* — [arXiv:2404.13914](https://arxiv.org/html/2404.13914v1); *Robustness in deepfake speech detection* — [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0885230826001002) | Corroboration for sub-1 % → 30–60 % EER degradation and why it happens. |
+| R8 | ASVspoof 5 on Hugging Face — [huggingface.co/datasets/jungjee/asvspoof5](https://huggingface.co/datasets/jungjee/asvspoof5) | Alternate download mirror. Licence still governs. |
+| R9 | PyTorch `sm_120` / Blackwell support — [pytorch/pytorch#159207](https://github.com/pytorch/pytorch/issues/159207) | §2's environment gate; PyTorch ≥ 2.7 on a CUDA 12.8+ build. |
