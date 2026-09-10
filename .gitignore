@@ -108,3 +108,19 @@ crawl4ai_downloads/
 # Local backups & scratch
 *.bak
 scratch/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# AI agent tooling — local config/caches, per AGENTS.md's "keep agent
+# workspaces out of git" rule. These are per-developer and per-tool; they
+# are not project source and must never land in a PR.
+.claude/
+.cursor/
+.gemini/
+.opencode/
+.workbuddy-ai/
+GEMINI.md
+opencode.json
+.mcp.json
+.ignore
