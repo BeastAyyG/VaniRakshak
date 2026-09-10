@@ -83,6 +83,7 @@ AdamW m, v        8P bytes
 | **WavLM-large, layers 0–11 only** | **~160 M** | **~2.6 GB** | **~3–4 GB** | **~7 GB** | **yes — the target, see §4** |
 | WavLM-large, all 24 layers | ~315 M | ~5.0 GB | ~4–6 GB | ~10–11 GB | yes, but wasteful (§4) |
 | XLS-R-300m | 300 M | ~4.8 GB | ~3–5 GB | ~9–10 GB | yes, but worse (§4) |
+| **WavLM-large + LoRA (Recipe D)** | **~3.6 M** | **< 0.1 GB** | **~4–6 GB** | **~7 GB** | **yes — frozen backbone, no truncation needed** |
 | XLS-R-2B / WavLM-large ×ensemble | 2 B+ | ~32 GB | — | — | no — cloud only |
 
 Gradient checkpointing is mandatory for every fine-tuning row. It trades
@@ -211,7 +212,12 @@ class produces a model that looks fine and is not.
 
 ## 4. Phase 2 — Two recipes, run in this order
 
-Run **A first even though B is the real target.** A is cheap, exercises the
+**Read §4's Recipe D before starting C.** C is the best single-corpus
+fine-tune that fits this card; D is better at generalization and cheaper in
+VRAM, at the cost of about a week more corpus work. If your timeline allows
+it, D is the recipe to build.
+
+Run **A first even though the fine-tune is the real target.** A is cheap, exercises the
 whole pipeline end to end, and gives you a floor. If A's plumbing is broken
 you find out in an hour instead of two days into a fine-tune.
 
@@ -338,6 +344,81 @@ Throughput (5060 Ti 16 GB, bf16 + grad-ckpt, batch 8, 12 layers):
 > integration day. WavLM-large hidden states are **1024-dim, not 768**, so
 > the AttM input width and any dimension assertion change with it.
 
+### Recipe D — MLDG-LoRA (the best answer if you can spend the extra week)
+
+Recipe C is the best *single-corpus fine-tune* that fits this card. Recipe D
+is better, and it is better at the thing that actually matters here:
+**generalization to audio the model has never seen** (§5.4), which is the gap
+that decides whether this is useful on a real call or not.
+
+**Method.** Insert LoRA adapters into every attention head of the SSL
+backbone, freeze the backbone itself, and train only the adapters with
+**Meta-Learning Domain Generalization (MLDG)** — episodes split your training
+corpora into meta-train and meta-test domains so the optimiser is explicitly
+rewarded for features that survive a domain shift, instead of features that
+merely separate spoof from bonafide inside one corpus [R12].
+
+**Reported results** [R12]: average EER across six evaluation corpora drops
+from **8.84 % (full fine-tune) to 5.30 %**, and MLDG-LoRA **beats the fully
+fine-tuned model on five of the six** — i.e. it is not a compression
+trade-off, it is better *and* smaller. It trains **~3.6 M parameters, ~1.1 %**
+of the 318 M a full fine-tune touches.
+
+**Why this is easier on 16 GB, not harder.** With only ~3.6 M trainable
+parameters the §1 fixed cost collapses from ~2.6 GB to well under 100 MB. The
+backbone is frozen, so no gradients or optimiser state for it. That means
+**you no longer need Recipe C's layer truncation** — truncation was a VRAM
+concession, and Recipe D removes the constraint that motivated it. Keep the
+attentive merge over early/middle layers anyway, because [R10]'s finding is
+that those layers are *more informative*, not merely cheaper.
+
+```
+Backbone   : microsoft/wavlm-large, FROZEN, all 24 layers available
+Adapters   : LoRA on every attention head (rank 8-16 typical)  [R12]
+Merge      : attentive merging over early/middle hidden states [R10]
+Back-end   : AASIST3 (KAN-enhanced) or AASIST                  [R13][R1]
+Training   : MLDG episodes over >= 3 distinct corpora as domains
+Trainable  : ~3.6 M params  (~1.1 % of full fine-tune)
+```
+
+**What it costs you — be clear-eyed:**
+
+- **You need multiple corpora, not one.** MLDG has nothing to meta-learn from
+  a single domain. Plan on ASVspoof 2019 LA + ASVspoof 2021 DF + ASVspoof 5
+  at minimum, ideally a multilingual set too. That is more download, more
+  protocol parsing, more manifest work — call it **+2–3 days** before you
+  train anything.
+- **Meta-learning is slower per step** — each episode runs an inner update
+  and an outer update, so expect roughly **2–3× Recipe C's step time** even
+  though far fewer parameters move. Fewer epochs usually suffice, so the net
+  is maybe +50 % wall-clock, not +200 %.
+- **More moving parts, more ways to be subtly wrong.** A domain split that
+  leaks (same attack family in meta-train and meta-test) silently turns MLDG
+  back into ordinary training while you believe otherwise.
+
+**Total delta over Recipe C: roughly +4–7 days.** If the honest goal is a
+system that works on real calls rather than a good ASVspoof number, that is
+the best week you can spend in this whole plan.
+
+### Back-end: AASIST3 instead of AASIST
+
+Independent of front-end and training strategy, the *back-end* has also moved
+on. **AASIST3** replaces the activation functions in the GAT / GraphPool /
+HS-GAL layers with **Kolmogorov–Arnold Networks** (learnable B-splines plus
+PReLU) and adds encoders and pre-emphasis [R13]. On ASVspoof 5 it reports
+**minDCF 0.1414 / EER 4.89 %** in the *open* condition.
+
+Two honesty notes on that number, because it is easy to over-read:
+- The open-condition result uses an SSL front-end **and averages predictions
+  from several trained models** — it is an ensemble figure, so a single model
+  will not reach it.
+- Its *closed* condition (SincConv front-end, no SSL) is minDCF 0.5357 /
+  EER 22.67 %, which is a useful reminder of how much of the performance
+  lives in the SSL front-end rather than the graph back-end.
+
+AASIST3 is a drop-in for the AASIST back-end in any recipe here. Take it —
+but attribute the gain honestly, and update `_ARCHITECTURE` (§6) to name it.
+
 ### Why not the alternatives
 
 | Option | Verdict |
@@ -345,7 +426,8 @@ Throughput (5060 Ti 16 GB, bf16 + grad-ckpt, batch 8, 12 layers):
 | Frozen SSL + head (Recipe A) | Keep as smoke test. Frozen upstreams do appear in strong ASVspoof 5 systems [R11], but as one leg of large ensembles, not as a single-model answer. |
 | XLS-R-300m fine-tuned | Superseded — worse EER than WavLM at comparable size [R11], more VRAM, and a front-end family swap in `cm_aasist.py`. |
 | WavLM-large, all 24 layers | Wasteful: layers 12–23 contribute little here [R10] while costing ~2× the fine-tune. |
-| XLS-R-2B / WavLM-large ensembles | These are what actually top the leaderboards [R11], and they do not fit 16 GB. Cloud-only; see §11 escalation. |
+| XLS-R-2B / WavLM-large ensembles | These are what actually top the leaderboards [R11][R13], and they do not fit 16 GB. Cloud-only; see §11 escalation. |
+| **MLDG-LoRA (Recipe D)** | **Better than all of the above on cross-corpus EER, and cheaper in VRAM — costs ~1 extra week of corpus wrangling. Take it if you can.** [R12] |
 
 ### Augmentation (both recipes, on-the-fly, train partition only)
 
@@ -548,6 +630,9 @@ do not lower the bar — no shipping dev-tuned thresholds, no eval-peeking, no
 reporting the best of five seeds as if it were the expected one.
 
 Escalation order if Recipe C fails acceptance:
+0. **Recipe D (MLDG-LoRA) if you skipped it** — it beat full fine-tuning on
+   five of six corpora [R12] and needs less VRAM, so this is the first thing
+   to try, not a last resort.
 1. More attack-diverse training data (ASVspoof 5 + 2019 LA + 2021 DF pooled).
 2. Restore the dropped WavLM-large layers 12–23, or move to a larger
    upstream (XLS-R-2B, WavLM-large ensembles) — needs ≥ 24 GB, so cloud,
@@ -593,4 +678,6 @@ is that we do not yet have our own numbers.
 | R8 | ASVspoof 5 on Hugging Face — [huggingface.co/datasets/jungjee/asvspoof5](https://huggingface.co/datasets/jungjee/asvspoof5) | Alternate download mirror. Licence still governs. |
 | R9 | PyTorch `sm_120` / Blackwell support — [pytorch/pytorch#159207](https://github.com/pytorch/pytorch/issues/159207) | §2's environment gate; PyTorch ≥ 2.7 on a CUDA 12.8+ build. |
 | R10 | Pan, Liu et al. — *Attentive Merging of Hidden Embeddings from Pre-trained Speech Model for Anti-spoofing Detection*, Interspeech 2024. [ISCA](https://www.isca-archive.org/interspeech_2024/pan24c_interspeech.pdf) · [arXiv:2406.10283](https://arxiv.org/abs/2406.10283) | Recipe C's core: early-to-middle WavLM layers outperform the last layer and all-layer pooling; attentive merging beats linear. 0.65 / 3.50 / 3.19 % EER on 2019 LA / 2021 LA / 2021 DF. |
+| R12 | *Generalizable speech deepfake detection via meta-learned LoRA*, 2025. [arXiv:2502.10838](https://arxiv.org/pdf/2502.10838) | Recipe D. LoRA adapters in every attention head + Meta-Learning Domain Generalization. Avg EER 8.84 % (full fine-tune) → **5.30 %**; beats full fine-tuning on **5 of 6** corpora while training **~3.6 M params (~1.1 %)**. |
+| R13 | *AASIST3: KAN-Enhanced AASIST ... for the ASVspoof 2024 Challenge*. [arXiv:2408.17352](https://arxiv.org/html/2408.17352) | The upgraded back-end: Kolmogorov–Arnold networks (learnable B-splines + PReLU) replacing activations in GAT/GraphPool/HS-GAL. ASVspoof 5 **open** condition minDCF 0.1414 / EER 4.89 % (an *ensemble* of several models); **closed** condition 0.5357 / 22.67 %. |
 | R11 | ASVspoof 5 results and post-challenge analyses — challenge overview [emergentmind summary](https://www.emergentmind.com/topics/asvspoof-5-challenge); *WavLM model ensemble for audio deepfake detection* [ISCA](https://www.isca-archive.org/asvspoof_2024/combei24_asvspoof.pdf); *Exploring WavLM Back-ends for Speech Spoofing and Deepfake Detection* [ISCA](https://www.isca-archive.org/asvspoof_2024/stourbe24_asvspoof.pdf) | §5.0's expectation table; the WavLM-vs-wav2vec2 gap (7.26 % vs 11.91 % EER); and that top systems are ensembles, not single models. |
