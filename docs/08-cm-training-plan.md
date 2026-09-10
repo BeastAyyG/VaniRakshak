@@ -25,12 +25,25 @@ shippable checkpoint.
 
 ## 1. Corpus
 
-- **Primary: ASVspoof 5** (~50 GB, free for research after the license form).
+- **Primary: ASVspoof 5** [R4][R5] — crowdsourced speech from ~2 000
+  speakers, 20+ spoofing attacks, and (a first for the series) seven
+  adversarial attacks. Distributed via Zenodo; **read the README and LICENSE
+  files bundled with the download before downloading and before publishing
+  any number from it** — the licence, not this document, governs what you
+  may do with the data and how it must be cited. Mirror also on Hugging
+  Face [R8].
   Use the shipped train / dev / eval partitions untouched — no re-splitting,
-  no speaker overlap across partitions.
+  no speaker overlap across partitions. Follow the Phase-2 evaluation plan
+  [R4] if you want numbers comparable to the literature; deviating is
+  allowed but must then be stated next to every figure.
 - **Fallback: ASVspoof 2019 LA** if ASVspoof 5 access is slow. Smaller and
   older vocoders, so expect optimistic numbers; re-run on ASVspoof 5 before
   any production claim.
+- **Held-out generalization set: In-the-Wild** [R6] — ~20.8 h bonafide and
+  ~17.2 h spoofed audio scraped from social media and video platforms
+  (English-speaking public figures, real background noise). Never train or
+  tune on it. It exists solely to answer "does this checkpoint survive
+  contact with audio nobody curated?" — see §4.4.
 - **Location: outside the repo** (e.g. `~/cm-corpus/`). `AGENTS.md` keeps
   datasets out of git; the corpus never enters `data/`. Build a manifest TSV
   (`path<TAB>label`, label in `{bonafide, spoof}` + attack id) from the
@@ -57,10 +70,10 @@ mirror the constants in
 
 ## 3. Model + training recipe
 
-- **Head: AASIST-L** (light variant, ~0.3 M params): spectral + temporal
-  graph-attention branches over the WavLM frame sequence, graph pooling,
-  single genuine logit. Standard public implementations port directly; pin
-  whichever you use by commit hash in the run log.
+- **Head: AASIST-L** (light variant, **85 k params** per the original paper
+  [R1]): spectral + temporal graph-attention branches over the WavLM frame
+  sequence, graph pooling, single genuine logit. Port from the official
+  implementation [R2] and pin it by commit hash in the run log.
 - **Loss:** weighted cross-entropy (spoof weight = bonafide/spoof train
   ratio). OC-Softmax is an accepted substitute — record the choice, don't
   mix results across choices.
@@ -78,25 +91,56 @@ mirror the constants in
   restart for a bad seed. Log every run (git hash of this repo + training
   repo, seed, loss curves, dev EER per epoch).
 
+> **Known weakness of this recipe — read before running it.** §2 freezes the
+> WavLM front-end. That is a deliberate cost/complexity trade (single-GPU
+> job, production dependency identical to `VR_CM_BACKEND=wavlm`), but it is
+> *not* the configuration that produced the field's headline results. Tak et
+> al. [R3] fine-tuned an SSL front-end (wav2vec 2.0 / XLS-R) jointly with an
+> AASIST back-end and reported ~90% relative improvement over their
+> baseline, and state explicitly that fine-tuning the front-end was
+> necessary — the SSL model is pre-trained on bonafide speech only, so a
+> frozen version has never been asked to represent spoofing artefacts.
+> Expect the frozen variant here to underperform published numbers. If §8
+> acceptance fails, unfreezing the front-end (§9) is the first thing to try,
+> not the last; budget a larger GPU for it.
+
 ## 4. Eval protocol (report all of it, not just the headline)
 
 Conventions follow `docs/04-metrics-and-honest-evaluation.md`:
 
-1. **EER on the eval partition** — primary metric. Also report per-attack
-   EER: a head at 2% pooled EER that collapses on one attack family is not
-   shippable.
-2. **minDCF** (ASVspoof-5 cost parameters) — secondary; measures operating
-   usefulness, not just separability.
-3. **Calibration:** actDCF at the exported threshold vs minDCF. If they
-   diverge, the `eer_threshold` export in §5 is miscalibrated — fix, don't
-   ship.
-4. **In-repo gates after integration (§6):** recalibrate with
+1. **minDCF** — the **primary** metric, matching the ASVspoof 5 evaluation
+   plan's Track 1 (stand-alone bonafide-vs-spoof detection) [R4][R5]. Report
+   it with the challenge's own cost parameters so the number is comparable
+   to published work. This repo's earlier framing made EER primary; that was
+   wrong relative to the challenge protocol and is corrected here.
+2. **EER, pooled and per-attack** — secondary but non-negotiable for
+   shipping: a head at 2% pooled EER that collapses on one attack family is
+   not shippable, and pooled EER hides exactly that.
+3. **Calibration: Cllr and actDCF** at the exported threshold vs minDCF.
+   ASVspoof 5 Track 1 scores Cllr and actDCF alongside minDCF precisely to
+   catch systems that discriminate well but are badly calibrated [R4]. If
+   actDCF and minDCF diverge, the `eer_threshold` export in §5 is
+   miscalibrated — fix, don't ship.
+   (Track 2's a-DCF / t-EER metrics apply to spoofing-robust ASV, i.e. a
+   CM+ASV tandem. This system does fuse CM with ASV, so a-DCF is the more
+   honest end-to-end number *if* you evaluate the fused pipeline rather than
+   the CM alone — worth doing, out of scope for this checkpoint's gate.)
+4. **Cross-dataset generalization — the gate that matters most in
+   production.** Evaluate the frozen checkpoint, unchanged, on a corpus it
+   was not trained on: In-the-Wild [R6] is the standard choice. Published
+   surveys report models at sub-1% EER on ASVspoof degrading to **30–60%
+   EER** on in-the-wild audio [R6][R7] — i.e. from usable to worse than a
+   coin flip on some systems. Record this number even when it is
+   embarrassing; it is the honest predictor of behaviour on a real call,
+   and a checkpoint that is excellent in-domain and useless out-of-domain
+   must be documented as such rather than shipped on its in-domain figure.
+5. **In-repo gates after integration (§6):** recalibrate with
    `scripts/fit_fusion_weights.py` under `VR_ASV_BACKEND=ecapa`
    `VR_CM_BACKEND=aasist`, then `scripts/integration_check.py` — its
    tier-match gates were calibrated for stub-era operating points and will
    need recalibration (same as happened under `ecapa`/`wavlm`); record the
    new gates, don't delete them.
-5. **Demo-clip sanity:** genuine must outscore impostor on the shipped demo
+6. **Demo-clip sanity:** genuine must outscore impostor on the shipped demo
    set — the minimum bar the heuristic failed.
 
 ## 5. Checkpoint export (schema is contractual)
@@ -166,3 +210,42 @@ a new run, not a reinterpretation of this one.
   to the stub while weights are absent — `VR_CM_BACKEND=aasist` without a
   checkpoint changes nothing but a log line. That is intentional.
 - This file is a plan. Its existence improves nothing by itself.
+
+## 11. References
+
+Verified by web search on 2026-09-10. Where a claim in this document rests
+on one of these, it is cited inline as `[Rn]`. Anything not cited here is
+this repo's own reasoning or measurement, not an external result — the
+distinction matters, because the whole point of this file is that we do not
+yet have our own numbers.
+
+| # | Reference | Used for |
+|---|---|---|
+| R1 | Jung, Heo, Tak, Shim, Chung, Lee, Yu, Evans — *AASIST: Audio Anti-Spoofing using Integrated Spectro-Temporal Graph Attention Networks*, ICASSP 2022. [PDF](https://www.eurecom.fr/publication/6696/download/sec-publi-6696.pdf) · [Semantic Scholar](https://www.semanticscholar.org/paper/83ed100306b892da76a7468e6eca6f99074fbd02) | The architecture. AASIST-L = **85 k params**; the paper reports ~20% relative improvement over the then-SOTA on ASVspoof 2019 LA. |
+| R2 | Official PyTorch implementation, NAVER/Clova — [github.com/clovaai/aasist](https://github.com/clovaai/aasist) | The reference code to port. Pin by commit hash (§3). |
+| R3 | Tak, Todisco, Wang, Jung, Yamagishi, Evans — *Automatic Speaker Verification Spoofing and Deepfake Detection Using Wav2vec 2.0 and Data Augmentation*, Odyssey 2022. [ISCA](https://www.isca-archive.org/odyssey_2022/tak22_odyssey.pdf) · [arXiv:2202.12233](https://arxiv.org/abs/2202.12233) | The SSL-front-end + AASIST combination, and the finding that **fine-tuning the front-end was necessary** — the basis for §3's warning that our frozen recipe is the weaker configuration. |
+| R4 | *ASVspoof 5 Evaluation Plan (Phase 2)* — [asvspoof.org](https://www.asvspoof.org/file/ASVspoof5___Evaluation_Plan_Phase2.pdf) | The protocol and metrics. **Track 1 primary metric = minDCF**, with Cllr and actDCF scored alongside to catch miscalibration. Track 2 (spoofing-robust ASV) uses min a-DCF, with min t-DCF / t-EER as supplements. |
+| R5 | Wang, Yamagishi, Todisco, Delgado, Nautsch, Evans et al. — *ASVspoof 5: Crowdsourced Speech Data, Deepfakes, and Adversarial Attacks at Scale*, ASVspoof Workshop 2024. [arXiv:2408.08739](https://arxiv.org/pdf/2408.08739) · [journal version](https://www.sciencedirect.com/science/article/pii/S0885230825000506) | The corpus itself: ~2 000 crowdsourced speakers, 20+ attacks, 7 adversarial attacks. |
+| R6 | Müller, Czempin, Diekmann, Froghyar, Böttinger — *Does Audio Deepfake Detection Generalize?* (the **In-the-Wild** dataset), Interspeech 2022. [arXiv:2203.16263](https://arxiv.org/abs/2203.16263) | The held-out generalization set (§1) and the generalization-gap figure in §4.4. |
+| R7 | *Audio Anti-Spoofing Detection: A Survey* — [arXiv:2404.13914](https://arxiv.org/html/2404.13914v1); and *Robustness in deepfake speech detection: a survey of failure mechanisms* — [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0885230826001002) | Corroboration for the sub-1% → 30–60% EER in-the-wild degradation, and the taxonomy of *why* it happens. |
+| R8 | ASVspoof 5 on Hugging Face — [huggingface.co/datasets/jungjee/asvspoof5](https://huggingface.co/datasets/jungjee/asvspoof5) | Alternate download mirror. Licence still governs; check it there too. |
+
+### What these references change about this plan
+
+Three corrections landed from reading them, recorded rather than silently
+folded in:
+
+1. **AASIST-L is 85 k parameters**, not the ~0.3 M this document previously
+   claimed (R1).
+2. **minDCF is the primary metric, not EER** (R4). The earlier framing here
+   inverted the challenge's own protocol.
+3. **Freezing the front-end is the weaker recipe** (R3). Kept anyway for
+   cost reasons, but now labelled as a known handicap with an explicit
+   escalation path, instead of being presented as the natural choice.
+
+And one thing they confirm that should temper expectations for everyone
+reading this repo: a countermeasure that scores beautifully on ASVspoof can
+still be near-useless on real-world audio (R6, R7). Landing this checkpoint
+is a real step forward, but it is **not** the point at which VaniRakshak
+becomes trustworthy against arbitrary real calls. See `docs/09-post-cm-roadmap.md`
+for what remains after it.
