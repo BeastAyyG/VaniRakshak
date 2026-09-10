@@ -27,11 +27,14 @@ genuine than the *genuine* clip (RUNBOOK, "Real detector backends"). Any
 trained head that cannot separate bonafide from spoof on every attack family
 is a failed run, not a shippable checkpoint.
 
-**"Perfect" is not on the table — do not aim for it.** §5.4 explains why:
-published systems at sub-1% EER in-domain routinely degrade to 30–60% EER on
-real-world audio [R6][R7]. The realistic goal is a checkpoint that is
-*measured*, *honestly documented*, and *better than the heuristic*. Define
-success as §10's checklist, not as a number you hoped for.
+**"Perfect" is not on the table — do not aim for it.** Two independent
+reasons, both in §5: on ASVspoof 5 itself the *top-5 challenge submissions*
+land at minDCF < 0.5 and **EER below 15 %**, not below 1 % [R11] — the
+sub-1 % figures you will read about are on the older, easier 2019 LA corpus.
+And whatever you achieve in-domain, published systems routinely degrade to
+30–60 % EER on real-world audio [R6][R7]. The realistic goal is a checkpoint
+that is *measured*, *honestly documented*, and *better than the heuristic*.
+Define success as §10's checklist, not as a number you hoped for.
 
 ---
 
@@ -54,10 +57,10 @@ Written for the intended training box:
 > before assuming which box you are on.
 
 **The 16 GB is what makes this project viable.** At 8 GB you can only train a
-small head on frozen features (Recipe A), which is the configuration the
-literature says underperforms [R3]. At 16 GB you can fine-tune a 300 M-param
-SSL front-end with gradient checkpointing — that is the recipe that produced
-the field's headline results.
+small head on frozen features (Recipe A), which is not what the strong
+published single systems do. At 16 GB you can fine-tune a truncated
+WavLM-large front-end with gradient checkpointing — the recipe §4 argues is
+the best available answer that fits this card.
 
 ### VRAM arithmetic (do this before you trust any batch size)
 
@@ -73,16 +76,18 @@ AdamW m, v        8P bytes
                  16P bytes
 ```
 
-| Model | *P* | Fixed (16P) | Activations @ batch 8 + grad-ckpt | Total | Fits 16 GB? |
+| Model | *P* trained | Fixed (16P) | Activations @ batch 8 + grad-ckpt | Total | Fits 16 GB? |
 |---|---|---|---|---|---|
 | AASIST-L head only | 85 k | ~1 MB | negligible | < 1 GB | trivially |
-| WavLM-base-plus | 94 M | ~1.5 GB | ~2–3 GB | ~5 GB | comfortably |
-| **XLS-R-300m** | **300 M** | **~4.8 GB** | **~3–5 GB** | **~9–10 GB** | **yes, with checkpointing** |
-| XLS-R-1B | 1 B | ~16 GB | — | — | no |
+| WavLM-base-plus, full | 94 M | ~1.5 GB | ~2–3 GB | ~5 GB | comfortably |
+| **WavLM-large, layers 0–11 only** | **~160 M** | **~2.6 GB** | **~3–4 GB** | **~7 GB** | **yes — the target, see §4** |
+| WavLM-large, all 24 layers | ~315 M | ~5.0 GB | ~4–6 GB | ~10–11 GB | yes, but wasteful (§4) |
+| XLS-R-300m | 300 M | ~4.8 GB | ~3–5 GB | ~9–10 GB | yes, but worse (§4) |
+| XLS-R-2B / WavLM-large ×ensemble | 2 B+ | ~32 GB | — | — | no — cloud only |
 
-Gradient checkpointing is mandatory for the 300 M row. It trades ~30–40 %
-extra compute for roughly a 3–4× activation-memory reduction, and without it
-batch 8 will OOM.
+Gradient checkpointing is mandatory for every fine-tuning row. It trades
+~30–40 % extra compute for roughly a 3–4× activation-memory reduction, and
+without it batch 8 will OOM.
 
 ---
 
@@ -218,6 +223,12 @@ Mirrors the constants in `vanirakshak-backend/vanirakshak/detectors/cm_aasist.py
 - Slice/pad to **4.0 s** (64 000 samples). Production analyses a 4.04 s
   window; 4.0 s is the model aperture, the extra 0.04 s is pipeline framing.
 - Per-utterance normalization (zero mean, unit variance) before the head.
+- **Which layer's hidden states you feed the head is a real decision, not a
+  default.** Do not reflexively take the last hidden state: early-to-middle
+  transformer layers carry more of the spoofing signal than the final layer,
+  and more than all layers combined [R10]. Recipe A takes a single early
+  layer; Recipe C merges the kept layers attentively. Record the choice in
+  the run log — two runs differing only in layer index are not comparable.
 - Crop policy: **random 4 s crop during training, centre crop at eval.**
   Random crop is free augmentation; a fixed crop at train time teaches the
   model where in the file the artefacts live, which is not a real signal.
@@ -258,45 +269,83 @@ flattering accuracy.
 **Expect A to underperform.** That is not a bug; §4's Recipe C exists because
 of it.
 
-### Recipe C — fine-tuned XLS-R-300m + AASIST (the real target)
+### Recipe C — fine-tuned **WavLM-large, truncated**, + attentive merging + AASIST
 
-This is the configuration behind the published results. Tak et al. [R3]
-fine-tuned an SSL front-end (wav2vec 2.0 / XLS-R) jointly with an AASIST
-back-end and reported **~90 % relative improvement** over their baseline,
-stating explicitly that fine-tuning the front-end was *necessary* — the SSL
-model is pre-trained on bonafide speech only, so a frozen copy has never been
-asked to represent spoofing artefacts at all.
+**This supersedes an earlier recommendation in this file of
+`wav2vec2-xls-r-300m`.** That was based on Tak et al. 2022 [R3], which is a
+real result but no longer the best available answer. Three findings from
+2024 evidence change it, and all three point the same way:
+
+1. **WavLM beats wav2vec2/XLS-R at this task.** On ASVspoof 5, fine-tuned
+   WavLM-base reached **7.26 % EER** against **11.91 %** for the comparable
+   fine-tuned wav2vec2 [R11]. The reason is architectural rather than
+   incidental: WavLM is pre-trained with masked speech *denoising*, so it
+   already represents speaker characteristics and messy acoustic
+   environments — exactly the axes a spoof detector needs — whereas
+   wav2vec2 is not.
+2. **Early-to-middle layers carry the spoofing signal, not the last one.**
+   Pan et al. [R10] show hidden embeddings from the early transformer
+   layers up to roughly layer 12 contribute *more* to anti-spoofing than the
+   outputs of all layers combined, and broader ablations find the ~5th
+   encoder layer the single most discriminative. So **truncate the model** —
+   load WavLM-large and keep only layers 0–11.
+3. Their **attentive merging (AttM)** of those hidden layers beats a linear
+   merge, and beats using any single layer.
+
+Truncation is why this is the rare upgrade that is both better *and*
+cheaper: you fine-tune ~160 M parameters instead of 300 M, run half the
+forward depth, and land at ~7 GB instead of ~10 GB (§1 table). It also keeps
+you inside the `microsoft/wavlm-*` family the repo's inference path already
+depends on, so §6's `_FRONTEND` change is `base-plus` → `large`, not a
+family swap.
+
+Reference results for this recipe: fine-tuned WavLM with attentive merging
+reached **0.65 % EER on ASVspoof 2019 LA, 3.50 % on 2021 LA, 3.19 % on
+2021 DF** [R10]. Note those are the older corpora — see §5.0 for what to
+expect on ASVspoof 5, which is much harder.
 
 ```
-Model      : facebook/wav2vec2-xls-r-300m  (300 M) + AASIST back-end
+Front-end  : microsoft/wavlm-large, transformer layers 0–11 only (drop 12–23)
+Merge      : attentive merging (AttM) over the kept layers' hidden states  [R10]
+Back-end   : AASIST                                                        [R1][R2]
 Precision  : bf16 autocast, fp32 master weights
 Batch      : 8 micro-batch  ×  4 grad-accum  =  32 effective
 Grad ckpt  : ON  (mandatory — batch 8 OOMs without it)
-Optimizer  : AdamW, lr 1e-6 front-end / 1e-4 head, cosine, warmup 5 % steps
+Optimizer  : AdamW, lr 1e-6 front-end / 1e-4 head+AttM, cosine, warmup 5 %
 Epochs     : 8–15, early-stop on dev minDCF, patience 3
 ```
 
-The **two-speed learning rate is not optional**. A single 1e-4 LR across a
-pre-trained 300 M front-end destroys the representation in the first few
-hundred steps — you get a model that trains smoothly and generalizes worse
-than Recipe A. Front-end gets 1e-6 to 1e-5; the randomly-initialised head
-gets 1e-4.
+The **two-speed learning rate is not optional.** A single 1e-4 across a
+pre-trained front-end destroys the representation within a few hundred steps
+— you get a model that trains smoothly and generalizes *worse* than Recipe A.
+Front-end 1e-6 to 1e-5; the randomly-initialised AttM + AASIST head 1e-4.
 
 ```
-Throughput (5060 Ti 16 GB, bf16 + grad-ckpt, batch 8):  ~0.3–0.5 s/step
-  182 k utts / 8  =  22 750 steps/epoch  →  ~2.5 h/epoch
-  10 epochs  →  ~25 h
-  realistic with one restart for a bad seed  →  2–3 days
+Throughput (5060 Ti 16 GB, bf16 + grad-ckpt, batch 8, 12 layers):
+  ~0.25–0.4 s/step
+  182 k utts / 8  =  22 750 steps/epoch  →  ~1.6–2.5 h/epoch
+  10 epochs  →  ~16–25 h
+  realistic with one restart for a bad seed  →  1.5–2.5 days
 ```
 
 > **Checkpoint-schema constraint — read before you start Recipe C.**
 > `cm_aasist.py` hard-validates `frontend == "microsoft/wavlm-base-plus"`
-> and `architecture == "aasist-l"` (`_FRONTEND`, `_ARCHITECTURE` at lines
-> 52–53). A Recipe C checkpoint **will be rejected at load** until you update
-> those two constants and the `docs/PROTOCOL.md` / health-report strings that
-> name the backend. Do that as part of §8, not as a surprise on integration
-> day. Also update `_validate_checkpoint`'s expectations if you change the
-> feature dimension (XLS-R-300m is 1024-dim, not 768).
+> and `architecture == "aasist-l"` (`_FRONTEND`, `_ARCHITECTURE`, lines
+> 52–53). A Recipe C checkpoint **is rejected at load** until you update
+> those constants — to e.g. `"microsoft/wavlm-large-l12-attm"` and
+> `"aasist"` — along with the `docs/PROTOCOL.md` and health-report strings
+> that name the backend. Do it as part of §6/§7, not as a surprise on
+> integration day. WavLM-large hidden states are **1024-dim, not 768**, so
+> the AttM input width and any dimension assertion change with it.
+
+### Why not the alternatives
+
+| Option | Verdict |
+|---|---|
+| Frozen SSL + head (Recipe A) | Keep as smoke test. Frozen upstreams do appear in strong ASVspoof 5 systems [R11], but as one leg of large ensembles, not as a single-model answer. |
+| XLS-R-300m fine-tuned | Superseded — worse EER than WavLM at comparable size [R11], more VRAM, and a front-end family swap in `cm_aasist.py`. |
+| WavLM-large, all 24 layers | Wasteful: layers 12–23 contribute little here [R10] while costing ~2× the fine-tune. |
+| XLS-R-2B / WavLM-large ensembles | These are what actually top the leaderboards [R11], and they do not fit 16 GB. Cloud-only; see §11 escalation. |
 
 ### Augmentation (both recipes, on-the-fly, train partition only)
 
@@ -318,6 +367,25 @@ augmentation 0.3.
 ## 5. Phase 3 — Evaluation (report all of it, not just the headline)
 
 Conventions follow `docs/04-metrics-and-honest-evaluation.md`.
+
+### 5.0 What a good number actually looks like on ASVspoof 5
+
+Calibrate before you measure, so you don't mistake a normal result for a
+failure or a suspicious one for success.
+
+| Corpus | Strong published result | Source |
+|---|---|---|
+| ASVspoof 5 eval, **top-5 challenge submissions** | **minDCF < 0.5, EER < 15 %** | [R11] |
+| ASVspoof 5, fine-tuned WavLM-base (single system) | 7.26 % EER (progress set) | [R11] |
+| ASVspoof 5, fine-tuned wav2vec2 (single system) | 11.91 % EER — the gap that motivates §4 | [R11] |
+| ASVspoof 2019 LA, fine-tuned WavLM + AttM | 0.65 % EER | [R10] |
+| ASVspoof 2021 LA / DF, same system | 3.50 % / 3.19 % EER | [R10] |
+
+Two things follow. **ASVspoof 5 is much harder than 2019 LA** — a single-digit
+EER there is a genuinely good result, and anyone quoting sub-1 % is quoting a
+different, easier corpus. And **if your ASVspoof 5 eval EER comes out below
+~5 %, suspect a leak** (augmented dev, overlapping partitions, a manifest
+built from the wrong protocol file) before celebrating.
 
 ### 5.1 minDCF — primary
 
@@ -481,7 +549,10 @@ reporting the best of five seeds as if it were the expected one.
 
 Escalation order if Recipe C fails acceptance:
 1. More attack-diverse training data (ASVspoof 5 + 2019 LA + 2021 DF pooled).
-2. Larger front-end (XLS-R-1B) — needs ≥ 24 GB, so cloud, not this box.
+2. Restore the dropped WavLM-large layers 12–23, or move to a larger
+   upstream (XLS-R-2B, WavLM-large ensembles) — needs ≥ 24 GB, so cloud,
+   not this box. This is what actually tops the ASVspoof 5 leaderboard
+   [R11]; the top systems are multi-component ensembles, not single models.
 3. Score-level ensemble of two seeds/architectures — cheap, usually worth
    0.5–1 point of EER, and honest as long as you report it as an ensemble.
 
@@ -521,3 +592,5 @@ is that we do not yet have our own numbers.
 | R7 | *Audio Anti-Spoofing Detection: A Survey* — [arXiv:2404.13914](https://arxiv.org/html/2404.13914v1); *Robustness in deepfake speech detection* — [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0885230826001002) | Corroboration for sub-1 % → 30–60 % EER degradation and why it happens. |
 | R8 | ASVspoof 5 on Hugging Face — [huggingface.co/datasets/jungjee/asvspoof5](https://huggingface.co/datasets/jungjee/asvspoof5) | Alternate download mirror. Licence still governs. |
 | R9 | PyTorch `sm_120` / Blackwell support — [pytorch/pytorch#159207](https://github.com/pytorch/pytorch/issues/159207) | §2's environment gate; PyTorch ≥ 2.7 on a CUDA 12.8+ build. |
+| R10 | Pan, Liu et al. — *Attentive Merging of Hidden Embeddings from Pre-trained Speech Model for Anti-spoofing Detection*, Interspeech 2024. [ISCA](https://www.isca-archive.org/interspeech_2024/pan24c_interspeech.pdf) · [arXiv:2406.10283](https://arxiv.org/abs/2406.10283) | Recipe C's core: early-to-middle WavLM layers outperform the last layer and all-layer pooling; attentive merging beats linear. 0.65 / 3.50 / 3.19 % EER on 2019 LA / 2021 LA / 2021 DF. |
+| R11 | ASVspoof 5 results and post-challenge analyses — challenge overview [emergentmind summary](https://www.emergentmind.com/topics/asvspoof-5-challenge); *WavLM model ensemble for audio deepfake detection* [ISCA](https://www.isca-archive.org/asvspoof_2024/combei24_asvspoof.pdf); *Exploring WavLM Back-ends for Speech Spoofing and Deepfake Detection* [ISCA](https://www.isca-archive.org/asvspoof_2024/stourbe24_asvspoof.pdf) | §5.0's expectation table; the WavLM-vs-wav2vec2 gap (7.26 % vs 11.91 % EER); and that top systems are ensembles, not single models. |
