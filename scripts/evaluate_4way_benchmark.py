@@ -117,6 +117,8 @@ def main():
                 print(f"Scored {i}/{len(records)} ({i/elapsed:.1f} utts/s, elapsed: {elapsed:.1f}s)")
                 sys.stdout.flush()
 
+            del at, out, feat_l12, feat_l5, feats_12, l_pre, l_post, l_l5, l_attm
+
     res_pre = evaluate_system(np.array(bon_pre), np.array(spf_pre))
     res_post = evaluate_system(np.array(bon_post), np.array(spf_post))
     res_l5 = evaluate_system(np.array(bon_l5), np.array(spf_l5))
@@ -231,4 +233,9 @@ Learned softmax layer attention weights across `hidden_states[0:12]`:
     print(f"Attentive Merge (12L):   {res_attm['eer']*100:6.3f}   {res_attm['min_dcf']:6.4f}   {res_attm['act_dcf']:6.4f}   {res_attm['act_dcf_bayes']:12.4f}   {res_attm['cllr']:6.4f}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stdout)
+        sys.exit(1)

@@ -3,7 +3,7 @@
   "total_utterances": 20000,
   "bonafide_count": 4058,
   "spoof_count": 15942,
-  "timestamp": "2026-09-11T22:05:19Z",
+  "timestamp": "2026-09-11T22:10:31Z",
   "models": {
     "pre_aug_layer12": {
       "checkpoint": "data/pre_aug_cm_aasist.pt",

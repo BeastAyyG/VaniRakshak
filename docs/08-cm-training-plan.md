@@ -994,7 +994,45 @@ Evaluated on the full 20,000-utterance evaluation slice (`data/eval_benchmark/ev
 | **Layer 5 (Pan et al.)** | Layer 5 | 14.096% | 0.8280 | 2.8190 | 12.1242 | 2.4901 |
 | **Attentive Merging (12L)** | **AttentiveMerging [0:12]** | **12.666%** | **0.8804** | **2.5329** | **13.2390** | **3.2391** |
 
-Full breakdown and per-attack metrics recorded in `reports/cm_attentive_merge_benchmark.md` and `reports/cm_attentive_merge_benchmark.json`.
+##### Per-Attack Breakdown (EER %) on Held-Out Evaluation Slice (A17–A32)
+
+| Attack ID | Pre-Aug L12 (%) | Post-Aug L12 (%) | Layer 5 (%) | Attentive Merge 12L (%) | Best Performing Architecture |
+|---|---|---|---|---|---|
+| A17 | 5.347% | 3.869% | 1.984% | **1.134%** | **Attentive Merge** |
+| A18 | 4.707% | 5.347% | 8.034% | 5.002% | Pre-Aug L12 |
+| A19 | 9.044% | 21.316% | 30.828% | **20.214%** | Pre-Aug L12 |
+| A20 | 6.407% | 23.189% | 30.951% | 24.104% | Pre-Aug L12 |
+| A21 | 13.085% | 9.177% | 3.524% | **4.929%** | Layer 5 |
+| A22 | 14.191% | 11.542% | 6.481% | **5.495%** | **Attentive Merge** |
+| A23 | 8.748% | 6.654% | 9.942% | 8.880% | Post-Aug L12 |
+| A24 | 29.333% | 17.846% | 8.034% | **5.150%** | **Attentive Merge** |
+| A25 | 6.506% | 12.543% | 10.098% | **6.037%** | **Attentive Merge** |
+| A26 | 4.633% | 7.615% | 7.048% | 6.982% | Pre-Aug L12 |
+| A27 | 7.097% | 12.488% | 16.387% | 19.181% | Pre-Aug L12 |
+| A28 | 32.257% | 26.220% | 12.945% | **16.008%** | Layer 5 |
+| A29 | 5.067% | 2.932% | 0.931% | **0.827%** | **Attentive Merge** |
+| A30 | 6.407% | 9.038% | 17.989% | 14.662% | Pre-Aug L12 |
+| A31 | 14.810% | 13.221% | 15.530% | 15.845% | Post-Aug L12 |
+| A32 | 11.237% | 17.227% | 20.999% | 24.396% | Pre-Aug L12 |
+
+##### Learned Layer Attention Weights (`softmax(model.merge.weights)`)
+
+| Layer Index | Hidden State Source | Softmax Weight (%) | Contribution Role |
+|---|---|---|---|
+| **Layer 0** | WavLM CNN Feature Extractor | 8.18% | Low-level acoustic waveform encoding |
+| **Layer 1** | Transformer Layer 1 | 9.31% | Early spectral framing |
+| **Layer 2** | Transformer Layer 2 | 9.04% | Early spectro-temporal cues |
+| **Layer 3** | Transformer Layer 3 | 9.49% | Mid-early phonetic context |
+| **Layer 4** | Transformer Layer 4 | 9.08% | Mid-early artifact localization |
+| **Layer 5** | Transformer Layer 5 | 7.62% | Pan et al. acoustic-phonetic transition |
+| **Layer 6** | Transformer Layer 6 | 7.25% | Intermediate representation |
+| **Layer 7** | Transformer Layer 7 | 6.97% | Intermediate representation |
+| **Layer 8** | Transformer Layer 8 | 7.11% | Intermediate contextual representation |
+| **Layer 9** | Transformer Layer 9 | 7.39% | High-level acoustic structure |
+| **Layer 10** | Transformer Layer 10 | 8.28% | High-level phonetic & prosodic context |
+| **Layer 11** | Transformer Layer 11 | **10.28%** | Top-level semantic & synthesis cues |
+
+Detailed raw benchmark artifacts are preserved in `reports/cm_attentive_merge_benchmark.json` and `reports/cm_attentive_merge_benchmark.md`.
 
 
 
