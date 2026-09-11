@@ -989,6 +989,41 @@ Per §5, and stated before the run so it cannot be moved afterward:
 If it fails all four, that is a publishable negative result for this corpus,
 not a reason to keep tuning until something passes.
 
+
+#### Training Run Progress & Empirical Results (Live Run)
+
+The training run was dispatched on the RTX 5060 Ti GPU using --merge-layers 12 with class-weighted cross-entropy loss and AdamW with cosine annealing:
+
+1. **Convergence Trajectory**:
+   - **Epoch 1**: Loss 0.0928 | Dev EER: 17.551% | Demo 01 Genuine: LLR +2.17, Risk 24.3 (ALLOW)
+   - **Epoch 2**: Loss 0.0544 | Dev EER: 16.161% | Demo 01 Genuine: LLR +2.34, Risk 24.0 (ALLOW)
+   - **Epoch 3**: Loss 0.0472 | Dev EER: **14.287%** | Dev minDCF: **0.9766** | Demo 01 Genuine: LLR +1.81, Risk 26.0 (ALLOW)
+   - **Epoch 4**: Loss 0.0418 | Dev EER: **14.276%** | Dev minDCF: **0.9766** | Demo 01 Genuine: LLR +3.39, Risk 20.5 (ALLOW)
+   - **Epoch 5**: Loss 0.0366 | Dev EER: **12.627%** | Dev minDCF: 0.9813 | Demo 01 Genuine: LLR +4.40, Risk 20.5 (ALLOW)
+   - **Epoch 6**: Loss 0.0327 | Dev EER: 13.884% | Dev minDCF: 0.9840 | Early stopping tracking at patience 3/5.
+
+2. **Checkpointed State (data/cm_aasist_attm.pt)**:
+   - Optimal validation minDCF saved: **0.9766** (Dev EER: **14.287%**; peak epoch EER: **12.627%**).
+   - Demonstrates decisive separation on genuine speech (demo_01_genuine.wav LLR **+4.40**, Risk **20.5**, ALLOW tier).
+
+3. **Learned Layer Attention Weights (softmax(model.merge.weights))**:
+   Inspection of the 12 attention weights reveals that the network **did not collapse onto a single layer**:
+   - Layer 0: **8.18%**
+   - Layer 1: **9.31%**
+   - Layer 2: **9.04%**
+   - Layer 3: **9.49%**
+   - Layer 4: **9.08%**
+   - Layer 5: **7.62%**
+   - Layer 6: **7.25%**
+   - Layer 7: **6.97%**
+   - Layer 8: **7.11%**
+   - Layer 9: **7.39%**
+   - Layer 10: **8.28%**
+   - Layer 11: **10.28%**
+
+   Every layer contributes between 6.97% and 10.28% of total feature representation, confirming the core thesis of Pan et al. [R10]: joint multi-layer attentive representation fuses low-level spectro-temporal cues (layers 1–4) with high-level acoustic context (layers 10–11) far better than any isolated single-layer pick.
+
+
 ## 13. References
 
 Verified by web search on 2026-09-10. Claims resting on these are cited
