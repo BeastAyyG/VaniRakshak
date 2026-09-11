@@ -33,6 +33,7 @@ ENV/
 *.npz
 *.pt
 *.pth
+!data/cm_aasist.pt
 
 # Audio datasets & raw recordings (keep scripts & structures)
 *.wav
