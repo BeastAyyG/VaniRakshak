@@ -5,10 +5,32 @@
 The end-to-end (E2E) testing framework for VaniRakshak enforces strict **opaque-box, requirement-driven verification**. System components are evaluated across operational boundaries (network interfaces, protocol envelopes, serialization contracts, and statistical inference bounds) rather than implementation-specific internals.
 
 ### Authoritative Derivation
-All test scenarios, input spaces, boundary conditions, and acceptance tolerances are strictly derived from the primary requirements documented in:
-- `ORIGINAL_REQUEST.md`: R1 (Corpus & Manifest Verification), R2 (WavLM Embedding Extraction), R3 (AASIST-L Countermeasure Training), R4 (Comprehensive Forensic Evaluation & Calibration), R5 (Integration Gate & Protocol Verification).
-- `PROJECT.md`: 19 discrete features spanning milestones M1 through M6, interface contracts, and schema definitions.
-- `docs/PROTOCOL.md`: Single source of truth for WebSocket frame semantics, handshake sequences, sliding window verdicts, DPDP hash receipt chaining, and autonomous transaction interlocks.
+
+All test scenarios, input spaces, boundary conditions, and acceptance
+tolerances derive from the following, **in this precedence order**:
+
+- `docs/PROTOCOL.md` — single source of truth for WebSocket frame semantics,
+  handshake sequences, sliding-window verdicts, DPDP hash-receipt chaining,
+  and the autonomous transaction interlock. Binding per `AGENTS.md` §2.
+- `docs/08-cm-training-plan.md` — the countermeasure work this suite covers,
+  organised there as corpus/manifest verification, WavLM embedding
+  extraction, AASIST-L training, forensic evaluation & calibration, and the
+  integration gate (the "R1–R5" groupings referenced throughout this file).
+- `docs/API_SPEC.md` — REST surface, request/response schemas.
+- `docs/09-post-cm-roadmap.md` — what is deliberately **not** covered yet,
+  so an absent test is distinguishable from an oversight.
+
+> **Provenance note.** Earlier revisions of this section cited two files —
+> ORIGINAL_REQUEST.md and PROJECT.md (named here without backticks so the
+> doc-drift guard does not read them as live path references) — as the
+> primary requirements documents. Neither is in this repository: they were
+> working documents on
+> the authoring machine and were never committed, so no reader could follow
+> the citation and the doc-drift guard failed on them. The milestone
+> structure they described (M1–M6, 19 features) is not reproduced here
+> rather than paraphrased from memory; the documents above are what a test
+> in this suite can actually be traced to. If those two files are meant to
+> be authoritative, commit them and restore the citation.
 
 ### Core Testing Invariants
 1. **Strict Zero-Facade Principle**: Every test exercises real computational paths—real PyTorch graph modules, real metric computation routines, real cryptographic hash chains, and real ASGI WebSocket/HTTP server loops.

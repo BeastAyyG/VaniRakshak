@@ -132,6 +132,20 @@ KNOWN_HISTORICAL_REFERENCES = {
     "app/main.py",  # backend/README.md's retirement note for the standalone server
 }
 
+# Paths that are REAL and correct to cite, but generated locally and
+# deliberately gitignored -- so they exist on a developer's disk and never in
+# a fresh CI checkout. Distinct from KNOWN_HISTORICAL_REFERENCES above: those
+# name things that are gone, these name things that are absent *here* by
+# design. Hard-failing on them would force docs to stop telling developers
+# about tooling they are expected to run.
+#
+# Add a path here only if it is genuinely generated and genuinely gitignored
+# -- verify with `git check-ignore -v <path>` before adding, so this does not
+# become a place to silence real misses.
+GENERATED_NOT_COMMITTED = {
+    "graft/INDEX.md",  # graft's local graph cache; .gitignore `/graft/`, rebuilt by `graft build`
+}
+
 
 class Findings:
     def __init__(self) -> None:
@@ -213,6 +227,11 @@ def check_paths(docs: List[Path], findings: Findings, verbose: bool) -> None:
             if candidate in KNOWN_HISTORICAL_REFERENCES:
                 findings.warn_msg(
                     f"{rel_doc}: references deleted `{candidate}` -- allowlisted as an intentional historical/retraction reference"
+                )
+                continue
+            if candidate in GENERATED_NOT_COMMITTED:
+                findings.warn_msg(
+                    f"{rel_doc}: references `{candidate}` -- allowlisted as generated-and-gitignored (absent in a fresh checkout by design)"
                 )
                 continue
             findings.hard_fail(
