@@ -93,6 +93,7 @@ class CMModelAASIST:
     dev_eer: float = float("nan")
     dev_min_dcf: float = float("nan")
     layer_index: int = -1
+    merge_layers: Optional[int] = None
     natural_offset: float = field(
         default_factory=lambda: float(os.environ.get("VR_CM_NATURAL_OFFSET", "0.0"))
     )
@@ -148,7 +149,10 @@ class CMModelAASIST:
             from ml.aasist_model import AASISTLHead
 
         in_dim = 768 if ckpt.get("frontend") == _FRONTEND else 1024
-        model = AASISTLHead(in_dim=in_dim)
+        # merge_layers is absent from every checkpoint trained before attentive
+        # merging existed, so .get() -> None keeps them on the single-layer path.
+        merge_layers = ckpt.get("merge_layers") or None
+        model = AASISTLHead(in_dim=in_dim, merge_layers=merge_layers)
         model.load_state_dict(ckpt["state_dict"], strict=False)
         model.eval()
 
@@ -157,6 +161,7 @@ class CMModelAASIST:
         self.dev_eer = float(ckpt["dev_eer"])
         self.dev_min_dcf = float(ckpt["dev_min_dcf"])
         self.layer_index = int(ckpt.get("layer_index", ckpt.get("layer", -1)))
+        self.merge_layers = merge_layers
         self.name = f"aasist_l_wavlm_dev_eer_{self.dev_eer:.3f}"
 
         # Platt calibration metadata stored in checkpoint (deliberately not applied
@@ -209,8 +214,15 @@ class CMModelAASIST:
 
         with torch.inference_mode():
             outputs = wavlm(input_values, output_hidden_states=True)
-            hidden_state = outputs.hidden_states[self.layer_index]  # (1, T, 768)
-            feat = hidden_state.to(torch.float32)
+            if self.merge_layers:
+                # Attentive merge over hidden_states[0:N] -- must select the
+                # same range training did, which the checkpoint records.
+                feat = [
+                    outputs.hidden_states[i].to(torch.float32)
+                    for i in range(self.merge_layers)
+                ]
+            else:
+                feat = outputs.hidden_states[self.layer_index].to(torch.float32)  # (1, T, 768)
             _, logits = self._model(feat)
             # LLR = genuine_logit (index 1) - spoof_logit (index 0) - eer_threshold + natural_offset
             raw_llr = float((logits[0, 1] - logits[0, 0]).item())

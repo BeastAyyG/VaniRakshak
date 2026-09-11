@@ -454,12 +454,35 @@ class FastAudioDevLoader:
 # Benchmark Demo Clip Evaluator
 # ---------------------------------------------------------------------------
 
+def select_wavlm_features(w_out, layer_index: int, merge_layers: Optional[int] = None):
+    """Pick the WavLM representation(s) the AASIST head will consume.
+
+    Returns a single (B, T, D) tensor for the single-layer recipe, or a list
+    of them when ``merge_layers`` is set, for AASISTLHead's attentive merge
+    (Pan et al., docs/08 [R10]). ``merge_layers=12`` selects hidden_states
+    0..11 -- the embedding output plus the early-to-middle transformer
+    layers that docs/08 §12.6 measured as carrying the spoofing signal.
+
+    Every extraction site in this file routes through here, so train and
+    inference cannot drift apart on which layers they read.
+
+    Returned tensors are cast to float32 here (WavLM runs in half): doing it
+    in one place means a caller cannot forget it on the merged path, where
+    the value is a list and ``.float()`` would raise AttributeError.
+    """
+    if merge_layers:
+        return [w_out.hidden_states[i].float() for i in range(merge_layers)]
+    return w_out.hidden_states[layer_index].float()
+
+
 def evaluate_demo_clips(
     model: AASISTLHead,
     wavlm: WavLMModel,
     threshold: float,
     dev: torch.device,
     layer_index: int = 5,
+    merge_layers: Optional[int] = None,
+    merge_layers: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Evaluate model on the 4 demo benchmark clips via full pipeline and fusion."""
     from vanirakshak.detectors.pipeline import DetectionPipeline
@@ -477,11 +500,13 @@ def evaluate_demo_clips(
     model.eval()
 
     class _TempCM:
-        def __init__(self, m: AASISTLHead, w: WavLMModel, t: float, layer_idx: int = 5) -> None:
+        def __init__(self, m: AASISTLHead, w: WavLMModel, t: float, layer_idx: int = 5,
+                     merge_layers: Optional[int] = None) -> None:
             self.m = m
             self.w = w
             self.t = t
             self.layer_idx = layer_idx
+            self.merge_layers = merge_layers
 
         def score(self, x: np.ndarray, sr: int) -> float:
             audio = np.asarray(x, dtype=np.float32).ravel()
@@ -501,12 +526,12 @@ def evaluate_demo_clips(
 
             with torch.no_grad():
                 w_out = self.w(inp, output_hidden_states=True)
-                feat = w_out.hidden_states[self.layer_idx]
-                _, logits = self.m(feat.float())
+                feat = select_wavlm_features(w_out, self.layer_idx, self.merge_layers)
+                _, logits = self.m(feat)
                 raw_llr = float((logits[0, 1] - logits[0, 0]).item())
                 return raw_llr - self.t
 
-    cm_temp = _TempCM(model, wavlm, threshold, layer_idx=layer_index)
+    cm_temp = _TempCM(model, wavlm, threshold, layer_idx=layer_index, merge_layers=merge_layers)
     pipe = DetectionPipeline(cm=cm_temp)
 
     # Enrol Modi using genuine demo audio
@@ -622,7 +647,7 @@ def train_recipe_a(
         p.requires_grad = False
 
     # 5. Initialize AASIST-L Head
-    model = AASISTLHead(in_dim=768).to(dev)
+    model = AASISTLHead(in_dim=768, merge_layers=merge_layers).to(dev)
     if init_weights and Path(init_weights).is_file():
         logger.info("Loading initial weights from %s...", init_weights)
         init_ckpt = torch.load(str(init_weights), map_location="cpu")
@@ -668,11 +693,11 @@ def train_recipe_a(
             # Frozen WavLM forward pass on GPU
             with torch.no_grad():
                 w_out = wavlm(audio_batch, output_hidden_states=True)
-                feats = w_out.hidden_states[layer_index]  # (B, 199, 768)
+                feats = select_wavlm_features(w_out, layer_index, merge_layers)
 
             optimizer.zero_grad()
             with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
-                _, logits = model(feats.float())
+                _, logits = model(feats)
                 loss = criterion(logits, labels)
 
             scaler.scale(loss).backward()
@@ -719,9 +744,9 @@ def train_recipe_a(
                         non_blocking=True,
                     )
                     w_out = wavlm(audio_batch, output_hidden_states=True)
-                    feats = w_out.hidden_states[layer_index]
+                    feats = select_wavlm_features(w_out, layer_index, merge_layers)
                     with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
-                        _, logits = model(feats.float())
+                        _, logits = model(feats)
                     llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                     labels_np = labels.numpy()
                     mask = (labels_np == 1)
@@ -747,7 +772,8 @@ def train_recipe_a(
         t_val1 = time.perf_counter()
 
         # Evaluate demo clips
-        demo_res = evaluate_demo_clips(model, wavlm, threshold_eer, dev, layer_index=layer_index)
+        demo_res = evaluate_demo_clips(model, wavlm, threshold_eer, dev, layer_index=layer_index,
+                                   merge_layers=merge_layers)
         demo_01 = demo_res.get("demo_01_genuine.wav", {})
 
         elapsed_total = time.perf_counter() - t0
@@ -788,6 +814,7 @@ def train_recipe_a(
                 "dev_eer": float(best_dev_eer),
                 "dev_min_dcf": float(best_dev_mindcf),
                 "layer_index": int(layer_index),
+                "merge_layers": int(merge_layers) if merge_layers else None,
             }
             torch.save(checkpoint_payload, str(output_checkpoint))
             _validate_checkpoint(checkpoint_payload, output_checkpoint)
@@ -862,6 +889,17 @@ def main() -> None:
         default=None,
         help="Limit number of dev validation utterances for fast epoch evaluation",
     )
+    parser.add_argument(
+        "--merge-layers",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Attentively merge WavLM hidden_states[0:N] instead of reading one "
+            "layer (Pan et al., docs/08 [R10]). N=12 is the documented range. "
+            "Overrides --layer-index. Adds only N parameters to the head."
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=5e-4)
@@ -890,6 +928,7 @@ def main() -> None:
         max_dev_utts=args.max_dev_utts,
         n_workers=args.workers,
         layer_index=args.layer_index,
+        merge_layers=args.merge_layers,
         streaming_dev=args.streaming_dev,
     )
 

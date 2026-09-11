@@ -229,10 +229,24 @@ class AASISTLHead(nn.Module):
         gat_dims: Tuple[int, int] = (24, 32),
         pool_ratios: Tuple[float, float, float, float] = (0.4, 0.5, 0.7, 0.5),
         temperatures: Tuple[float, float, float, float] = (2.0, 2.0, 100.0, 100.0),
+        merge_layers: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.in_dim = in_dim
         self.gat_dims = gat_dims
+
+        # Optional attentive merging over several WavLM hidden layers
+        # (Pan et al. 2024, [R10] in docs/08). When None the head keeps its
+        # original single-layer contract, so every checkpoint trained before
+        # this existed loads and scores identically -- `merge` is simply
+        # absent from its state_dict and `forward` never looks for it.
+        #
+        # Motivated by this repo's own measurement, not only the paper:
+        # docs/08 §12.6 found layer 5 decisively better on A17/A21/A24/A29
+        # and layer 12 better on A19/A20, i.e. no single layer wins across
+        # attack families. A learned merge is the obvious response to that.
+        self.merge_layers = merge_layers
+        self.merge = AttentiveMerging(num_layers=merge_layers) if merge_layers else None
 
         # SSL feature projection into initial node dimension
         self.proj = nn.Linear(in_dim, 64)
@@ -266,14 +280,38 @@ class AASISTLHead(nn.Module):
         # 5 readout components: [T_max, T_avg, S_max, S_avg, master] * gat_dims[1]
         self.out_layer = nn.Linear(5 * gat_dims[1], 2)
 
-    def forward(self, feat: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, feat: Union[torch.Tensor, List[torch.Tensor]]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Args:
-            feat: (B, T, in_dim) SSL feature sequence.
+            feat: (B, T, in_dim) SSL feature sequence, or -- when this head
+                was built with ``merge_layers`` -- a list of such tensors,
+                one per selected WavLM hidden layer, merged attentively
+                before the graph stack sees them.
 
         Returns:
             last_hidden: (B, 5 * gat_dims[1])
             logits: (B, 2) where index 0=spoof, 1=bonafide.
         """
+        if isinstance(feat, (list, tuple)):
+            if self.merge is None:
+                raise ValueError(
+                    "AASISTLHead received a list of hidden states but was built "
+                    "without merge_layers; construct it with "
+                    "AASISTLHead(merge_layers=N) to enable attentive merging"
+                )
+            if len(feat) != self.merge_layers:
+                raise ValueError(
+                    f"expected {self.merge_layers} hidden states to merge, got {len(feat)} "
+                    "-- train and inference must select the same layer range"
+                )
+            feat = self.merge(list(feat))
+        elif self.merge is not None:
+            raise ValueError(
+                f"this head was built with merge_layers={self.merge_layers} and needs a "
+                "list of that many hidden states, not a single tensor"
+            )
+
         bs, seq_len, _ = feat.size()
 
         # Project and normalize

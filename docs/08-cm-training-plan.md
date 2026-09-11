@@ -913,6 +913,82 @@ eports/cm_layer5_vs_layer12_benchmark.json and
 eports/cm_layer5_vs_layer12_benchmark.md.
 
 
+### 12.7 Attentive merging — implemented, untrained (run this next)
+
+§12.6 measured that **no single layer wins**: layer 5 crushed A17/A21/A24/A29,
+layer 12 held A19/A20. That is the exact condition a learned merge exists to
+resolve, so the merge is now wired end to end and is the next run to make.
+
+**What changed.** `AttentiveMerging` existed in `ml/aasist_model.py` but was
+dead code — imported once, never called by the head, the trainer, or
+inference. It is now connected through all three:
+
+| Piece | Change |
+|---|---|
+| `ml/aasist_model.py` | `AASISTLHead(merge_layers=N)` accepts a **list** of hidden states and merges them. Adds **N parameters** (one softmax weight per layer). |
+| `ml/train_cm.py` | `--merge-layers N`; one `select_wavlm_features()` helper is the single extraction point, so train and inference cannot drift on layer choice. |
+| `cm_aasist.py` | Reads `merge_layers` from the checkpoint and rebuilds the same merge at inference. |
+
+**Backward compatible by construction.** `merge_layers` is absent from every
+existing checkpoint, so `.get() -> None` keeps them on the single-layer path.
+Verified: `data/cm_aasist.pt` loads with 0 missing / 0 unexpected keys and
+scores `demo_01_genuine.wav` identically (LLR +1.1529).
+
+**Weight initialisation is deliberate.** `AttentiveMerging.weights` starts at
+zeros, so `softmax` is uniform and the merged feature is exactly the *mean*
+of the selected layers on step 1. Training moves away from that rather than
+from a random point — a failed merge run should degrade toward layer-averaging,
+not toward noise.
+
+#### Run it
+
+```powershell
+# training box, cm-train venv, corpus already staged per §3
+python ml/train_cm.py `
+  --train-manifest data/manifests/train.tsv `
+  --dev-manifest   data/manifests/dev.tsv `
+  --merge-layers 12 `
+  --output data/cm_aasist_attm.pt `
+  --epochs 10 --batch-size 64 --device cuda
+```
+
+`--merge-layers 12` selects `hidden_states[0:12]` — the embedding output plus
+the early-to-middle transformer layers §12.6 found carry the spoofing signal.
+It overrides `--layer-index`. Cost is ~12 extra parameters and one extra
+`torch.stack` per batch; **expect throughput within a few percent of the
+layer-5 run**, since the WavLM forward already computes every layer and
+`output_hidden_states=True` was always set — merging reads tensors that were
+previously discarded.
+
+#### Then benchmark it against the other three
+
+```powershell
+python scripts/evaluate_3way_benchmark.py   # extend with the new checkpoint
+$env:VR_CM_BACKEND="aasist"
+$env:VR_CM_AASIST_WEIGHTS="data/cm_aasist_attm.pt"
+python scripts/integration_check.py
+```
+
+#### What would count as success
+
+Per §5, and stated before the run so it cannot be moved afterward:
+
+- [ ] **Pooled eval EER below 12.878 %** — the pre-aug layer-12 number, which
+      is still the best any checkpoint here has achieved on the 20k slice.
+      Beating post-aug (13.627 %) alone is not enough.
+- [ ] **Holds layer 5's per-attack wins** on A17/A21/A24/A29 *without*
+      surrendering A19/A20 to the degree layer 5 did (A19: 30.8 % L5 vs
+      21.3 % L12). The whole thesis of merging is getting both.
+- [ ] **CLLR below 1.6238** (post-aug L12, the current best). Layer 5's 2.4901
+      is the number to avoid repeating.
+- [ ] Learned weights inspected and reported: `softmax(model.merge.weights)`.
+      If it collapses onto one layer, the merge found nothing and the honest
+      conclusion is that single-layer was right — record that, don't re-run
+      until it looks better.
+
+If it fails all four, that is a publishable negative result for this corpus,
+not a reason to keep tuning until something passes.
+
 ## 13. References
 
 Verified by web search on 2026-09-10. Claims resting on these are cited
