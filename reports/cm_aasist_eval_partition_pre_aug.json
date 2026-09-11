@@ -1,5 +1,8 @@
 {
   "checkpoint": "data/pre_aug_cm_aasist.pt",
+  "partition": "eval_slice_20k",
+  "n_bonafide": 4058,
+  "n_spoof": 15942,
   "metrics": {
     "min_dcf": 0.883424289589931,
     "act_dcf": 2.5756883982900307,

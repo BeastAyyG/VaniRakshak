@@ -6,20 +6,20 @@
   "metrics": {
     "min_dcf": 0.8047550574380675,
     "act_dcf": 2.724907824130091,
-    "act_dcf_bayes": 1.3794533275781187,
-    "cllr": 0.7203981005171542,
+    "act_dcf_bayes": 10.245496968155694,
+    "cllr": 1.62381957387492,
     "eer": 0.1362740266140956,
     "minDCF": 0.8047550574380675,
     "actDCF": 2.724907824130091,
-    "actDCF_bayes": 1.3794533275781187,
-    "CLLR": 0.7203981005171542,
+    "actDCF_bayes": 10.245496968155694,
+    "CLLR": 1.62381957387492,
     "EER": 0.1362740266140956,
-    "threshold_eer": -1.4396371272704236,
-    "threshold_mindcf": 0.5938959121704102,
-    "threshold_actdcf": -1.4396371272704236,
+    "threshold_eer": 5.887557457914019,
+    "threshold_mindcf": 11.3877854347229,
+    "threshold_actdcf": 5.887557457914019,
     "threshold_bayes": -0.6444820085786643,
     "threshold_source": "eer_operating_point",
-    "calibrated": true
+    "calibrated": false
   },
   "per_attack_eer": {
     "A17": 3.869,

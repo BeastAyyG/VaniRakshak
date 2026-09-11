@@ -86,11 +86,14 @@ trained on ASVspoof 5 with frozen WavLM-base-plus representations).
 Measured on the demo corpus and ASVspoof 5:
 - **ASV (ECAPA-TDNN)**: genuine `asv=0.854`, impostor `asv=0.044` — clean separation.
 - **CM (AASIST-L)**: ASVspoof 5 dev pooled **EER = 16.415 %**, **minDCF = 0.9912**,
-  calibrated $C_{\text{llr}} = 0.6536$. ASVspoof 5 eval partition pooled **EER = 13.627 %**,
-  **minDCF = 0.8048**, **$\text{actDCF}_{\text{Bayes}} = 1.3795$**, **$C_{\text{llr}} = 0.7204$**
+  calibrated $C_{\text{llr}} = 0.6536$. ASVspoof 5 eval partition pooled **minDCF = 0.8048**
+  (improving from pre-aug 0.8834), raw **EER = 13.627 %** (pre-aug 12.878%),
+  calibrated **$\text{actDCF}_{\text{Bayes}} = 1.3795$**, **$C_{\text{llr}} = 0.7204$**
   across held-out attacks A17–A32 (`reports/cm_aasist_eval_partition.json`). On demo clips,
-  genuine outscores impostor cleanly (`demo_01_genuine.wav` Risk 24.0 ALLOW vs
-  `demo_04_impostor.wav` Risk 70.0 BLOCK), eliminating the heuristic's inverted ranking bug.
+  genuine scores autonomously as **ALLOW** in the production sliding-window path
+  (`demo_01_genuine.wav` Risk **31.6**, mean LLR **+2.55**, 3.4 points off the CHALLENGE boundary;
+  center-crop yields Risk 24.0, LLR +3.85). Impostor speech (`demo_04_impostor.wav`, an authentic human voice)
+  is blocked by the ASV subsystem override (`asv_consistency ~ 0.011 < 0.10` -> Risk 70.0 BLOCK).
 Two operational notes: (1) the tier-match gates in `integration_check.py` were
 calibrated for stub-era operating points and reflect increased sensitivity under
 real backends (`degraded_copy` → CHALLENGE, `partial_splice` → BLOCK); (2) if

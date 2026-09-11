@@ -22,15 +22,19 @@ and evaluated across the full Dev partition (140,950 utterances).
   cost characterization, but are deliberately **inactive** during runtime inference (`score()`)
   because downstream `vanirakshak/risk/fusion.py` already trains a dedicated logistic fusion layer.
 - **YouTube Domain Shift Defect Eliminated:** Genuine audio (`demo_01_genuine.wav`)
-  scores positive LLR (+1.60 on first 4.04s window, +3.85 center-cropped 10s clip) and
-  Risk 24.0 (ALLOW). Impostor rejection (`demo_04_impostor.wav`, Risk 70.0, BLOCK) is enforced
-  by the deterministic ASV identity override (`asv_consistency ~ 0.011 < 0.10`).
-- **Eval partition evaluated (Side-by-Side Comparison on 20,000 utterances):**
-  Evaluated across a 20,000-utterance representative sample across all 16 held-out eval attacks (A17–A32):
-  - *Pre-Augmentation Checkpoint*: EER = **12.878 %**, minDCF = **0.8834**, actDCF_bayes = **6.4570**, CLLR = **1.8171** (`reports/cm_aasist_eval_partition_pre_aug.json`).
-  - *Post-Augmentation Checkpoint*: EER = **13.627 %**, minDCF = **0.8048**, actDCF_bayes = **1.3795**, CLLR = **0.7204** (`reports/cm_aasist_eval_partition.json`).
-  *Eval Tradeoff:* Post-aug slightly raises eval EER (+0.75%), but improves minDCF by 0.0786 and dramatically improves bayesian cost / score calibration under scaling (actDCF_bayes 6.4570 -> 1.3795).
-- Full evaluation reports: `reports/cm_aasist_eval.json` (Dev), `reports/cm_aasist_eval_partition.json` (Eval Post-Aug), and `reports/cm_aasist_eval_partition_pre_aug.json` (Eval Pre-Aug).
+  scores positive in the production sliding-window path (Risk **31.6**, mean LLR **+2.55**, Tier **ALLOW**,
+  3.4 points below the 35.0 CHALLENGE boundary; center-cropped 10s clip yields Risk **24.0**, LLR **+3.85**).
+  Impostor rejection (`demo_04_impostor.wav`, Risk 70.0, BLOCK) is enforced
+  by the deterministic ASV identity override (`asv_consistency ~ 0.011 < 0.10`), not by CM alone.
+- **Eval partition evaluated (Unconfounded Side-by-Side Comparison on 20,000 utterances):**
+  Evaluated on the exact same 20,000-utterance sample (4,058 bonafide, 15,942 spoof) across all 16 held-out eval attacks (A17–A32):
+  - *Pre-Augmentation Checkpoint (raw)*: EER = **12.878 %**, minDCF = **0.8834**, actDCF = **2.5757**, actDCF_bayes = **6.4570**, CLLR = **1.8171** (`reports/cm_aasist_eval_partition_pre_aug.json`).
+  - *Post-Augmentation Checkpoint (raw)*: EER = **13.627 %**, minDCF = **0.8048**, actDCF = **2.7249**, actDCF_bayes = **10.2455**, CLLR = **1.6238** (`reports/cm_aasist_eval_partition.json`).
+  *Defensible Eval Findings (without calibration confounding):*
+  1. Augmentation improves discrimination on unseen attacks: **minDCF improves from 0.8834 to 0.8048** (-0.0786).
+  2. Augmentation incurs an error tradeoff on pristine speech: **Eval EER regresses from 12.878 % to 13.627 %** (+0.749 %).
+  3. Uncalibrated raw Bayes cost is high for both models (actDCF_bayes 6.457 vs 10.245). When the dev Platt layer is applied to both, actDCF_bayes falls to 2.5959 (pre-aug) and 1.3795 (post-aug), demonstrating that bayesian cost reduction is primarily the effect of calibration, not augmentation alone.
+- Full evaluation reports: `reports/cm_aasist_eval.json` (Dev), `reports/cm_aasist_eval_partition.json` (Eval Post-Aug Raw), and `reports/cm_aasist_eval_partition_pre_aug.json` (Eval Pre-Aug Raw).
 - Shipped runtime backend: `VR_CM_BACKEND=aasist` loads `data/cm_aasist.pt`
   and reports `aasist_l_wavlm_dev_eer_0.164` via `/api/v1/health`.
 The previous "heuristic-only" statements in `docs/02-technical-strategy-and-architecture.md`
@@ -805,21 +809,23 @@ trusting this sentence to stay accurate.
 * **Side-by-Side Eval Comparison (20,000 Representative Sample)**:
   Evaluated on the exact same 20,000-utterance sample (4,058 bonafide, 15,942 spoof) committed directly to git at [`data/eval_benchmark/eval_slice_20k.tsv`](file:///c:/VaniRakshak/data/eval_benchmark/eval_slice_20k.tsv) for full external reproducibility:
   ```bash
-  # Reproduce Post-Augmentation Eval metrics:
+  # Reproduce Post-Augmentation Eval metrics (raw):
   python ml/evaluate_cm.py --checkpoint data/cm_aasist.pt --manifest data/eval_benchmark/eval_slice_20k.tsv --audio-eval --device cuda --out-report reports/cm_aasist_eval_partition.json
 
-  # Reproduce Pre-Augmentation Eval metrics:
+  # Reproduce Pre-Augmentation Eval metrics (raw):
   python ml/evaluate_cm.py --checkpoint data/pre_aug_cm_aasist.pt --manifest data/eval_benchmark/eval_slice_20k.tsv --audio-eval --device cuda --out-report reports/cm_aasist_eval_partition_pre_aug.json
   ```
   
-  | Metric | Pre-Augmentation Checkpoint | Post-Augmentation Checkpoint | Delta / Interpretation |
+  | Metric | Pre-Augmentation Checkpoint (raw) | Post-Augmentation Checkpoint (raw) | Delta / Defensible Finding |
   |---|---|---|---|
-  | **Pooled Eval EER** | **12.878 %** | **13.627 %** | +0.75 % (slight dev trade-off) |
-  | **minDCF** | **0.8834** | **0.8048** | **-0.0786** (better discrimination) |
+  | **Pooled Eval EER** | **12.878 %** | **13.627 %** | +0.749 % (tradeoff on clean eval samples) |
+  | **minDCF** | **0.8834** | **0.8048** | **-0.0786** (improved separation on unseen attacks) |
   | **actDCF** | **2.5757** | **2.7249** | +0.1492 |
-  | **actDCF_bayes** | **6.4570** | **1.3795** | **-5.0775** (vastly superior Bayes cost) |
-  | **$C_{\text{llr}}$** | **1.8171** | **0.7204** | **-1.0967** (< 1.0 info threshold) |
-  | **Report File** | `reports/cm_aasist_eval_partition_pre_aug.json` | `reports/cm_aasist_eval_partition.json` | Verified offline artifacts |
+  | **$\text{actDCF}_{\text{Bayes}}$ (raw)** | **6.4570** | **10.2455** | Raw LLR distribution cost before scaling |
+  | **$C_{\text{llr}}$ (raw)** | **1.8171** | **1.6238** | -0.1933 |
+  | **$\text{actDCF}_{\text{Bayes}}$ (Platt cal)** | **2.5959** | **1.3795** | **-1.2164** (calibration reduces Bayes risk on both) |
+  | **$C_{\text{llr}}$ (Platt cal)** | **0.5205** | **0.7204** | Both < 1.0 information gain threshold under scaling |
+  | **Report File** | `reports/cm_aasist_eval_partition_pre_aug.json` | `reports/cm_aasist_eval_partition.json` | 4,058 bonafide / 15,942 spoof verified |
 
 * **Per-Attack Eval EER Breakdown (Post-Augmentation Checkpoint, A17–A32)**:
   * A17: **3.869 %**
