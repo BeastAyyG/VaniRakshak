@@ -115,6 +115,7 @@ scratch/
 # AI agent tooling — local config/caches, per AGENTS.md's "keep agent
 # workspaces out of git" rule. These are per-developer and per-tool; they
 # are not project source and must never land in a PR.
+.agents/
 .claude/
 .cursor/
 .gemini/
