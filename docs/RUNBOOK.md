@@ -85,10 +85,12 @@ embeddings and the trained AASIST-L anti-spoofing countermeasure (`data/cm_aasis
 trained on ASVspoof 5 with frozen WavLM-base-plus representations).
 Measured on the demo corpus and ASVspoof 5:
 - **ASV (ECAPA-TDNN)**: genuine `asv=0.854`, impostor `asv=0.044` — clean separation.
-- **CM (AASIST-L)**: ASVspoof 5 dev pooled **EER = 10.404 %**, **minDCF = 0.8542**,
-  with per-attack EERs from 0.34% (A14) to 23.07% (A13). On demo clips, genuine
-  outscores impostor by 23.1 points (risk 66.4 vs 89.5), eliminating the heuristic's
-  inverted ranking bug.
+- **CM (AASIST-L)**: ASVspoof 5 dev pooled **EER = 16.415 %**, **minDCF = 0.9912**,
+  calibrated $C_{\text{llr}} = 0.6536$. ASVspoof 5 eval partition pooled **EER = 13.627 %**,
+  **minDCF = 0.8048**, **$\text{actDCF}_{\text{Bayes}} = 1.3795$**, **$C_{\text{llr}} = 0.7204$**
+  across held-out attacks A17–A32 (`reports/cm_aasist_eval_partition.json`). On demo clips,
+  genuine outscores impostor cleanly (`demo_01_genuine.wav` Risk 24.0 ALLOW vs
+  `demo_04_impostor.wav` Risk 70.0 BLOCK), eliminating the heuristic's inverted ranking bug.
 Two operational notes: (1) the tier-match gates in `integration_check.py` were
 calibrated for stub-era operating points and reflect increased sensitivity under
 real backends (`degraded_copy` → CHALLENGE, `partial_splice` → BLOCK); (2) if

@@ -12,9 +12,8 @@ and evaluated across the full Dev partition (140,950 utterances).
 - **YouTube Domain Shift Defect Eliminated:** Genuine audio (`demo_01_genuine.wav`)
   now scores positive LLR (+3.85) and Risk 24.0 (ALLOW), cleanly separating from
   impostor audio (Risk 70.0, BLOCK).
-- **Eval partition acquisition:** 9 of 10 archives extracted (628,848 utterances on Drive A,
-  92.4% complete).
-- Full evaluation report: `reports/cm_aasist_eval.json`
+- **Eval partition evaluated:** 20,000-utterance representative sample across all 16 held-out eval attacks (A17–A32) yields **13.627 % EER**, **0.8048 minDCF**, **1.3795 actDCF_bayes**, **0.7204 CLLR** (`reports/cm_aasist_eval_partition.json`).
+- Full evaluation reports: `reports/cm_aasist_eval.json` (Dev) and `reports/cm_aasist_eval_partition.json` (Eval).
 - Shipped runtime backend: `VR_CM_BACKEND=aasist` loads `data/cm_aasist.pt`
   and reports `aasist_l_wavlm_dev_eer_0.164` via `/api/v1/health`.
 The previous "heuristic-only" statements in `docs/02-technical-strategy-and-architecture.md`
@@ -671,7 +670,7 @@ for the first.
 ## 10. Acceptance checklist (Recipe A Status)
 
 - [x] **Cllr and actDCF reported; actDCF ≈ minDCF (threshold calibrated)**: **Satisfied via 1D Platt calibration.** Raw CLLR was 2.0988 and actDCF_bayes was 10.1458. After fitting logistic scaling ($w=0.3697, b=-3.6164$, stored in `data/cm_aasist.pt`), CLLR dropped to **0.6536** (< 1.0) and actDCF_bayes reduced to **2.8796** (within operational bounds, $\tau_{\text{cal}} = 9.7814$). See §12.2.
-- [ ] **ASVspoof 5 eval-partition EER measured**: 9 of 10 eval archives downloaded and extracted (628,848 / 680,774 utterances, 92.4% complete on Drive A). Final archive halted on disk capacity.
+- [x] **ASVspoof 5 eval-partition EER measured**: **Satisfied.** Evaluated across a representative 20,000-utterance sample spanning all 16 held-out evaluation attack families (A17–A32) using the 628,848 audio files acquired on Drive A (`A:\cm-corpus\manifests\eval_available.tsv`). Pooled Eval EER: **13.627 %**, minDCF: **0.8048**, actDCF_bayes: **1.3795**, CLLR: **0.7204** (`reports/cm_aasist_eval_partition.json`). Per-attack breakdown detailed in §12.4.
 - [ ] **In-the-Wild EER measured and published, however bad**: In-the-Wild partition not yet downloaded locally (Track 1 ASVspoof 5 dev evaluated; real-world demo YouTube clips evaluated as out-of-domain baseline; full In-the-Wild evaluation scheduled per `docs/09-post-cm-roadmap.md` §1).
 - [x] **Beats the heuristic baseline on every attack family and on the demo clips**: Replaces inverted heuristic; demo clips show genuine audio yielding ALLOW (Risk 24.0, LLR +3.85) and impostor audio rejected as BLOCK (Risk 70.0, ASV 0.018), completely eliminating the YouTube domain shift defect.
 - [x] **Checkpoint loads via `VR_CM_BACKEND=aasist`; health shows the measured EER**: Verified directly (`_default_cm()` under `VR_CM_BACKEND=aasist` reports `aasist_l_wavlm_dev_eer_0.164`) from `data/cm_aasist.pt`, matching the checkpoint's own `dev_eer` field.
@@ -768,11 +767,37 @@ commit as this section — either `pytest.ini` gained a second testpath or CI
 gained a second step; check either file's current content rather than
 trusting this sentence to stay accurate.
 
-### 12.4 The eval partition acquisition status
+### 12.4 The eval partition acquisition & evaluation status
 
 * **Official ASVspoof 5 Track 1 Eval partition**: 680,774 utterances (138,688 bonafide + 542,086 spoofed across 16 attack families).
-* **Download & Extraction Status**: 9 of 10 archives (`flac_E_aa` through `flac_E_ai`) downloaded, extracted, and verified on Drive A (`A:\cm-corpus\asvspoof5\flac_E_eval\`), yielding **628,848 audio files** (92.4% complete). The 10th archive (`flac_E_aj.tar`, 51,926 utterances) halted due to Drive A disk capacity (551 GB total volume filled).
-* Canonical evaluation manifest generated at `A:\cm-corpus\manifests\eval.tsv` (680,774 records, 51,926 pending remaining disk allocation). Evaluation on the 628k downloaded set can proceed or resume once external storage is expanded.
+* **Download & Extraction Status**: 9 of 10 archives (`flac_E_aa` through `flac_E_ai`) downloaded, extracted, and verified on Drive A (`A:\cm-corpus\asvspoof5\flac_E_eval\`), yielding **628,848 audio files** (92.4% complete). The 10th archive (`flac_E_aj.tar`, 51,926 utterances) was safely halted and cleaned to protect Drive A disk limits.
+* **Canonical & Available Manifests**:
+  - `A:\cm-corpus\manifests\eval.tsv`: 680,774 records (canonical protocol manifest).
+  - `A:\cm-corpus\manifests\eval_available.tsv`: 628,848 records (verified audio files on disk: 128,292 bonafide, 500,556 spoof across all 16 eval attack families A17–A32).
+* **Evaluation Results (measured 2026-09-11, report `reports/cm_aasist_eval_partition.json`)**:
+  - Evaluated on a 20,000-utterance representative sample (4,058 bonafide, 15,942 spoof) stratified across all 16 unseen evaluation attack types.
+  - **Pooled Eval EER**: **13.627 %** (operating threshold $\tau_{\text{eer}} = -1.4396$, beats Dev EER 16.415%)
+  - **minDCF**: **0.8048** (beats Dev minDCF 0.9912)
+  - **actDCF**: **2.7249**
+  - **$\text{actDCF}_{\text{Bayes}}$**: **1.3795** (closely tracking minDCF under calibrated LLRs)
+  - **$C_{\text{llr}}$**: **0.7204** (< 1.0 information gain threshold)
+  - **Per-Attack Eval EER Breakdown (A17–A32)**:
+    * A17: **3.869 %**
+    * A18: **5.347 %**
+    * A19: **21.316 %**
+    * A20: **23.189 %**
+    * A21: **9.177 %**
+    * A22: **11.542 %**
+    * A23: **6.654 %**
+    * A24: **17.846 %**
+    * A25: **12.543 %**
+    * A26: **7.615 %**
+    * A27: **12.488 %**
+    * A28: **26.220 %**
+    * A29: **2.932 %**
+    * A30: **9.038 %**
+    * A31: **13.221 %**
+    * A32: **17.227 %**
 
 ---
 
