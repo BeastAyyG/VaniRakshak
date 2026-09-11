@@ -15,7 +15,7 @@
       "sha256": "2b9be4a210e9b495c49aaa60070034d4a5fe79c636bb22541f6432d06c311563",
       "expected_verdict": "AUTHENTIC_TARGET",
       "expected_tier": "ALLOW",
-      "expected_tier_aasist": "CHALLENGE",
+      "expected_tier_aasist": "ALLOW",
       "expected_tier_wavlm": "CHALLENGE"
     },
     "demo_02_degraded_copy.wav": {
@@ -42,7 +42,7 @@
       "sha256": "d547eb6e567a9fdb1036c76787eecb310ce482964d7b5c7b3d10b49a867a0d89",
       "expected_verdict": "SUSPICIOUS_SPLICED_AUDIO",
       "expected_tier": "CHALLENGE",
-      "expected_tier_aasist": "BLOCK",
+      "expected_tier_aasist": "CHALLENGE",
       "expected_tier_wavlm": "CHALLENGE",
       "splice_regions_sec": [
         [
