@@ -234,7 +234,9 @@ clone/synthetic detector; reported alongside the acoustic `verdict`, never
 folded into it, so a missing checkpoint degrades to `available: false`
 without breaking the rest of the report. `semantic` is computed once for the
 whole file and fed into every window's fusion pass (unlike the WS path, where
-it necessarily lags one window — see PROTOCOL.md §3.1).
+it necessarily lags one window — see PROTOCOL.md §3.1). Multi-window risk score
+aggregation is configurable via `VR_ANALYZE_POOLING` (`last` by default, `max`,
+or `top_k`).
 
 ### `POST /v1/verify-speaker` (and `/api/v1/verify-speaker`)
 

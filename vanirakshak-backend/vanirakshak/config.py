@@ -56,6 +56,12 @@ class RiskConfig:
     # fused score. Set to <= 0 to disable.
     impostor_block_below: float = _env_float("VR_IMPOSTOR_BLOCK_BELOW", 0.10)
 
+    # Window aggregation mode for one-shot file analysis (/analyze/audio).
+    # Options: 'last' (default, evaluates final rolling window),
+    #          'max' (peak risk / anomaly across all evaluated windows),
+    #          'top_k' (average of top k windows, or top-k max pooling).
+    analyze_pooling: str = _env("VR_ANALYZE_POOLING", "last").lower()
+
 
 @dataclass(frozen=True)
 class FusionConfig:

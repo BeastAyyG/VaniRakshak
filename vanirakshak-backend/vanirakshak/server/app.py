@@ -368,9 +368,24 @@ async def analyze(
         _timed_push(x_analysis[i : i + hop])
         i += hop
 
-    last = sess.history[-1] if sess.history else None
-    if last is None:
+    if not sess.history:
         raise HTTPException(400, "Unable to extract forensic analysis window")
+
+    # Configurable window pooling: 'last' (default), 'max' (peak risk window),
+    # or 'top_k' (highest risk window among top windows).
+    pooling_mode = getattr(settings.risk, "analyze_pooling", "last")
+    if pooling_mode == "max":
+        last = max(sess.history, key=lambda cr: cr.risk)
+    elif pooling_mode.startswith("top_"):
+        try:
+            k = int(pooling_mode.split("_")[1])
+        except (IndexError, ValueError):
+            k = 3
+        sorted_history = sorted(sess.history, key=lambda cr: cr.risk, reverse=True)
+        # Select peak of top-k (or top-k representative)
+        last = sorted_history[0]
+    else:
+        last = sess.history[-1]
 
     windows: List[dict] = []
     hop_sec = sess.buffer.cfg.hop_seconds
