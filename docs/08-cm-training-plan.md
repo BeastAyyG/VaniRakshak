@@ -14,6 +14,11 @@ this status line.
 - **actDCF is 2.4× minDCF — this fails §5.3/§10's calibration gate.** The
   threshold this checkpoint exports is not usable as-is at the EER operating
   point; see §10 item 2 and §12.2 before trusting `p_spoof` as a probability.
+- **The 10.404 % figure is a dev-partition number — the eval partition
+  (680,774 utterances, 8 attack types this checkpoint has never seen) has
+  never been downloaded or scored, 0 %.** See §3.2, §5.0, and §10's eval
+  checklist item. Do not compare this number directly to any
+  eval-partition or leaderboard figure — they are not the same measurement.
 - Full evaluation report: `reports/cm_aasist_eval.json`
 - Shipped runtime backend: `VR_CM_BACKEND=aasist` loads `data/cm_aasist.pt`
   and reports `aasist_l_wavlm_dev_eer_0.104` via `/api/v1/health` — confirmed
@@ -198,16 +203,29 @@ enters `data/`. Use e.g. `~/cm-corpus/asvspoof5/`.
 
 Plan disk before downloading:
 
-| Item | Approx |
-|---|---|
-| ASVspoof 5 audio (all partitions, FLAC) | 100–150 GB — **verify against the actual release** |
-| Cached WavLM features, train+dev, fp16 (§4.1) | ~93 GB |
-| In-the-Wild | ~5 GB |
-| Checkpoints, logs, scores | ~10 GB |
-| **Working total** | **~250–300 GB** |
+| Item | Approx | Downloaded on the Recipe A run? |
+|---|---|---|
+| Train (182,357 utts, 5 archives) | ~30–40 GB | Yes — complete, matches official count |
+| Dev (140,950 utts, 3 archives) | ~25–30 GB | Yes — complete, matches official count |
+| **Eval (680,774 utts, 10 archives)** | **~90–110 GB** | **No — 0%, `flac_E_*` wasn't even in the script until this pass** |
+| Cached WavLM features, train+dev, fp16 (§4.1) | ~93 GB | Yes |
+| In-the-Wild | ~5 GB | No — see §10's checklist |
+| Checkpoints, logs, scores | ~10 GB | — |
+| **Working total (all partitions)** | **~250–300 GB** | **~160–180 GB actually used so far** |
 
 Do **not** cache eval-partition features: at ~680 k utterances that is a
 further ~197 GB for no benefit, since you pass over eval once. Stream it.
+
+> **What actually happened on the Recipe A run (§12.1): eval was never
+> downloaded, 0 of 680,774 utterances.** `scripts/download_and_extract_corpus.py`
+> only had `DEV_ARCHIVES`/`TRAIN_ARCHIVES` — no `flac_E_*` at all — until this
+> section was written. It now has `EVAL_ARCHIVES` (`--partition eval`), but
+> the checkpoint currently in `data/cm_aasist.pt` predates that fix and has
+> never been scored on it. Every "10.404% EER" figure anywhere in this repo
+> is a **dev-set number**. See §5.0 for why that specifically matters — dev
+> shares train's 8 attack types; eval adds 8 more this checkpoint has never
+> seen even in the same family, which is the actual point of holding out an
+> eval set at all.
 
 ### 3.3 Manifest
 
@@ -483,19 +501,35 @@ Conventions follow `docs/04-metrics-and-honest-evaluation.md`.
 Calibrate before you measure, so you don't mistake a normal result for a
 failure or a suspicious one for success.
 
-| Corpus | Strong published result | Source |
+| Corpus + **partition** | Strong published result | Source |
 |---|---|---|
-| ASVspoof 5 eval, **top-5 challenge submissions** | **minDCF < 0.5, EER < 15 %** | [R11] |
-| ASVspoof 5, fine-tuned WavLM-base (single system) | 7.26 % EER (progress set) | [R11] |
-| ASVspoof 5, fine-tuned wav2vec2 (single system) | 11.91 % EER — the gap that motivates §4 | [R11] |
-| ASVspoof 2019 LA, fine-tuned WavLM + AttM | 0.65 % EER | [R10] |
-| ASVspoof 2021 LA / DF, same system | 3.50 % / 3.19 % EER | [R10] |
+| ASVspoof 5 **eval**, top-5 challenge submissions | minDCF < 0.5, EER < 15 % | [R11] |
+| ASVspoof 5 **progress set**, fine-tuned WavLM-base (single system) | 7.26 % EER | [R11] |
+| ASVspoof 5 **progress set**, fine-tuned wav2vec2 (single system) | 11.91 % EER — the gap that motivates §4 | [R11] |
+| ASVspoof 2019 LA **eval**, fine-tuned WavLM + AttM | 0.65 % EER | [R10] |
+| ASVspoof 2021 LA / DF **eval**, same system | 3.50 % / 3.19 % EER | [R10] |
+| ASVspoof 5 **dev** — this repo's Recipe A checkpoint (§12.1) | 10.404 % EER, minDCF 0.8542 | measured, this repo |
 
-Two things follow. **ASVspoof 5 is much harder than 2019 LA** — a single-digit
-EER there is a genuinely good result, and anyone quoting sub-1 % is quoting a
-different, easier corpus. And **if your ASVspoof 5 eval EER comes out below
-~5 %, suspect a leak** (augmented dev, overlapping partitions, a manifest
-built from the wrong protocol file) before celebrating.
+**The partition column is the point, and it's why this repo's own number
+doesn't belong in a direct comparison against the rows above it.** Every
+published row here is an **eval** or **progress** figure — scored on data
+the system never trained or selected against. This repo's 10.404 % is a
+**dev**-partition figure: the same partition used for early stopping and
+threshold selection (§4, §6). Dev is almost always easier than eval for two
+concrete reasons in ASVspoof 5 specifically — dev shares train's 8 attack
+types, while eval adds 8 more the model has never seen even in the same
+family (§3.2), and dev is the set every training decision in this pipeline
+was implicitly tuned against. **Until eval is actually run (§3.2, §10), this
+repo's number and the published rows above are not the same measurement and
+should not be read as directly comparable**, even though they're both
+labeled "ASVspoof 5" and both labeled "EER."
+
+Two things also follow from the table itself. **ASVspoof 5 is much harder
+than 2019 LA** — a single-digit EER there is a genuinely good result, and
+anyone quoting sub-1 % is quoting a different, easier corpus. And **if your
+ASVspoof 5 eval EER comes out below ~5 %, suspect a leak** (augmented dev,
+overlapping partitions, a manifest built from the wrong protocol file)
+before celebrating.
 
 ### 5.1 minDCF — primary
 
@@ -644,6 +678,7 @@ for the first.
 
 - [x] **Eval minDCF + pooled EER + per-attack EER published in the run report**: Measured on 140,950 dev utterances in `reports/cm_aasist_eval.json` (pooled EER: **10.404 %**, minDCF: **0.8542**; per-attack EERs: A09: 7.048%, A10: 7.237%, A11: 11.349%, A12: 6.366%, A13: 23.074%, A14: 0.343%, A15: 14.876%, A16: 1.277%).
 - [ ] **Cllr and actDCF reported; actDCF ≈ minDCF (threshold calibrated)**: **Reported but NOT satisfied.** `reports/cm_aasist_eval.json`: CLLR **1.6815**, actDCF **2.0804** at the EER operating point ($\tau = 8.878$) — 2.4× minDCF (0.8542), not ≈. Raw Bayes actDCF is worse still: **6.5437**. §5.3 says explicitly: "if actDCF and minDCF diverge, the `eer_threshold` export is miscalibrated — fix, don't ship." This was shipped anyway with the box checked; the box is now unchecked and this counts as an **open defect**, not a completed item. See §12.2 for the practical consequence and §11 for what fixes it (Platt/logistic calibration on dev, or one of the escalation paths — most likely the actual fix here, since this checkpoint's issue looks like undertrained calibration rather than a fundamentally bad feature space).
+- [ ] **ASVspoof 5 eval-partition EER measured** (added — not in the original checklist, and should have been §5.1's default reading of "eval partition" from the start): **0 of 680,774 utterances downloaded.** `scripts/download_and_extract_corpus.py` had no `flac_E_*` entries at all until this pass; it now supports `--partition eval` but nothing has run against it yet. All published numbers to date (10.404 % EER, §12.1) are dev-partition, and dev shares train's 8 attack types while eval holds 8 more this checkpoint has never been scored against (§3.2, §5.0). This is a bigger gap than In-the-Wild below — it's the challenge's *own* held-out set, not even an external generalization test yet.
 - [ ] **In-the-Wild EER measured and published, however bad**: In-the-Wild partition not yet downloaded locally (Track 1 ASVspoof 5 dev evaluated; real-world demo YouTube clips evaluated as out-of-domain baseline; full In-the-Wild evaluation scheduled per `docs/09-post-cm-roadmap.md` §1).
 - [x] **Beats the heuristic baseline on every attack family and on the demo clips**: Replaces inverted heuristic; demo clips show genuine outscoring impostor by 23.1 points (risk 66.4 vs 89.5).
 - [x] **Checkpoint loads via `VR_CM_BACKEND=aasist`; health shows the measured EER**: Verified directly (`_default_cm()` under `VR_CM_BACKEND=aasist` reports `aasist_l_wavlm_dev_eer_0.104`) from `data/cm_aasist.pt`, matching the checkpoint's own `dev_eer` field.
@@ -768,6 +803,40 @@ except a human who knows to ask for it by path. It is fixed in the same
 commit as this section — either `pytest.ini` gained a second testpath or CI
 gained a second step; check either file's current content rather than
 trusting this sentence to stay accurate.
+
+### 12.4 The eval partition was never downloaded — found on a machine handoff
+
+Training happened on the §1 desktop (16 GB card). This section was written
+back on the 8 GB laptop this repo otherwise lives on — a real instance of
+§1's own warning to check which box you're on before assuming anything.
+Neither machine currently holds the eval partition; this was found by
+comparing the repo's own download script and manifests against the official
+ASVspoof 5 partition statistics [R5], not by having access to the training
+machine's disk.
+
+What was actually verified, and how:
+- `scripts/download_and_extract_corpus.py` (as it existed before this
+  section) requested only `flac_D_*` (3 archives) and `flac_T_*`
+  (5 archives) — no `flac_E_*` in the file at all.
+- The official ASVspoof 5 Track 1 partition sizes: train 182,357 utterances
+  / 400 speakers / 8 attacks; dev 140,950 / 785 / 8; **eval 680,774
+  (138,688 bonafide + 542,086 spoofed) / 16 attacks** [R5]. This repo's
+  train and dev counts match the official figures exactly — those two
+  partitions are genuinely complete, not a subset. Eval was simply never
+  requested.
+- Fixed in this pass: `EVAL_ARCHIVES` (10 archives, `flac_E_aa` through
+  `flac_E_aj`) and `--partition eval` / `--partition all` added to the
+  script. Their MD5s are **not** filled in — I could not obtain authoritative
+  checksums without downloading ~680k utterances first, and a guessed hash
+  would silently defeat `--verify-md5` rather than help it. Get them from
+  the official Zenodo release before trusting an eval download for a
+  published number; the script now warns loudly (not silently) when it
+  proceeds without one.
+
+This changes what "10.404 % EER" is allowed to mean in any writeup: it is a
+**dev-partition** result, comparable to other dev/progress-set numbers, and
+not yet comparable to the eval-partition figures the ASVspoof 5 leaderboard
+and most published papers actually report (§5.0).
 
 ---
 

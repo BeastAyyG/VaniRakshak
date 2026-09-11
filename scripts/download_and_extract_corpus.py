@@ -1,7 +1,17 @@
 """Automated ASVspoof 5 corpus downloader and extractor.
 
 Manages sequential download, extraction, and disk cleanup of ASVspoof 5
-partitions (train and dev) on Drive A to stay within disk budget constraints.
+partitions (train, dev, and eval) on Drive A to stay within disk budget
+constraints.
+
+Eval was added after the fact (see docs/08-cm-training-plan.md section 12.4):
+the first training pass on this repo trained+selected on train/dev only and
+never touched eval, so every published number so far is a dev-set number,
+not the eval-set number ASVspoof 5 leaderboard comparisons actually use.
+Eval is also where 8 of the 16 official attack types live — train and dev
+only cover 8 between them, and none of those 8 are eval's extra 8. A
+checkpoint that has never been scored on eval has not been scored against
+half the attack space the challenge defines.
 """
 
 from __future__ import annotations
@@ -46,6 +56,22 @@ TRAIN_ARCHIVES = [
     "flac_T_ae.tar",
 ]
 
+# 10 archives, roughly double train+dev combined on disk (eval is 680,774
+# utterances vs train's 182,357 + dev's 140,950) -- budget disk accordingly,
+# see docs/08-cm-training-plan.md section 3.2's table (now updated for this).
+EVAL_ARCHIVES = [
+    "flac_E_aa.tar",
+    "flac_E_ab.tar",
+    "flac_E_ac.tar",
+    "flac_E_ad.tar",
+    "flac_E_ae.tar",
+    "flac_E_af.tar",
+    "flac_E_ag.tar",
+    "flac_E_ah.tar",
+    "flac_E_ai.tar",
+    "flac_E_aj.tar",
+]
+
 ARCHIVE_MD5 = {
     "flac_D_aa.tar": "df0be44957623991028cce59792beb17",
     "flac_D_ab.tar": "1e8cd685d89b64502692f1bcf1a13db3",
@@ -55,6 +81,15 @@ ARCHIVE_MD5 = {
     "flac_T_ac.tar": "70d1ba4ad75a20aef3dae541fbd321e3",
     "flac_T_ad.tar": "c9bb56af2cc410d98338d74babcb95c9",
     "flac_T_ae.tar": "a3969816982f3e52300d6147ad796df7",
+    # flac_E_* intentionally has no entries here yet. I could not obtain
+    # authoritative MD5s for the eval archives from this environment without
+    # downloading ~680k utterances first to compute them myself, and a
+    # fabricated hash would be worse than none -- it would make verify_md5
+    # reject a legitimately good download. Get the real ones from the
+    # official Zenodo release (docs/08 R4/R8) before running --verify-md5
+    # on eval, or accept process_archive's explicit unverified-download
+    # warning below and verify some other way (e.g. checking the extracted
+    # utterance count against the 680,774 official total).
 }
 
 
@@ -132,9 +167,17 @@ def process_archive(
     # Optional checksum
     if verify_checksum:
         expected = ARCHIVE_MD5.get(archive_name)
-        if expected and not verify_md5(tar_path, expected):
-            logger.error("Checksum verification failed for %s", archive_name)
-            return False
+        if expected:
+            if not verify_md5(tar_path, expected):
+                logger.error("Checksum verification failed for %s", archive_name)
+                return False
+        else:
+            logger.warning(
+                "No known MD5 for %s -- proceeding WITHOUT verification. "
+                "Get the official checksum from Zenodo before trusting this "
+                "download for a published number.",
+                archive_name,
+            )
 
     # Extract
     if not extract_tar(tar_path, target_dir):
@@ -158,9 +201,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="ASVspoof 5 corpus automated manager")
     parser.add_argument(
         "--partition",
-        choices=["dev", "train", "all"],
+        choices=["dev", "train", "eval", "all"],
         default="dev",
-        help="Partition to download and extract (default: dev)",
+        help="Partition to download and extract (default: dev). "
+             "'eval' is the official held-out partition -- 680,774 "
+             "utterances, 16 attack types (8 unseen in train/dev). No "
+             "published number in this repo has used it yet.",
     )
     parser.add_argument(
         "--corpus-dir",
@@ -191,6 +237,8 @@ def main() -> int:
         archives_to_run.extend(DEV_ARCHIVES)
     if args.partition in ("train", "all"):
         archives_to_run.extend(TRAIN_ARCHIVES)
+    if args.partition in ("eval", "all"):
+        archives_to_run.extend(EVAL_ARCHIVES)
 
     logger.info("Target directory: %s", args.corpus_dir)
     logger.info("Processing %d archives for partition '%s'...", len(archives_to_run), args.partition)
