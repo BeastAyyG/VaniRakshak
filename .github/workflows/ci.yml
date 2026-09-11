@@ -43,6 +43,42 @@ jobs:
       - name: Run backend tests
         run: pytest vanirakshak-backend/tests/ -v
 
+  tier1-e2e-tests:
+    name: Tier 1 E2E Feature Coverage (tests/e2e/)
+    runs-on: ubuntu-latest
+    # This suite is CPU-torch + transformers, so it needs the heavier
+    # requirements-dev.txt (backend-tests above stays on the lighter
+    # vanirakshak-backend/requirements.txt deliberately, for fast signal).
+    # See docs/08-cm-training-plan.md §12.3: this suite existed and passed
+    # (95/95) for a full commit before anything ran it in CI.
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      PYTHONUNBUFFERED: "1"
+      CUDA_VISIBLE_DEVICES: ""
+      PYTHONPATH: "vanirakshak-backend:."
+      VR_CM_BACKEND: "stub"
+      VR_ASV_BACKEND: "stub"
+      VR_AUDIT_PATH: "/tmp/ci_audit_log.jsonl"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "requirements-dev.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Run tier 1 e2e feature coverage suite
+        run: pytest tests/e2e/ -v
+
   contract-integration:
     name: Contract & Integration Verification
     runs-on: ubuntu-latest

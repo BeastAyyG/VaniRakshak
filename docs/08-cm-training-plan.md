@@ -1,15 +1,28 @@
 # 08 — Trained countermeasure: build runbook (AASIST)
 
-**Status: Recipe A trained, verified, and integrated.** The AASIST-L countermeasure
-head on frozen `microsoft/wavlm-base-plus` representations has been trained on the
-ASVspoof 5 Track 1 Train partition (182,357 utterances) and evaluated across the full
-Dev partition (140,950 utterances).
-- Checkpoint: `data/cm_aasist.pt` (359 KB)
-- Measured Dev EER: **9.517 %** (operating threshold $\tau = 6.1500$)
-- Measured Dev minDCF: **0.7277** (actDCF = 1.9031, CLLR = 1.0911)
+**Status: Recipe A trained, verified, and integrated — calibration failed.**
+The AASIST-L countermeasure head on frozen `microsoft/wavlm-base-plus`
+representations has been trained on the ASVspoof 5 Track 1 Train partition
+(182,357 utterances) and evaluated across the full Dev partition
+(140,950 utterances). These are the numbers in the checkpoint itself
+(`torch.load` → `dev_eer`/`dev_min_dcf`) and in `reports/cm_aasist_eval.json`
+— verified by loading both directly, not copied from an earlier draft of
+this status line.
+- Checkpoint: `data/cm_aasist.pt` (402,315 bytes, 89,551 params)
+- Measured Dev EER: **10.404 %** (operating threshold $\tau = 8.878$)
+- Measured Dev minDCF: **0.8542** (actDCF = **2.0804**, CLLR = 1.6815)
+- **actDCF is 2.4× minDCF — this fails §5.3/§10's calibration gate.** The
+  threshold this checkpoint exports is not usable as-is at the EER operating
+  point; see §10 item 2 and §12.2 before trusting `p_spoof` as a probability.
 - Full evaluation report: `reports/cm_aasist_eval.json`
-- Shipped runtime backend: `VR_CM_BACKEND=aasist` loads `data/cm_aasist.pt` and reports `aasist_l_wavlm_dev_eer_0.095` via `/api/v1/health`.
-The previous "heuristic-only" statements in `docs/02-technical-strategy-and-architecture.md` are retired with these measured numbers attached — see §10 and §12.
+- Shipped runtime backend: `VR_CM_BACKEND=aasist` loads `data/cm_aasist.pt`
+  and reports `aasist_l_wavlm_dev_eer_0.104` via `/api/v1/health` — confirmed
+  by loading the pipeline factory directly.
+The previous "heuristic-only" statements in `docs/02-technical-strategy-and-architecture.md`
+are retired with these measured numbers attached — see §10 and §12. This file
+previously carried an earlier, uncorrected set of numbers (9.517 % / 0.7277)
+in this status block and in §10's checklist; both are corrected below. §12.1
+already had the right numbers — the drift was isolated to this section.
 
 This document is written to be **followed without asking anyone**. It states
 the target hardware, the exact VRAM arithmetic, the failure modes in the
@@ -629,13 +642,13 @@ for the first.
 
 ## 10. Acceptance checklist (Recipe A Status)
 
-- [x] **Eval minDCF + pooled EER + per-attack EER published in the run report**: Measured on 140,950 dev utterances in `reports/cm_aasist_eval.json` (pooled EER: 9.517 %, minDCF: 0.7277; per-attack EERs: A09: 7.090%, A10: 7.157%, A11: 13.311%, A12: 7.122%, A13: 17.215%, A14: 0.197%, A15: 13.146%, A16: 0.811%).
-- [x] **Cllr and actDCF reported; actDCF ≈ minDCF (threshold calibrated)**: Reported in `reports/cm_aasist_eval.json` (CLLR: 1.0911, actDCF: 1.9031 at EER operating point $\tau = 6.1500$; raw Bayes actDCF: 5.8687).
+- [x] **Eval minDCF + pooled EER + per-attack EER published in the run report**: Measured on 140,950 dev utterances in `reports/cm_aasist_eval.json` (pooled EER: **10.404 %**, minDCF: **0.8542**; per-attack EERs: A09: 7.048%, A10: 7.237%, A11: 11.349%, A12: 6.366%, A13: 23.074%, A14: 0.343%, A15: 14.876%, A16: 1.277%).
+- [ ] **Cllr and actDCF reported; actDCF ≈ minDCF (threshold calibrated)**: **Reported but NOT satisfied.** `reports/cm_aasist_eval.json`: CLLR **1.6815**, actDCF **2.0804** at the EER operating point ($\tau = 8.878$) — 2.4× minDCF (0.8542), not ≈. Raw Bayes actDCF is worse still: **6.5437**. §5.3 says explicitly: "if actDCF and minDCF diverge, the `eer_threshold` export is miscalibrated — fix, don't ship." This was shipped anyway with the box checked; the box is now unchecked and this counts as an **open defect**, not a completed item. See §12.2 for the practical consequence and §11 for what fixes it (Platt/logistic calibration on dev, or one of the escalation paths — most likely the actual fix here, since this checkpoint's issue looks like undertrained calibration rather than a fundamentally bad feature space).
 - [ ] **In-the-Wild EER measured and published, however bad**: In-the-Wild partition not yet downloaded locally (Track 1 ASVspoof 5 dev evaluated; real-world demo YouTube clips evaluated as out-of-domain baseline; full In-the-Wild evaluation scheduled per `docs/09-post-cm-roadmap.md` §1).
 - [x] **Beats the heuristic baseline on every attack family and on the demo clips**: Replaces inverted heuristic; demo clips show genuine outscoring impostor by 23.1 points (risk 66.4 vs 89.5).
-- [x] **Checkpoint loads via `VR_CM_BACKEND=aasist`; health shows the measured EER**: Verified via `/api/v1/health` reporting `aasist_l_wavlm_dev_eer_0.095` from `data/cm_aasist.pt`.
-- [x] **Fusion recalibrated; `pytest` + `integration_check` + `check_docs` green**: 30/30 unit tests pass; `check_docs.py` has 0 hard failures; `integration_check.py` 18/18 checks pass.
-- [x] **Docs updated to the measured numbers; "heuristic-only" claims retired**: Retired in `docs/02-technical-strategy-and-architecture.md`, `docs/RUNBOOK.md`, and this file.
+- [x] **Checkpoint loads via `VR_CM_BACKEND=aasist`; health shows the measured EER**: Verified directly (`_default_cm()` under `VR_CM_BACKEND=aasist` reports `aasist_l_wavlm_dev_eer_0.104`) from `data/cm_aasist.pt`, matching the checkpoint's own `dev_eer` field.
+- [x] **Fusion recalibrated; `pytest` + `integration_check` + `check_docs` green**: 30/30 unit tests + 95/95 `tests/e2e/` pass; `check_docs.py` 0 hard failures; `integration_check.py` 18/18 checks pass — all re-run directly, not taken from an earlier report. **Gap found while verifying:** `tests/e2e/test_tier1_feature_coverage.py` is not in any `pytest.ini` `testpaths` and is not invoked by `.github/workflows/ci.yml` — it passes, but nothing currently gates on it. See §12.3.
+- [x] **Docs updated to the measured numbers; "heuristic-only" claims retired**: `docs/02-technical-strategy-and-architecture.md` and `docs/RUNBOOK.md` already carried the correct authoritative numbers; this file's status block and this checklist did not and are corrected as of this pass.
 - [x] **Run log retained: git hashes, seed, LR schedule, loss curves, per-epoch dev minDCF**: Retained in `reports/cm_aasist_eval.json` and training run outputs.
 
 ## 11. If training fails
@@ -703,6 +716,58 @@ The first real countermeasure checkpoint has been trained, evaluated, and integr
   * Because Recipe A was trained purely on studio-clean ASVspoof 5 data without telephony/codec augmentation, lossy compression on YouTube audio (`data/demo/demo_01_genuine.wav`) induces an acoustic domain shift, yielding negative raw CM LLRs (-10.11) and placing genuine audio in the `CHALLENGE` tier (risk 66.4) rather than `ALLOW`.
   * The Bayesian tandem fusion safely preserves discrimination: target verification strongly anchors genuine Modi speech (ASV 0.784 vs 0.011), preventing accidental impostor approval while challenging compressed audio.
   * Robust in-the-wild generalization across lossy telephony codecs remains the explicit objective for Recipe C (fine-tuning front-end with codec augmentation) per `docs/09-post-cm-roadmap.md`.
+
+  **This is a deviation from this file's own instructions, worth stating
+  plainly.** §4's Augmentation section says "both recipes" should use
+  `augment.py`'s codec/noise/bandpass augmentation on the train split. This
+  run skipped it. That is a real candidate root cause for two things at
+  once — the domain-shift failure above *and* the actDCF/minDCF calibration
+  gap (§12.2): a model never shown codec-compressed audio during training
+  has a logit distribution shaped for clean speech, and both symptoms are
+  consistent with feeding it audio that distribution wasn't built for. Not
+  proven — a controlled rerun with and without augmentation would confirm
+  it — but it is the first thing to try before reaching for a bigger model.
+
+### 12.2 What the calibration failure means in practice
+
+actDCF (2.0804) at 2.4× minDCF (0.8542) means: **the threshold this
+checkpoint exports (`eer_threshold` = 8.878) is not the threshold you'd get
+by actually calibrating on the operating cost, it's just where genuine and
+spoof error rates cross on the dev set.** Concretely:
+
+- `score()`'s raw genuine-logit output and the `p_spoof` fusion computes from
+  it (`risk/fusion.py::calibrate`) are **not well-calibrated probabilities**
+  for this checkpoint specifically. Treat `metrics.cm_score` as a ranking
+  signal (it still separates the per-attack EERs correctly, per the table
+  above) rather than as "this is the probability of spoofing."
+- The fusion weights (`VR_FUSION_W_CM`, `VR_FUSION_BIAS`) were **not**
+  re-derived against this checkpoint's actual score distribution — §7 step 3
+  (`scripts/fit_fusion_weights.py`) is listed in §10 as done for the
+  mechanical parts (pytest/integration_check/check_docs green) but the
+  calibration-specific recalibration it names has not actually closed the
+  actDCF gap, because that gap is a property of the CM checkpoint's raw
+  scores, not of the fusion weights layered on top of them.
+- **Fix path, in order of how likely each is to actually work:** (1) rerun
+  training with the codec augmentation §4 specifies (§12.1's hypothesis
+  above); (2) fit a Platt/logistic calibration layer on the dev-set raw
+  scores and re-export `eer_threshold` from the calibrated output, which is
+  a training-time change, not a retrain; (3) escalate per §11 if neither
+  closes the gap.
+- Until one of those lands, **do not cite this checkpoint's `p_spoof` as a
+  probability in any external-facing material.** The EER and per-attack
+  numbers are real and citable; the probability calibration is not.
+
+### 12.3 A real gap found while verifying this section
+
+`tests/e2e/test_tier1_feature_coverage.py` (95 tests) passes — confirmed by
+running it directly — but is not listed in `pytest.ini`'s or
+`vanirakshak-backend/pytest.ini`'s `testpaths`, and
+`.github/workflows/ci.yml`'s "Run backend tests" step invokes
+`pytest vanirakshak-backend/tests/` only. Nothing currently runs this suite
+except a human who knows to ask for it by path. It is fixed in the same
+commit as this section — either `pytest.ini` gained a second testpath or CI
+gained a second step; check either file's current content rather than
+trusting this sentence to stay accurate.
 
 ---
 
