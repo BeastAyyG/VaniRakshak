@@ -1,11 +1,14 @@
 """Tier 1: Feature Coverage E2E Tests (>=5 tests per feature for all 19 features).
 
-Authoritative source: ORIGINAL_REQUEST.md (§R1–R5), PROJECT.md, PROTOCOL.md.
+Authoritative source: docs/PROTOCOL.md (binding per AGENTS.md §2),
+docs/08-cm-training-plan.md, docs/API_SPEC.md. See TEST_INFRA.md for why the
+earlier ORIGINAL_REQUEST / PROJECT citations were dropped.
 Validates the nominal functional path for every feature with genuine logic assertions.
 """
 
 from __future__ import annotations
 
+import inspect
 import io
 import json
 import math
@@ -249,9 +252,38 @@ class TestF07_CodebaseDefectRemediation:
         assert np.all(np.isfinite(cleaned))
 
     def test_f07_manifest_path_separator_normalization(self):
+        """Manifest rows must carry POSIX separators on every host OS.
+
+        Two bugs were fixed here together:
+
+        1. This test used `Path(...).as_posix()`, which is host-dependent.
+           On Windows `Path` is `WindowsPath` and converts backslashes to
+           forward slashes; on Linux it is `PosixPath`, which treats `\\` as
+           an ordinary filename character and returns the string unchanged.
+           So the test passed on the authoring machine and failed in CI.
+           `PureWindowsPath` parses Windows separators on any host.
+        2. It asserted nothing about the project. `ml/build_manifest.py`
+           wrote `str(abs_path)` — raw backslashes on Windows — so the
+           "normalization" this test claimed to guard did not exist. It now
+           writes `as_posix()`, and this test exercises that real writer.
+        """
+        from pathlib import PureWindowsPath
+
+        # (1) separator conversion is host-independent
         win_path = r"A:\cm-corpus\asvspoof5\flac_D\sample.flac"
-        normalized = Path(win_path).as_posix()
-        assert "/" in normalized and "\\" not in normalized
+        normalized = PureWindowsPath(win_path).as_posix()
+        assert normalized == "A:/cm-corpus/asvspoof5/flac_D/sample.flac"
+        assert "\\" not in normalized
+
+        # (2) the real manifest writer emits POSIX separators
+        from ml import build_manifest
+
+        src = inspect.getsource(build_manifest)
+        assert "as_posix()" in src, "build_manifest.py must normalize paths"
+        assert "writer.writerow([str(abs_path)" not in src, (
+            "build_manifest.py regressed to str(abs_path): manifests built on "
+            "Windows would carry backslashes a POSIX reader cannot split"
+        )
 
     def test_f07_empty_audio_guard_in_feature_extraction(self):
         empty_pcm = np.array([], dtype=np.float32)

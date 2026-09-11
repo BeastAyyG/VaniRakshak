@@ -92,7 +92,12 @@ def parse_protocol_and_build_manifest(
             if not abs_path.is_file():
                 missing += 1
 
-            writer.writerow([str(abs_path), key, attack_id])
+            # as_posix(), not str(): a manifest built on the Windows training
+            # box must stay readable if the corpus is later mounted on Linux
+            # (or scored in CI). str() emits backslashes on Windows, which a
+            # POSIX reader treats as literal filename characters rather than
+            # separators. Forward slashes are accepted by Path() on both.
+            writer.writerow([abs_path.as_posix(), key, attack_id])
             count += 1
             if key == "bonafide":
                 n_bonafide += 1
