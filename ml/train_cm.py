@@ -482,6 +482,7 @@ def evaluate_demo_clips(
     dev: torch.device,
     layer_index: int = 5,
     merge_layers: Optional[int] = None,
+    freeze_merge: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     """Evaluate model on the 4 demo benchmark clips via full pipeline and fusion."""
     from vanirakshak.detectors.pipeline import DetectionPipeline
@@ -647,7 +648,8 @@ def train_recipe_a(
         p.requires_grad = False
 
     # 5. Initialize AASIST-L Head
-    model = AASISTLHead(in_dim=768, merge_layers=merge_layers).to(dev)
+    model = AASISTLHead(in_dim=768, merge_layers=merge_layers,
+                        freeze_merge=freeze_merge).to(dev)
     if init_weights and Path(init_weights).is_file():
         logger.info("Loading initial weights from %s...", init_weights)
         init_ckpt = torch.load(str(init_weights), map_location="cpu")
@@ -815,6 +817,7 @@ def train_recipe_a(
                 "dev_min_dcf": float(best_dev_mindcf),
                 "layer_index": int(layer_index),
                 "merge_layers": int(merge_layers) if merge_layers else None,
+                "freeze_merge": bool(freeze_merge),
             }
             torch.save(checkpoint_payload, str(output_checkpoint))
             _validate_checkpoint(checkpoint_payload, output_checkpoint)
@@ -900,6 +903,15 @@ def main() -> None:
             "Overrides --layer-index. Adds only N parameters to the head."
         ),
     )
+    parser.add_argument(
+        "--freeze-merge",
+        action="store_true",
+        help=(
+            "Ablation for docs/08 §12.7: hold the merge weights at their "
+            "uniform init so the merge is a fixed mean. Separates 'attentive "
+            "merging helps' from 'averaging helps'."
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=5e-4)
@@ -929,6 +941,7 @@ def main() -> None:
         n_workers=args.workers,
         layer_index=args.layer_index,
         merge_layers=args.merge_layers,
+        freeze_merge=args.freeze_merge,
         streaming_dev=args.streaming_dev,
     )
 

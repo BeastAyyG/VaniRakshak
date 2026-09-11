@@ -230,6 +230,7 @@ class AASISTLHead(nn.Module):
         pool_ratios: Tuple[float, float, float, float] = (0.4, 0.5, 0.7, 0.5),
         temperatures: Tuple[float, float, float, float] = (2.0, 2.0, 100.0, 100.0),
         merge_layers: Optional[int] = None,
+        freeze_merge: bool = False,
     ) -> None:
         super().__init__()
         self.in_dim = in_dim
@@ -247,6 +248,16 @@ class AASISTLHead(nn.Module):
         # attack families. A learned merge is the obvious response to that.
         self.merge_layers = merge_layers
         self.merge = AttentiveMerging(num_layers=merge_layers) if merge_layers else None
+        if self.merge is not None and freeze_merge:
+            # Ablation (docs/08 §12.7): weights stay at their zero init, so
+            # softmax is exactly uniform and the merge is a fixed mean over
+            # the selected layers. The first AttM run finished at entropy
+            # ratio 99.69% -- near-indistinguishable from uniform -- so this
+            # is the control that separates "attentive merging helps" from
+            # "averaging helps". Match the trained variant and the attention
+            # contributed nothing.
+            self.merge.weights.requires_grad_(False)
+        self.freeze_merge = bool(freeze_merge)
 
         # SSL feature projection into initial node dimension
         self.proj = nn.Linear(in_dim, 64)

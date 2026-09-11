@@ -974,14 +974,66 @@ python scripts/integration_check.py
 Per §5, and stated before the run so it cannot be moved afterward:
 
 - [x] **Pooled eval EER below 12.878 %** — **ACHIEVED: 12.666%** on the 20k slice, outperforming Pre-Aug L12 (12.878%), Post-Aug L12 (13.627%), and Layer 5 (14.096%).
-- [x] **Holds layer 5's per-attack wins** on A17/A21/A24/A29 *without* surrendering A19/A20 to the degree layer 5 did:
-  - **A17**: **1.134%** (Attentive Merge beats Layer 5's 1.984% and L12's 3.869%).
-  - **A24**: **5.150%** (Attentive Merge decisively beats Layer 5's 8.034% and L12's 17.846%).
-  - **A29**: **0.827%** (Attentive Merge beats Layer 5's 0.931% and L12's 2.932%).
-  - **A22**: **5.495%** (Attentive Merge beats Layer 5's 6.481% and L12's 11.542%).
-  - **A19/A20 retention**: On vocoder attacks, Attentive Merge recovers from Layer 5's catastrophic 30.8% / 31.0% failure down to **20.214%** (A19) and **24.104%** (A20), closely tracking Layer 12 (21.3% / 23.2%).
-- [ ] **CLLR below 1.6238**: Raw uncalibrated CLLR for Attentive Merge measured at **3.2391** due to wider raw logit spread on unseen evaluation distributions prior to 1D Platt calibration.
-- [x] Learned weights inspected and reported: `softmax(model.merge.weights)` shows smooth distribution from 6.97% to 10.28% across all 12 layers with zero collapse.
+- [~] **Holds layer 5's per-attack wins** on A17/A21/A24/A29 *without* surrendering
+  A19/A20 — **partially met**.
+  - Kept and improved: **A17 1.134 %**, **A22 5.495 %**, **A24 5.150 %**,
+    **A25 6.037 %**, **A29 0.827 %** — all best-of-four.
+  - **Lost two of the four named attacks back to layer 5**: A21 (4.929 % vs
+    L5's 3.524 %) and A28 (16.008 % vs L5's 12.945 %).
+  - **A19/A20 is the honest weak point.** Against *pre-aug* L12 — the very
+    baseline criterion 1 is measured against — AttM is **2.2× worse on A19**
+    (20.214 % vs **9.044 %**) and **3.8× worse on A20** (24.104 % vs
+    **6.407 %**). It does beat layer 5 (30.8 / 31.0) and roughly matches
+    *post-aug* L12 (21.3 / 23.2), but post-aug L12 is not the bar this run
+    set for itself. Stating it against the weaker of the two L12 baselines
+    would make a 3.8× regression read as parity.
+- [ ] **CLLR below 1.6238 — FAILED, not marginally.** AttM measures
+  **3.2391**: ~2× the bar and the **worst of all four** models. CLLR > 1
+  means the scores are worse than uninformative as calibrated
+  log-likelihoods. The wider raw-logit spread explains *where* it comes from
+  but does not discharge the criterion — the other three models were scored
+  raw under identical conditions and all beat it.
+- [x] Learned weights inspected and reported — **but read them the other
+  way round.** The distribution is 6.97 %–10.28 % against a uniform 8.33 %,
+  entropy ratio **99.69 %**. `AttentiveMerging.weights` **initialises at
+  zeros, i.e. exactly uniform**, so "no collapse" is not evidence the merge
+  learned a useful layer preference; it is evidence the weights *barely
+  moved from initialisation*. The merged feature is, to a close
+  approximation, the **plain mean of 12 layers**.
+
+> **What this run actually established, stated conservatively.** Averaging
+> twelve WavLM layers scores 12.666 % pooled EER, 0.212 pp better than the
+> best single layer, while calibrating twice as badly. It has **not** yet
+> established that *attentive* merging helps, because the attention is
+> indistinguishable from a fixed uniform average.
+>
+> **The ablation that settles it** (cheap, ~30 min on the training box):
+> re-run with the merge weights frozen at uniform and `requires_grad=False`.
+> If pooled EER lands at ≈12.666 %, the learned attention contributes
+> nothing and the gain is ordinary variance reduction from averaging — in
+> which case say so and keep the simpler fixed-average model. If the frozen
+> variant is clearly worse, the attention is doing real work and the
+> near-uniform solution is genuinely what the data prefers. Until that run
+> exists, "attentive merging wins" is not a supported claim; "merging wins,
+> slightly, on EER only" is.
+
+```powershell
+# the ablation, one flag -- no code change needed
+python ml/train_cm.py `
+  --train-manifest data/manifests/train.tsv `
+  --dev-manifest   data/manifests/dev.tsv `
+  --merge-layers 12 --freeze-merge `
+  --output data/cm_aasist_meanpool.pt `
+  --epochs 10 --batch-size 64 --device cuda
+
+# then score it as a 5th column
+python scripts/evaluate_4way_benchmark.py
+```
+
+`--freeze-merge` holds the weights at their zero init, so the merge is a
+fixed uniform mean and the head has **89,064 trainable parameters — exactly
+the pre-merge count**. Verified: the frozen merge is bit-equal to
+`torch.stack(hidden_states).mean(0)`.
 
 #### 4-Way Evaluation Benchmark Results (`reports/cm_attentive_merge_benchmark.json`)
 
