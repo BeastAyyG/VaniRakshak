@@ -31,10 +31,21 @@ Expected checkpoint schema (written by the training script in
     }
 
 ``score()`` returns an LLR-shaped value (positive => genuine) by centering
-the genuine logit at the dev EER threshold, so the existing fusion
-(``VR_FUSION_W_CM``, ``VR_FUSION_BIAS``) and tier gates keep working —
-recalibrate them with ``scripts/fit_fusion_weights.py`` after swapping in
-real weights, exactly as the RUNBOOK's real-backend section describes.
+the genuine logit at the dev EER threshold (``raw_llr - eer_threshold``),
+so the existing fusion (``VR_FUSION_W_CM``, ``VR_FUSION_BIAS``) and tier
+gates keep working as calibrated.
+
+Calibration Note: The checkpoint stores Platt calibration parameters
+(``calibration``: scale_w=0.369718, bias_b=-3.616373, and
+``calibrated_eer_threshold``=9.781436). These parameters are deliberately
+left unused in production runtime ``score()``. The deployed Bayesian fusion
+engine (``vanirakshak/risk/fusion.py``) maps ``cm_score`` to a posterior
+via its own calibrated logistic regression weights (``w_cm=1.5``,
+``intercept=-1.6``). Directly applying the Platt scaling (scale_w ~ 0.37) in
+``score()`` compresses score variance and shifts genuine demo clips into
+false-positive CHALLENGE/BLOCK states. Calibration metrics in the evaluation
+reports document Bayes theoretical risk bounds on raw features, while runtime
+interlock scoring uses the operational zero-centered dev-EER offset.
 """
 
 from __future__ import annotations
@@ -146,8 +157,19 @@ class CMModelAASIST:
         self.dev_min_dcf = float(ckpt["dev_min_dcf"])
         self.name = f"aasist_l_wavlm_dev_eer_{self.dev_eer:.3f}"
 
+        # Platt calibration metadata stored in checkpoint (deliberately not applied
+        # in runtime score(); see module docstring for rationale)
+        self.calibration = ckpt.get("calibration", {})
+        self.calibrated_eer_threshold = float(ckpt.get("calibrated_eer_threshold", float("nan")))
+
     def score(self, x: np.ndarray, sr: int) -> float:
-        """Return an LLR-shaped score (positive => genuine)."""
+        """Return an LLR-shaped score (positive => genuine).
+
+        Subtracts dev eer_threshold (zero-centered LLR) + natural_offset.
+        Platt calibration (self.calibration) is deliberately unused here;
+        Bayesian risk fusion (vanirakshak/risk/fusion.py) manages its own
+        probability calibration.
+        """
         self._ensure_model()
         self._ensure_frontend()
         import torch

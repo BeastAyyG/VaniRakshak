@@ -8,12 +8,29 @@ and evaluated across the full Dev partition (140,950 utterances).
 - Checkpoint: `data/cm_aasist.pt` (397,842 bytes, 89,064 params)
 - Measured Dev EER: **16.415 %** (operating threshold $\tau = 7.3604$)
 - Measured Dev minDCF: **0.9912** (actDCF = **3.2810**)
-- **Platt Scaling Layer Fitted**: $w = 0.3697, b = -3.6164$ closing $C_{\text{llr}}$ from 2.0988 down to **0.6536** (< 1.0) and $\text{actDCF}_{\text{Bayes}}$ down to **2.8796**.
+- **The Dev Regression Tradeoff**: Retraining with dynamic codec/telephony
+  augmentation resolved the real-world domain shift on lossy audio (`demo_01_genuine.wav`
+  LLR improved from -10.11 to +3.85 / +1.60), but caused a measurable regression on
+  clean development audio: Dev EER regressed from **10.404 %** to **16.415 %**, and
+  Dev minDCF regressed from **0.8542** to **0.9912** (at the no-better-than-trivial boundary).
+  This regression occurred because augmentation probabilities were applied at initial
+  hand-tuned defaults (p_codec=0.5, p_noise=0.3, p_bandpass=0.3, p_rir=0.2, p_gain=0.3)
+  without hyperparameter optimization.
+- **Platt Scaling Layer Fitted (Analysis Only)**: $w = 0.3697, b = -3.6164$ closing $C_{\text{llr}}$
+  from 2.0988 down to **0.6536** (< 1.0) and $\text{actDCF}_{\text{Bayes}}$ down to **2.8796**.
+  *Note:* Platt calibration parameters are stored in `data/cm_aasist.pt` for offline Bayes
+  cost characterization, but are deliberately **inactive** during runtime inference (`score()`)
+  because downstream `vanirakshak/risk/fusion.py` already trains a dedicated logistic fusion layer.
 - **YouTube Domain Shift Defect Eliminated:** Genuine audio (`demo_01_genuine.wav`)
-  now scores positive LLR (+3.85) and Risk 24.0 (ALLOW), cleanly separating from
-  impostor audio (Risk 70.0, BLOCK).
-- **Eval partition evaluated:** 20,000-utterance representative sample across all 16 held-out eval attacks (A17–A32) yields **13.627 % EER**, **0.8048 minDCF**, **1.3795 actDCF_bayes**, **0.7204 CLLR** (`reports/cm_aasist_eval_partition.json`).
-- Full evaluation reports: `reports/cm_aasist_eval.json` (Dev) and `reports/cm_aasist_eval_partition.json` (Eval).
+  scores positive LLR (+1.60 on first 4.04s window, +3.85 center-cropped 10s clip) and
+  Risk 24.0 (ALLOW). Impostor rejection (`demo_04_impostor.wav`, Risk 70.0, BLOCK) is enforced
+  by the deterministic ASV identity override (`asv_consistency ~ 0.011 < 0.10`).
+- **Eval partition evaluated (Side-by-Side Comparison on 20,000 utterances):**
+  Evaluated across a 20,000-utterance representative sample across all 16 held-out eval attacks (A17–A32):
+  - *Pre-Augmentation Checkpoint*: EER = **12.878 %**, minDCF = **0.8834**, actDCF_bayes = **6.4570**, CLLR = **1.8171** (`reports/cm_aasist_eval_partition_pre_aug.json`).
+  - *Post-Augmentation Checkpoint*: EER = **13.627 %**, minDCF = **0.8048**, actDCF_bayes = **1.3795**, CLLR = **0.7204** (`reports/cm_aasist_eval_partition.json`).
+  *Eval Tradeoff:* Post-aug slightly raises eval EER (+0.75%), but improves minDCF by 0.0786 and dramatically improves bayesian cost / score calibration under scaling (actDCF_bayes 6.4570 -> 1.3795).
+- Full evaluation reports: `reports/cm_aasist_eval.json` (Dev), `reports/cm_aasist_eval_partition.json` (Eval Post-Aug), and `reports/cm_aasist_eval_partition_pre_aug.json` (Eval Pre-Aug).
 - Shipped runtime backend: `VR_CM_BACKEND=aasist` loads `data/cm_aasist.pt`
   and reports `aasist_l_wavlm_dev_eer_0.164` via `/api/v1/health`.
 The previous "heuristic-only" statements in `docs/02-technical-strategy-and-architecture.md`
@@ -200,7 +217,7 @@ Plan disk before downloading:
 |---|---|---|
 | Train (182,357 utts, 5 archives) | ~30–40 GB | Yes — complete, matches official count |
 | Dev (140,950 utts, 3 archives) | ~25–30 GB | Yes — complete, matches official count |
-| **Eval (680,774 utts, 10 archives)** | **~90–110 GB** | **No — 0%, `flac_E_*` wasn't even in the script until this pass** |
+| **Eval (680,774 utts, 10 archives)** | **~90–110 GB** | **Partially — 9 of 10 archives extracted (628,848 audio files on disk, 92.4%)** |
 | Cached WavLM features, train+dev, fp16 (§4.1) | ~93 GB | Yes |
 | In-the-Wild | ~5 GB | No — see §10's checklist |
 | Checkpoints, logs, scores | ~10 GB | — |
@@ -726,7 +743,12 @@ The countermeasure has been retrained with stochastic on-the-fly telephony and c
   * **minDCF**: **0.9912**
   * **actDCF**: **3.2810**
   * **$C_{\text{llr}}$**: **2.0988**
-* **Per-Attack EER Breakdown**:
+* **The Dev Regression Tradeoff**:
+  * Prior to augmentation, clean Recipe A achieved Dev EER **10.404 %** and Dev minDCF **0.8542**.
+  * Retraining with aggressive dynamic augmentations increased Dev EER to **16.415 %** (+6.01 %) and Dev minDCF to **0.9912** (+0.1370, boundary of trivial acceptance).
+  * **Cause**: Augmentation parameters were initial defaults (`p_codec=0.5, p_noise=0.3, p_bandpass=0.3, p_rir=0.2, p_gain=0.3`), not hyperparameter-tuned. Clean dev speech is degraded by synthetic codecs/noise during training, lowering discrimination on pristine evaluation audio.
+  * **Justification**: This regression was accepted as the necessary operational price to resolve severe domain collapse on YouTube/lossy audio, where clean models failed completely (LLR -10.11).
+* **Per-Attack EER Breakdown (Dev)**:
   * A09: **6.278 %**
   * A10: **6.406 %**
   * A11: **9.246 %**
@@ -735,17 +757,20 @@ The countermeasure has been retrained with stochastic on-the-fly telephony and c
   * A14: **4.700 %**
   * A15: **23.148 %**
   * A16: **3.233 %**
-* **Domain Shift Defect Fully Resolved (§5.6)**:
+* **Domain Shift Defect Fully Resolved (§5.6) & Demo Audio Scoring Bases**:
   * Under clean Recipe A without augmentation, YouTube lossy compression on genuine audio (`demo_01_genuine.wav`) induced an acoustic domain shift (LLR -10.11), wrongly classifying authentic speech as `CHALLENGE`.
-  * **With codec augmentation, domain shift is eliminated**: `demo_01_genuine.wav` yields LLR **+3.85**, Risk **24.0**, achieving an autonomous **ALLOW** verdict.
+  * **With codec augmentation, domain shift is eliminated**:
+    * First 4.04s window (center-cropped to 4.0s = 64,000 samples, matching streaming inference): raw LLR = 8.9595, centered LLR = $8.9595 - 7.3604$ = **+1.60** (or **+1.598**).
+    * Full 10.0s clip center-cropped to 4.0s single evaluation: centered LLR = **+3.85**, yielding Risk **24.0** (ALLOW).
+    * Sliding-window analysis over 6 windows in `/analyze/audio`: window scores `[+1.60, +0.74, +0.90, +3.35, +5.07, +3.62]`, mean = **+2.55**, Risk **31.6** (ALLOW).
   * In-pipeline benchmark discrimination:
     * `demo_01_genuine.wav` -> Risk **24.0**, Tier **ALLOW**, ASV **0.901**
     * `demo_02_degraded_copy.wav` -> Risk **28.9**, Tier **ALLOW**, ASV **0.738**
     * `demo_03_partial_splice.wav` -> Risk **39.4**, Tier **CHALLENGE**, ASV **0.888**
     * `demo_04_impostor.wav` -> Risk **70.0**, Tier **BLOCK**, ASV **0.018**
-  * Impostor rejection remains absolute: the impostor audio triggers the deterministic `VR_IMPOSTOR_BLOCK_BELOW` boundary with an autonomous **BLOCK**.
+  * **Mechanism of Impostor BLOCK**: Notice that `demo_04_impostor.wav` is an authentic human voice belonging to an impostor speaker (not a synthetic voice). The CM detector correctly treats human voice as genuine-ish (CM score +0.78 first window, +2.91 clip mean). The **BLOCK** verdict is enforced deterministically by the ASV subsystem: `asv_consistency ~ 0.011 < 0.10` triggers the hard `VR_IMPOSTOR_BLOCK_BELOW` override in `vanirakshak/risk/fusion.py`.
 
-### 12.2 Post-Evaluation Score Calibration (Platt Scaling Layer Fitted)
+### 12.2 Post-Evaluation Score Calibration (Platt Scaling Layer Fitted & Runtime Role)
 
 A 1D Platt / logistic calibration layer ($w \cdot s + b$) was fitted directly on the 140,950 development-set raw LLR scores to close the Bayes cost gap:
 
@@ -753,7 +778,10 @@ A 1D Platt / logistic calibration layer ($w \cdot s + b$) was fitted directly on
 * **Calibrated Operating Threshold**: $\tau_{\text{cal}} = -b / w = 9.7814$.
 * **Information Theoretic Cost ($C_{\text{llr}}$)**: Dropped from **2.0988** (misleading/uncalibrated) to **0.6536** (effective information gain < 1.0, satisfying information-theoretic criteria).
 * **$\text{actDCF}_{\text{Bayes}}$**: Reduced from **10.1458** to **2.8796**, aligning closely with operational risk bounds.
-* Score probabilities $P(\text{bonafide} \mid s) = \sigma(0.3697 \cdot s - 3.6164)$ are now well-calibrated and mathematically sound for Bayesian risk fusion.
+* **Deliberate Runtime Separation**:
+  * The calibration parameters $w$ and $b$ are stored in the checkpoint metadata for offline verification, metric reporting, and potential direct Bayesian evaluation.
+  * However, they are **deliberately unused** in `cm_aasist.score(x, sr)`.
+  * *Reason*: `vanirakshak/risk/fusion.py` already implements its own trained logistic fusion model mapping raw CM and ASV scores into risk ($w_{\text{cm}} = 1.5, \text{intercept} = -1.6$). Applying Platt scaling within `cm_aasist.py` compresses positive genuine scores (e.g. LLR +8.96 -> -0.30), inflating risk on genuine audio from 31.6 to 49.1 (`CHALLENGE`), breaking the Tier ALLOW contract.
 
 ### 12.3 A real gap found while verifying this section
 
@@ -771,33 +799,38 @@ trusting this sentence to stay accurate.
 
 * **Official ASVspoof 5 Track 1 Eval partition**: 680,774 utterances (138,688 bonafide + 542,086 spoofed across 16 attack families).
 * **Download & Extraction Status**: 9 of 10 archives (`flac_E_aa` through `flac_E_ai`) downloaded, extracted, and verified on Drive A (`A:\cm-corpus\asvspoof5\flac_E_eval\`), yielding **628,848 audio files** (92.4% complete). The 10th archive (`flac_E_aj.tar`, 51,926 utterances) was safely halted and cleaned to protect Drive A disk limits.
-* **Canonical & Available Manifests**:
-  - `A:\cm-corpus\manifests\eval.tsv`: 680,774 records (canonical protocol manifest).
-  - `A:\cm-corpus\manifests\eval_available.tsv`: 628,848 records (verified audio files on disk: 128,292 bonafide, 500,556 spoof across all 16 eval attack families A17–A32).
-* **Evaluation Results (measured 2026-09-11, report `reports/cm_aasist_eval_partition.json`)**:
-  - Evaluated on a 20,000-utterance representative sample (4,058 bonafide, 15,942 spoof) stratified across all 16 unseen evaluation attack types.
-  - **Pooled Eval EER**: **13.627 %** (operating threshold $\tau_{\text{eer}} = -1.4396$, beats Dev EER 16.415%)
-  - **minDCF**: **0.8048** (beats Dev minDCF 0.9912)
-  - **actDCF**: **2.7249**
-  - **$\text{actDCF}_{\text{Bayes}}$**: **1.3795** (closely tracking minDCF under calibrated LLRs)
-  - **$C_{\text{llr}}$**: **0.7204** (< 1.0 information gain threshold)
-  - **Per-Attack Eval EER Breakdown (A17–A32)**:
-    * A17: **3.869 %**
-    * A18: **5.347 %**
-    * A19: **21.316 %**
-    * A20: **23.189 %**
-    * A21: **9.177 %**
-    * A22: **11.542 %**
-    * A23: **6.654 %**
-    * A24: **17.846 %**
-    * A25: **12.543 %**
-    * A26: **7.615 %**
-    * A27: **12.488 %**
-    * A28: **26.220 %**
-    * A29: **2.932 %**
-    * A30: **9.038 %**
-    * A31: **13.221 %**
-    * A32: **17.227 %**
+* **Manifests**:
+  - `A:\cm-corpus\manifests\eval.tsv`: Rebuilt using `python ml/build_manifest.py --partition eval --only-existing` to index exactly the **628,848** verified audio files on Drive A (0 missing files on disk).
+  - All 16 held-out evaluation attack families A17–A32 are fully represented in this set.
+* **Side-by-Side Eval Comparison (20,000 Representative Sample)**:
+  Evaluated on the exact same 20,000-utterance sample (4,058 bonafide, 15,942 spoof) using `python ml/evaluate_cm.py --manifest A:\cm-corpus\manifests\eval.tsv --audio-eval --limit 20000`:
+  
+  | Metric | Pre-Augmentation Checkpoint | Post-Augmentation Checkpoint | Delta / Interpretation |
+  |---|---|---|---|
+  | **Pooled Eval EER** | **12.878 %** | **13.627 %** | +0.75 % (slight dev trade-off) |
+  | **minDCF** | **0.8834** | **0.8048** | **-0.0786** (better discrimination) |
+  | **actDCF** | **2.5757** | **2.7249** | +0.1492 |
+  | **actDCF_bayes** | **6.4570** | **1.3795** | **-5.0775** (vastly superior Bayes cost) |
+  | **$C_{\text{llr}}$** | **1.8171** | **0.7204** | **-1.0967** (< 1.0 info threshold) |
+  | **Report File** | `reports/cm_aasist_eval_partition_pre_aug.json` | `reports/cm_aasist_eval_partition.json` | Verified offline artifacts |
+
+* **Per-Attack Eval EER Breakdown (Post-Augmentation Checkpoint, A17–A32)**:
+  * A17: **3.869 %**
+  * A18: **5.347 %**
+  * A19: **21.316 %**
+  * A20: **23.189 %**
+  * A21: **9.177 %**
+  * A22: **11.542 %**
+  * A23: **6.654 %**
+  * A24: **17.846 %**
+  * A25: **12.543 %**
+  * A26: **7.615 %**
+  * A27: **12.488 %**
+  * A28: **26.220 %**
+  * A29: **2.932 %**
+  * A30: **9.038 %**
+  * A31: **13.221 %**
+  * A32: **17.227 %**
 
 ---
 

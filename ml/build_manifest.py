@@ -27,6 +27,7 @@ def parse_protocol_and_build_manifest(
     output_tsv: Path,
     audio_ext: str = ".flac",
     limit: Optional[int] = None,
+    only_existing: bool = False,
 ) -> int:
     """Parse ASVspoof protocol file and generate canonical manifest TSV."""
     output_tsv.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +92,8 @@ def parse_protocol_and_build_manifest(
             abs_path = audio_file.resolve()
             if not abs_path.is_file():
                 missing += 1
+                if only_existing:
+                    continue
 
             # as_posix(), not str(): a manifest built on the Windows training
             # box must stay readable if the corpus is later mounted on Linux
@@ -125,6 +128,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True, help="Output manifest TSV path")
     parser.add_argument("--ext", type=str, default=".flac", help="Audio file extension")
     parser.add_argument("--limit", type=int, default=None, help="Optional record limit")
+    parser.add_argument(
+        "--only-existing",
+        action="store_true",
+        help="Only include audio files that currently exist on disk (skips missing archives)",
+    )
     args = parser.parse_args()
 
     parse_protocol_and_build_manifest(
@@ -133,6 +141,7 @@ def main() -> None:
         output_tsv=args.output,
         audio_ext=args.ext,
         limit=args.limit,
+        only_existing=args.only_existing,
     )
 
 
