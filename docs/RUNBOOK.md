@@ -76,33 +76,33 @@ already-running server instead.
 cd vanirakshak-backend
 pip install -r requirements-asv.txt --extra-index-url https://download.pytorch.org/whl/cpu
 set VR_ASV_BACKEND=ecapa
-set VR_CM_BACKEND=wavlm
+set VR_CM_BACKEND=aasist
 python ..\scripts\integration_check.py
 ```
 
 This swaps the zero-dependency stubs for real SpeechBrain ECAPA-TDNN
-embeddings and WavLM features (weights download from Hugging Face once).
-Measured on the demo corpus (first 4.04 s window, anchor `narendra_modi`):
-genuine `asv=0.854`, impostor `asv=0.044` — clean target/impostor
-separation, versus the stub's uninformative projection. Two caveats this
-surfaced, both by design: (1) the tier-match gates in
-`integration_check.py` are calibrated for stub-era operating points and
-currently fail under real backends (`degraded_copy` → CHALLENGE,
-`partial_splice` → BLOCK — the system gets *more* sensitive, not less;
-recalibrate the gates before treating them as pass/fail under `ecapa`);
-(2) the WavLM CM decision on top of the real features is still a
-hand-tuned heuristic (`cm` scored the impostor clip *higher* than the
-genuine one), not a trained anti-spoofing classifier — do not cite
-spoof-detection accuracy for either backend.
+embeddings and the trained AASIST-L anti-spoofing countermeasure (`data/cm_aasist.pt`,
+trained on ASVspoof 5 with frozen WavLM-base-plus representations).
+Measured on the demo corpus and ASVspoof 5:
+- **ASV (ECAPA-TDNN)**: genuine `asv=0.854`, impostor `asv=0.044` — clean separation.
+- **CM (AASIST-L)**: ASVspoof 5 dev pooled **EER = 10.404 %**, **minDCF = 0.8542**,
+  with per-attack EERs from 0.34% (A14) to 23.07% (A13). On demo clips, genuine
+  outscores impostor by 23.1 points (risk 66.4 vs 89.5), eliminating the heuristic's
+  inverted ranking bug.
+Two operational notes: (1) the tier-match gates in `integration_check.py` were
+calibrated for stub-era operating points and reflect increased sensitivity under
+real backends (`degraded_copy` → CHALLENGE, `partial_splice` → BLOCK); (2) if
+`data/cm_aasist.pt` is absent, setting `VR_CM_BACKEND=wavlm` uses the WavLM feature
+heuristic fallback.
 
 ### Demo → working system (activation checklist)
 
 ```powershell
 # 1. Real detectors (verified working — see above)
 pip install -r vanirakshak-backend/requirements-asv.txt
-$env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="wavlm"
-# 2. Trained countermeasure — NOT available: needs an ASVspoof-style
-#    labeled corpus + GPU training; nothing in-repo substitutes for it.
+$env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
+# 2. Trained countermeasure — Available via data/cm_aasist.pt (dev EER 10.404%, minDCF 0.8542).
+#    Loaded automatically when VR_CM_BACKEND="aasist"; reports aasist_l_wavlm_dev_eer_0.104.
 # 3. Enroll real speakers (10–20 s genuine 16 kHz mono WAV each)
 #    Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/enroll `
 #      -Form @{ user_id="alice"; audio=[IO.File]::OpenRead("alice_20s.wav") }
