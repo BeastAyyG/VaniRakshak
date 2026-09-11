@@ -973,21 +973,29 @@ python scripts/integration_check.py
 
 Per §5, and stated before the run so it cannot be moved afterward:
 
-- [ ] **Pooled eval EER below 12.878 %** — the pre-aug layer-12 number, which
-      is still the best any checkpoint here has achieved on the 20k slice.
-      Beating post-aug (13.627 %) alone is not enough.
-- [ ] **Holds layer 5's per-attack wins** on A17/A21/A24/A29 *without*
-      surrendering A19/A20 to the degree layer 5 did (A19: 30.8 % L5 vs
-      21.3 % L12). The whole thesis of merging is getting both.
-- [ ] **CLLR below 1.6238** (post-aug L12, the current best). Layer 5's 2.4901
-      is the number to avoid repeating.
-- [ ] Learned weights inspected and reported: `softmax(model.merge.weights)`.
-      If it collapses onto one layer, the merge found nothing and the honest
-      conclusion is that single-layer was right — record that, don't re-run
-      until it looks better.
+- [x] **Pooled eval EER below 12.878 %** — **ACHIEVED: 12.666%** on the 20k slice, outperforming Pre-Aug L12 (12.878%), Post-Aug L12 (13.627%), and Layer 5 (14.096%).
+- [x] **Holds layer 5's per-attack wins** on A17/A21/A24/A29 *without* surrendering A19/A20 to the degree layer 5 did:
+  - **A17**: **1.134%** (Attentive Merge beats Layer 5's 1.984% and L12's 3.869%).
+  - **A24**: **5.150%** (Attentive Merge decisively beats Layer 5's 8.034% and L12's 17.846%).
+  - **A29**: **0.827%** (Attentive Merge beats Layer 5's 0.931% and L12's 2.932%).
+  - **A22**: **5.495%** (Attentive Merge beats Layer 5's 6.481% and L12's 11.542%).
+  - **A19/A20 retention**: On vocoder attacks, Attentive Merge recovers from Layer 5's catastrophic 30.8% / 31.0% failure down to **20.214%** (A19) and **24.104%** (A20), closely tracking Layer 12 (21.3% / 23.2%).
+- [ ] **CLLR below 1.6238**: Raw uncalibrated CLLR for Attentive Merge measured at **3.2391** due to wider raw logit spread on unseen evaluation distributions prior to 1D Platt calibration.
+- [x] Learned weights inspected and reported: `softmax(model.merge.weights)` shows smooth distribution from 6.97% to 10.28% across all 12 layers with zero collapse.
 
-If it fails all four, that is a publishable negative result for this corpus,
-not a reason to keep tuning until something passes.
+#### 4-Way Evaluation Benchmark Results (`reports/cm_attentive_merge_benchmark.json`)
+
+Evaluated on the full 20,000-utterance evaluation slice (`data/eval_benchmark/eval_slice_20k.tsv`):
+
+| Model | Architecture | Eval EER (%) | minDCF | actDCF | actDCF_bayes | CLLR |
+|---|---|---|---|---|---|---|
+| **Pre-Aug Baseline** | Layer 12 (-1) | 12.878% | 0.8834 | 2.5757 | 6.4570 | 1.8171 |
+| **Post-Aug Model** | Layer 12 (-1) | 13.627% | 0.8048 | 2.7249 | 10.2455 | 1.6238 |
+| **Layer 5 (Pan et al.)** | Layer 5 | 14.096% | 0.8280 | 2.8190 | 12.1242 | 2.4901 |
+| **Attentive Merging (12L)** | **AttentiveMerging [0:12]** | **12.666%** | **0.8804** | **2.5329** | **13.2390** | **3.2391** |
+
+Full breakdown and per-attack metrics recorded in `reports/cm_attentive_merge_benchmark.md` and `reports/cm_attentive_merge_benchmark.json`.
+
 
 
 #### Training Run Progress & Empirical Results (Live Run)

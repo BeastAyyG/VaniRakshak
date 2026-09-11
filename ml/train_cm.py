@@ -482,7 +482,6 @@ def evaluate_demo_clips(
     dev: torch.device,
     layer_index: int = 5,
     merge_layers: Optional[int] = None,
-    merge_layers: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Evaluate model on the 4 demo benchmark clips via full pipeline and fusion."""
     from vanirakshak.detectors.pipeline import DetectionPipeline
@@ -577,6 +576,7 @@ def train_recipe_a(
     max_dev_utts: Optional[int] = None,
     n_workers: int = 24,
     layer_index: int = 5,
+    merge_layers: Optional[int] = None,
     streaming_dev: bool = False,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
