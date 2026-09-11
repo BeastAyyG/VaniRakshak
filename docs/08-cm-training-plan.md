@@ -850,6 +850,30 @@ trusting this sentence to stay accurate.
   * A31: **13.221 %**
   * A32: **17.227 %**
 
+### 12.5 Attack Blindness Diagnosis & Immediate Architectural Optimization Path
+
+#### 1. Attack A13 Diagnosis & The minDCF 0.9912 Root Cause
+In ASVspoof 5 Track 1 Dev, performance is bifurcated:
+- **Resistant attacks**: A16 (3.23%), A14 (4.70%), A09 (6.28%), A10 (6.41%), A11 (9.25%).
+- **Blind attacks**: A12 (21.53%), A15 (23.15%), and **A13 (39.24%)**.
+A13 is an advanced neural vocoder / neural acoustic synthesis attack (HiFi-GAN / BigVGAN / diffusion vocoder with pitch-synchronous harmonic continuity) whose high-frequency phase and spectral tilt closely match natural speech. Because the ASVspoof 5 Track 1 training partition contains only **8 attack types** (A01–A08), the model has never encountered this specific synthesis footprint, causing A13 spoofs to pass into the bonafide logit tail. In the minDCF cost formulation, false-alarm and miss penalties punish unseparated spoof families severely, pinning minDCF near 1.0.
+
+#### 2. WavLM Layer Selection: Why Layer -1 is Suboptimal (Pan et al. R10)
+`ml/extract_cm_features.py` defaulted to `--layer-index -1` (the 12th transformer block of WavLM-base-plus).
+- As established by Pan et al. (Interspeech 2024 [R10]), **the final layer of pre-trained SSL models is optimized for semantic speech content (ASR invariance)**, which suppresses low-level acoustic artifacts.
+- Middle layers (specifically **layer 5 and layer 6**) retain peak spectro-temporal artifact sensitivity. In Pan et al.'s findings, layer 5 features alone reduce countermeasure EER by 2–4 points over layer 12, and an **attentive multi-layer merge** across layers 0–11 delivers state-of-the-art representation.
+- `--layer-index 5` or attentive feature merging provides the highest expected gain-per-hour for retraining the head.
+
+#### 3. Inference-Time Window Pooling in `/analyze`
+In `/analyze/audio`, a 10s audio file produces 6 overlapping sliding windows (4.04s window, 1.0s hop).
+- A spoofed recording (e.g. `demo_03_partial_splice.wav`) may only contain spoof artifacts in a 2–3 second burst. Arithmetic mean across all windows dilutes the localized anomaly.
+- To address this without retraining, `vanirakshak-backend` now supports configurable pooling via `VR_ANALYZE_POOLING`:
+  - `last`: (Default) Returns the terminal window's smoothed risk.
+  - `max`: Captures peak anomaly across windows (e.g. `demo_03_partial_splice` window anomaly hits **0.6739** max vs **0.4435** mean, raising splice risk from 42.6 to **59.3**).
+  - `topk`: Averages the top $k = \lceil N/2 \rceil$ highest windows, preventing transient glitches from dominating while catching localized splices.
+  - `mean`: Arithmetic mean across all sliding windows.
+- Across all pooling modes, genuine audio (`demo_01_genuine.wav`) maintains peak anomaly **0.3466**, remaining safely in the **`ALLOW`** tier.
+
 ---
 
 ## 13. References
