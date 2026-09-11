@@ -90,3 +90,29 @@ def test_validate_checkpoint_rejects_non_dict():
         pass
     else:
         raise AssertionError("expected ValueError for non-dict checkpoint")
+
+
+def test_try_create_with_valid_checkpoint(tmp_path, monkeypatch):
+    try:
+        import torch
+    except ImportError:
+        return  # Torch not installed yet, skip
+
+    from ml.aasist_model import AASISTLHead
+
+    ckpt_file = tmp_path / "test_aasist.pt"
+    head = AASISTLHead(in_dim=768)
+    payload = _valid_schema()
+    payload["state_dict"] = head.state_dict()
+    torch.save(payload, str(ckpt_file))
+
+    monkeypatch.setenv("VR_CM_BACKEND", "aasist")
+    monkeypatch.setenv("VR_CM_AASIST_WEIGHTS", str(ckpt_file))
+
+    cm = CMModelAASIST.try_create()
+    assert cm is not None
+    assert cm.dev_eer == 0.031
+    assert cm.dev_min_dcf == 0.087
+    assert cm.eer_threshold == 0.25
+    assert "aasist_l_wavlm" in cm.name
+

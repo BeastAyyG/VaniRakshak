@@ -172,7 +172,7 @@ class Settings:
 
         real_backend_active = (
             os.environ.get("VR_ASV_BACKEND", "stub").lower() == "ecapa"
-            or os.environ.get("VR_CM_BACKEND", "stub").lower() == "wavlm"
+            or os.environ.get("VR_CM_BACKEND", "stub").lower() in ("wavlm", "aasist")
         )
         if real_backend_active:
             # An explicit VR_FUSION_W_CM / VR_FUSION_W_ASV env var always wins —

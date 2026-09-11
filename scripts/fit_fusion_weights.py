@@ -65,48 +65,123 @@ class LabeledSample:
 def build_dataset(pipe: DetectionPipeline, rng: np.random.Generator, n_cm: int = 80, sr: int = 16000) -> List[LabeledSample]:
     samples: List[LabeledSample] = []
 
-    # --- CM axis: synthetic genuine vs spoofed audio, ASV neutral ---
-    for _ in range(n_cm):
-        clip = synthetic_speech(duration_sec=4.0, sr=sr, rng=rng)
-        w = pipe.analyse(clip, sr, claimed_user=None)
-        samples.append(LabeledSample(
-            cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
-            asv_mismatch=1.0 - w.asv_score,
-            prosody_unn=w.prosody_unnatural,
-            chan_anom=w.channel_anomaly,
-            label=0,
-        ))
-    for _ in range(n_cm):
-        clip = synthetic_spoofed(duration_sec=4.0, sr=sr, rng=rng)
-        w = pipe.analyse(clip, sr, claimed_user=None)
-        samples.append(LabeledSample(
-            cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
-            asv_mismatch=1.0 - w.asv_score,
-            prosody_unn=w.prosody_unnatural,
-            chan_anom=w.channel_anomaly,
-            label=1,
-        ))
+    # --- CM axis: real corpus clips if available and neural CM, else synthetic ---
+    dev_tsv = Path(r"A:\cm-corpus\manifests\dev.tsv")
+    used_corpus = False
+    if dev_tsv.exists() and pipe.cm.name.startswith("aasist"):
+        import csv
+        import soundfile as sf
+        bonafide_paths: List[str] = []
+        spoof_paths: List[str] = []
+        with open(dev_tsv, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f, delimiter="\t"):
+                if row.get("label") == "bonafide" and len(bonafide_paths) < n_cm:
+                    bonafide_paths.append(row["path"])
+                elif row.get("label") != "bonafide" and len(spoof_paths) < n_cm:
+                    spoof_paths.append(row["path"])
+                if len(bonafide_paths) >= n_cm and len(spoof_paths) >= n_cm:
+                    break
+
+        if len(bonafide_paths) > 0 and len(spoof_paths) > 0:
+            used_corpus = True
+            for p in bonafide_paths:
+                x, clip_sr = sf.read(p)
+                w = pipe.analyse(x.astype(np.float32), clip_sr, claimed_user=None)
+                samples.append(LabeledSample(
+                    cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                    asv_mismatch=1.0 - w.asv_score,
+                    prosody_unn=w.prosody_unnatural,
+                    chan_anom=w.channel_anomaly,
+                    label=0,
+                ))
+            for p in spoof_paths:
+                x, clip_sr = sf.read(p)
+                w = pipe.analyse(x.astype(np.float32), clip_sr, claimed_user=None)
+                samples.append(LabeledSample(
+                    cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                    asv_mismatch=1.0 - w.asv_score,
+                    prosody_unn=w.prosody_unnatural,
+                    chan_anom=w.channel_anomaly,
+                    label=1,
+                ))
+
+    if not used_corpus:
+        for _ in range(n_cm):
+            clip = synthetic_speech(duration_sec=4.0, sr=sr, rng=rng)
+            w = pipe.analyse(clip, sr, claimed_user=None)
+            samples.append(LabeledSample(
+                cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                asv_mismatch=1.0 - w.asv_score,
+                prosody_unn=w.prosody_unnatural,
+                chan_anom=w.channel_anomaly,
+                label=0,
+            ))
+        for _ in range(n_cm):
+            clip = synthetic_spoofed(duration_sec=4.0, sr=sr, rng=rng)
+            w = pipe.analyse(clip, sr, claimed_user=None)
+            samples.append(LabeledSample(
+                cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                asv_mismatch=1.0 - w.asv_score,
+                prosody_unn=w.prosody_unnatural,
+                chan_anom=w.channel_anomaly,
+                label=1,
+            ))
 
     # --- ASV axis: real target vs real other-speaker clips ---
     ea = _load_enroll_anchor()
-    for _name, x in ea.load_dir(ea.ANCHOR_DIR):
-        w = pipe.analyse(x.astype(np.float32), ea.TARGET_SR, claimed_user=ea.USER_ID)
-        samples.append(LabeledSample(
-            cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
-            asv_mismatch=1.0 - w.asv_score,
-            prosody_unn=w.prosody_unnatural,
-            chan_anom=w.channel_anomaly,
-            label=0,
-        ))
-    for _name, x in ea.load_dir(ea.OTHER_DIR, limit=20):
-        w = pipe.analyse(x.astype(np.float32), ea.TARGET_SR, claimed_user=ea.USER_ID)
-        samples.append(LabeledSample(
-            cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
-            asv_mismatch=1.0 - w.asv_score,
-            prosody_unn=w.prosody_unnatural,
-            chan_anom=w.channel_anomaly,
-            label=1,
-        ))
+    anchor_clips = list(ea.load_dir(ea.ANCHOR_DIR)) if ea.ANCHOR_DIR.is_dir() else []
+    other_clips = list(ea.load_dir(ea.OTHER_DIR, limit=20)) if ea.OTHER_DIR.is_dir() else []
+
+    if anchor_clips and other_clips:
+        for _name, x in anchor_clips:
+            w = pipe.analyse(x.astype(np.float32), ea.TARGET_SR, claimed_user=ea.USER_ID)
+            samples.append(LabeledSample(
+                cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                asv_mismatch=1.0 - w.asv_score,
+                prosody_unn=w.prosody_unnatural,
+                chan_anom=w.channel_anomaly,
+                label=0,
+            ))
+        for _name, x in other_clips:
+            w = pipe.analyse(x.astype(np.float32), ea.TARGET_SR, claimed_user=ea.USER_ID)
+            samples.append(LabeledSample(
+                cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                asv_mismatch=1.0 - w.asv_score,
+                prosody_unn=w.prosody_unnatural,
+                chan_anom=w.channel_anomaly,
+                label=1,
+            ))
+    else:
+        # Fallback to committed demo audio if raw anchor recordings are absent
+        demo_dir = REPO_ROOT / "data" / "demo"
+        gen_path = demo_dir / "demo_01_genuine.wav"
+        imp_path = demo_dir / "demo_04_impostor.wav"
+        if gen_path.exists() and imp_path.exists():
+            import soundfile as sf
+            x_gen, sr_gen = sf.read(gen_path)
+            x_imp, sr_imp = sf.read(imp_path)
+            chunk_len = 3 * sr_gen
+            hop = int(1.5 * sr_gen)
+            for start in range(0, max(1, len(x_gen) - chunk_len + 1), hop):
+                chunk = x_gen[start : start + chunk_len].astype(np.float32)
+                w = pipe.analyse(chunk, sr_gen, claimed_user=ea.USER_ID)
+                samples.append(LabeledSample(
+                    cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                    asv_mismatch=1.0 - w.asv_score,
+                    prosody_unn=w.prosody_unnatural,
+                    chan_anom=w.channel_anomaly,
+                    label=0,
+                ))
+            for start in range(0, max(1, len(x_imp) - chunk_len + 1), hop):
+                chunk = x_imp[start : start + chunk_len].astype(np.float32)
+                w = pipe.analyse(chunk, sr_imp, claimed_user=ea.USER_ID)
+                samples.append(LabeledSample(
+                    cm_spoof=1.0 - w.features.get("cm_genuine_prob", 0.5),
+                    asv_mismatch=1.0 - w.asv_score,
+                    prosody_unn=w.prosody_unnatural,
+                    chan_anom=w.channel_anomaly,
+                    label=1,
+                ))
 
     return samples
 

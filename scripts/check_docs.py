@@ -106,6 +106,7 @@ PATH_IGNORE_PATTERNS = [
     re.compile(r"^<"),
     re.compile(r"\*"),
     re.compile(r"^\."),  # relative dotfiles/dot-paths read case-by-case, not worth the false-positive rate
+    re.compile(r"^node_modules/"),
 ]
 
 # A path candidate must contain at least one of these to look like a repo

@@ -229,7 +229,7 @@ def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> 
         )
 
     backends = _real_backends_active()
-    real_active = backends["asv"] == "ecapa" or backends["cm"] == "wavlm"
+    real_active = backends["asv"] == "ecapa" or backends["cm"] in ("wavlm", "aasist")
     if not real_active:
         print(f"    (tier-match gate skipped — stub backends active: {backends})")
         return
@@ -240,10 +240,11 @@ def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> 
     gt = json.loads(GROUND_TRUTH_PATH.read_text(encoding="utf-8"))["files"]
 
     print(f"\n  Tier-match gate (real backends active: {backends})")
+    backend_key = f"expected_tier_{backends['cm']}" if backends["cm"] in ("wavlm", "aasist") else None
     for fname, _expected_verdict in DEMOS:
         if fname not in results or fname not in gt:
             continue
-        expected_tier = gt[fname].get("expected_tier")
+        expected_tier = (gt[fname].get(backend_key) if backend_key else None) or gt[fname].get("expected_tier")
         actual_tier = results[fname].get("tier")
         if not expected_tier:
             continue
@@ -251,6 +252,16 @@ def check_discrimination(results: Dict[str, Dict[str, Any]], checks: Checks) -> 
             f"{fname} tier == {expected_tier}",
             actual_tier == expected_tier,
             f"got tier={actual_tier} risk={results[fname].get('overall_risk_score')}",
+        )
+
+    # Core discrimination gate: genuine must outscore impostor (docs/08-cm-training-plan.md §5.6)
+    if "demo_01_genuine.wav" in results and "demo_04_impostor.wav" in results:
+        gen_risk = results["demo_01_genuine.wav"]["overall_risk_score"]
+        imp_risk = results["demo_04_impostor.wav"]["overall_risk_score"]
+        checks.record(
+            "genuine outscores impostor (risk spread)",
+            gen_risk < imp_risk,
+            f"genuine={gen_risk} < impostor={imp_risk} (spread={imp_risk - gen_risk:.1f} pts)",
         )
 
 

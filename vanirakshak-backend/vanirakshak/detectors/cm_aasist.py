@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -80,8 +81,33 @@ class CMModelAASIST:
     eer_threshold: float = 0.0
     dev_eer: float = float("nan")
     dev_min_dcf: float = float("nan")
+    natural_offset: float = field(
+        default_factory=lambda: float(os.environ.get("VR_CM_NATURAL_OFFSET", "0.0"))
+    )
     _model: object = field(default=None, repr=False, compare=False)
     _frontend: object = field(default=None, repr=False, compare=False)
+
+    def _ensure_frontend(self) -> None:
+        if self._frontend is not None:
+            return
+        import torch
+        from transformers import AutoFeatureExtractor, WavLMModel
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        try:
+            feature_extractor = AutoFeatureExtractor.from_pretrained(_FRONTEND, local_files_only=True)
+            wavlm = WavLMModel.from_pretrained(_FRONTEND, local_files_only=True)
+        except Exception:
+            feature_extractor = AutoFeatureExtractor.from_pretrained(_FRONTEND)
+            wavlm = WavLMModel.from_pretrained(_FRONTEND)
+        wavlm.eval()
+        if device == "cuda":
+            wavlm = wavlm.half().to(device)
+        else:
+            wavlm = wavlm.to(device)
+        if self._model is not None:
+            self._model.to(device)
+        self._frontend = (feature_extractor, wavlm, device)
 
     def _ensure_model(self) -> None:
         if self._model is not None:
@@ -98,18 +124,74 @@ class CMModelAASIST:
             )
         ckpt = torch.load(str(ckpt_path), map_location="cpu")
         _validate_checkpoint(ckpt, ckpt_path)
-        # Model construction happens here once the training plan lands the
-        # architecture definition; until then schema validation is the gate.
-        raise RuntimeError(
-            "checkpoint schema OK but the AASIST-L module definition is not "
-            "implemented yet — it ships with the training run, not before it."
-        )
+
+        # Import AASIST-L head architecture
+        try:
+            from ml.aasist_model import AASISTLHead
+        except ImportError:
+            here = Path(__file__).resolve()
+            repo_root = here.parent.parent.parent.parent
+            if str(repo_root) not in sys.path:
+                sys.path.insert(0, str(repo_root))
+            from ml.aasist_model import AASISTLHead
+
+        in_dim = 768 if ckpt.get("frontend") == _FRONTEND else 1024
+        model = AASISTLHead(in_dim=in_dim)
+        model.load_state_dict(ckpt["state_dict"], strict=False)
+        model.eval()
+
+        self._model = model
+        self.eer_threshold = float(ckpt["eer_threshold"])
+        self.dev_eer = float(ckpt["dev_eer"])
+        self.dev_min_dcf = float(ckpt["dev_min_dcf"])
+        self.name = f"aasist_l_wavlm_dev_eer_{self.dev_eer:.3f}"
 
     def score(self, x: np.ndarray, sr: int) -> float:
         """Return an LLR-shaped score (positive => genuine)."""
-        if self._model is None:
-            raise RuntimeError("CMModelAASIST.score() called without loaded weights")
-        raise RuntimeError("unreachable: _model is only set by _ensure_model")  # pragma: no cover
+        self._ensure_model()
+        self._ensure_frontend()
+        import torch
+
+        feature_extractor, wavlm, device = self._frontend
+        audio = np.asarray(x, dtype=np.float32).ravel()
+
+        if sr != _SAMPLE_RATE:
+            import librosa
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=_SAMPLE_RATE)
+
+        target_samples = int(_SAMPLE_RATE * _WINDOW_S)  # 64,000 samples for 4.0s
+        if len(audio) < target_samples:
+            padded = np.zeros(target_samples, dtype=np.float32)
+            padded[: len(audio)] = audio
+            audio = padded
+        elif len(audio) > target_samples:
+            # Centre crop for inference
+            start = (len(audio) - target_samples) // 2
+            audio = audio[start : start + target_samples]
+
+        std = float(np.std(audio))
+        if std > 1e-6:
+            audio = (audio - float(np.mean(audio))) / std
+
+        inputs = feature_extractor(
+            audio,
+            sampling_rate=_SAMPLE_RATE,
+            return_tensors="pt",
+            padding=False,
+        )
+        input_values = inputs.input_values.to(device)
+        if device == "cuda":
+            input_values = input_values.half()
+
+        with torch.inference_mode():
+            outputs = wavlm(input_values, output_hidden_states=True)
+            hidden_state = outputs.hidden_states[-1]  # (1, T, 768)
+            feat = hidden_state.to(torch.float32)
+            _, logits = self._model(feat)
+            # LLR = genuine_logit (index 1) - spoof_logit (index 0) - eer_threshold + natural_offset
+            raw_llr = float((logits[0, 1] - logits[0, 0]).item())
+            llr = raw_llr - self.eer_threshold + self.natural_offset
+            return float(llr)
 
     @classmethod
     def try_create(cls) -> Optional["CMModelAASIST"]:
@@ -122,6 +204,9 @@ class CMModelAASIST:
         except Exception as e:
             logger.warning("VR_CM_BACKEND=aasist requested but unavailable (%s); using stub CM", e)
             return None
+
+
+CMAASISTDetector = CMModelAASIST
 
 
 def _validate_checkpoint(ckpt: object, path: Path) -> None:
