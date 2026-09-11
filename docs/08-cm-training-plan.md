@@ -233,10 +233,13 @@ further ~197 GB for no benefit, since you pass over eval once. Stream it.
 > **What actually happened on the Recipe A run (§12.1): eval was never
 > downloaded, 0 of 680,774 utterances.** `scripts/download_and_extract_corpus.py`
 > only had `DEV_ARCHIVES`/`TRAIN_ARCHIVES` — no `flac_E_*` at all — until this
-> section was written. It now has `EVAL_ARCHIVES` (`--partition eval`), but
-> the checkpoint currently in `data/cm_aasist.pt` predates that fix and has
-> never been scored on it. Every "10.404% EER" figure anywhere in this repo
-> is a **dev-set number**. See §5.0 for why that specifically matters — dev
+> section was written. It now has `EVAL_ARCHIVES` (`--partition eval`), and
+> as of the augmented retrain the eval partition **has** been downloaded
+> (9 of 10 archives, 628,848 of 680,774 utterances) and both checkpoints
+> scored on a committed 20,000-utterance slice
+> (`data/eval_benchmark/eval_slice_20k.tsv`) — see §12.1. Dev-partition EER
+> figures elsewhere in this file remain **dev-set numbers** and are labelled
+> as such. See §5.0 for why that specifically matters — dev
 > shares train's 8 attack types; eval adds 8 more this checkpoint has never
 > seen even in the same family, which is the actual point of holding out an
 > eval set at all.
@@ -522,13 +525,15 @@ failure or a suspicious one for success.
 | ASVspoof 5 **progress set**, fine-tuned wav2vec2 (single system) | 11.91 % EER — the gap that motivates §4 | [R11] |
 | ASVspoof 2019 LA **eval**, fine-tuned WavLM + AttM | 0.65 % EER | [R10] |
 | ASVspoof 2021 LA / DF **eval**, same system | 3.50 % / 3.19 % EER | [R10] |
-| ASVspoof 5 **dev** — this repo's Recipe A checkpoint (§12.1) | 10.404 % EER, minDCF 0.8542 | measured, this repo |
+| ASVspoof 5 **dev** — this repo's pre-augmentation checkpoint | 10.404 % EER, minDCF 0.8542 | measured, this repo |
+| ASVspoof 5 **dev** — this repo's shipped augmented checkpoint (§12.1) | 16.415 % EER, minDCF 0.9912 | measured, this repo |
+| ASVspoof 5 **eval** (20k slice, raw) — pre-aug / shipped | 12.878 % / 13.627 % EER, minDCF 0.8834 / 0.8048 | measured, this repo |
 
 **The partition column is the point, and it's why this repo's own number
 doesn't belong in a direct comparison against the rows above it.** Every
 published row here is an **eval** or **progress** figure — scored on data
-the system never trained or selected against. This repo's 10.404 % is a
-**dev**-partition figure: the same partition used for early stopping and
+the system never trained or selected against. This repo's dev figures are
+**dev**-partition numbers: the same partition used for early stopping and
 threshold selection (§4, §6). Dev is almost always easier than eval for two
 concrete reasons in ASVspoof 5 specifically — dev shares train's 8 attack
 types, while eval adds 8 more the model has never seen even in the same

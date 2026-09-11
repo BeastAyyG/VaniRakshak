@@ -106,8 +106,9 @@ heuristic fallback.
 # 1. Real detectors (verified working — see above)
 pip install -r vanirakshak-backend/requirements-asv.txt
 $env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
-# 2. Trained countermeasure — Available via data/cm_aasist.pt (dev EER 10.404%, minDCF 0.8542).
-#    Loaded automatically when VR_CM_BACKEND="aasist"; reports aasist_l_wavlm_dev_eer_0.104.
+# 2. Trained countermeasure — Available via data/cm_aasist.pt (dev EER 16.415%, minDCF 0.9912;
+#    codec/telephony-augmented retrain — see docs/08 §12.1 for the tradeoff vs the 10.404% pre-aug run).
+#    Loaded automatically when VR_CM_BACKEND="aasist"; reports aasist_l_wavlm_dev_eer_0.164.
 # 3. Enroll real speakers (10–20 s genuine 16 kHz mono WAV each)
 #    Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/enroll `
 #      -Form @{ user_id="alice"; audio=[IO.File]::OpenRead("alice_20s.wav") }
