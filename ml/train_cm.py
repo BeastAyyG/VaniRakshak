@@ -25,7 +25,7 @@ import queue
 import sys
 import threading
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import soundfile as sf
@@ -305,6 +305,152 @@ class FastPrefetchLoader:
 
 
 # ---------------------------------------------------------------------------
+# Streaming Audio Dataset & Loader for Zero-Disk Dev Validation
+# ---------------------------------------------------------------------------
+
+def is_audio_manifest(manifest_tsv: Path) -> bool:
+    """Check if the first data row in manifest_tsv points to an audio file (.flac/.wav)."""
+    p = Path(manifest_tsv)
+    if not p.is_file():
+        return False
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            reader = csv.reader(f, delimiter="\t")
+            next(reader, None)  # skip header
+            for row in reader:
+                if row:
+                    target = row[0].strip().lower()
+                    if target.endswith(".flac") or target.endswith(".wav"):
+                        return True
+                    if target.endswith(".npy"):
+                        return False
+    except Exception:
+        return False
+    return False
+
+
+class AudioDevDataset(Dataset):
+    """Raw audio dataset for dev validation (no augmentation, center-crop)."""
+
+    def __init__(
+        self,
+        manifest_tsv: Path,
+        corpus_audio_dir: Optional[Path] = None,
+        limit: Optional[int] = None,
+    ) -> None:
+        self.samples: List[Tuple[str, int, str]] = []
+        n_bonafide = 0
+        n_spoof = 0
+
+        manifest_tsv = Path(manifest_tsv)
+        if not manifest_tsv.is_file():
+            raise FileNotFoundError(f"Dev manifest TSV not found at {manifest_tsv}")
+
+        default_audio_dir = corpus_audio_dir or Path(r"A:\cm-corpus\asvspoof5\flac_D")
+
+        with open(manifest_tsv, "r", encoding="utf-8") as f:
+            reader = csv.reader(f, delimiter="\t")
+            header = next(reader, None)
+            for row in reader:
+                if len(row) >= 2:
+                    raw_path = row[0].strip()
+                    label_str = row[1].strip().lower()
+                    attack_id = row[2].strip() if len(row) > 2 else "-"
+                    label = 1 if label_str in ("bonafide", "bona-fide", "genuine", "1") else 0
+
+                    p = Path(raw_path)
+                    if not p.is_file() and default_audio_dir.is_dir():
+                        candidate = default_audio_dir / p.name
+                        if candidate.is_file():
+                            raw_path = str(candidate)
+
+                    if label == 1:
+                        n_bonafide += 1
+                    else:
+                        n_spoof += 1
+                    self.samples.append((raw_path, label, attack_id))
+                    if limit and len(self.samples) >= limit:
+                        break
+
+        self.n_bonafide = n_bonafide
+        self.n_spoof = n_spoof
+        logger.info(
+            "Loaded %d dev audio records from %s (bonafide=%d, spoof=%d)",
+            len(self.samples),
+            manifest_tsv.name,
+            n_bonafide,
+            n_spoof,
+        )
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> Tuple[str, int, str]:
+        return self.samples[idx]
+
+
+class FastAudioDevLoader:
+    """Multi-threaded prefetching batch loader for streaming raw dev audio."""
+
+    def __init__(
+        self,
+        dataset: AudioDevDataset,
+        batch_size: int = 64,
+        n_threads: int = 16,
+        queue_size: int = 8,
+    ) -> None:
+        self.samples = dataset.samples
+        self.batch_size = batch_size
+        self.n_threads = n_threads
+        self.queue_size = queue_size
+
+    def __len__(self) -> int:
+        n = len(self.samples)
+        return (n + self.batch_size - 1) // self.batch_size
+
+    def _load_audio(self, item: Tuple[str, int, str]) -> Tuple[np.ndarray, int, str]:
+        path, label, attack_id = item
+        try:
+            audio, sr = sf.read(path, dtype="float32")
+            w = prepare_audio_window(audio, sr=sr, target_duration=4.0, random_crop=False)
+            return w, label, attack_id
+        except Exception as e:
+            logger.warning("Error loading dev audio %s: %s; using zero window", path, e)
+            return np.zeros(64000, dtype=np.float32), label, attack_id
+
+    def __iter__(self):
+        n = len(self.samples)
+        indices = np.arange(n)
+        q = queue.Queue(maxsize=self.queue_size)
+        sentinel = object()
+
+        def producer():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_threads) as executor:
+                for start in range(0, len(indices), self.batch_size):
+                    batch_idx = indices[start : start + self.batch_size]
+                    batch_items = [self.samples[i] for i in batch_idx]
+
+                    processed = list(executor.map(self._load_audio, batch_items))
+                    audios = np.stack([p[0] for p in processed])
+                    labels = np.array([p[1] for p in processed], dtype=np.int64)
+                    attacks = [p[2] for p in processed]
+
+                    audio_tensor = torch.from_numpy(audios).float()
+                    label_tensor = torch.from_numpy(labels).long()
+                    q.put((audio_tensor, label_tensor, attacks))
+            q.put(sentinel)
+
+        t = threading.Thread(target=producer, daemon=True)
+        t.start()
+
+        while True:
+            item = q.get()
+            if item is sentinel:
+                break
+            yield item
+
+
+# ---------------------------------------------------------------------------
 # Benchmark Demo Clip Evaluator
 # ---------------------------------------------------------------------------
 
@@ -313,6 +459,7 @@ def evaluate_demo_clips(
     wavlm: WavLMModel,
     threshold: float,
     dev: torch.device,
+    layer_index: int = 5,
 ) -> Dict[str, Dict[str, Any]]:
     """Evaluate model on the 4 demo benchmark clips via full pipeline and fusion."""
     from vanirakshak.detectors.pipeline import DetectionPipeline
@@ -330,10 +477,11 @@ def evaluate_demo_clips(
     model.eval()
 
     class _TempCM:
-        def __init__(self, m: AASISTLHead, w: WavLMModel, t: float) -> None:
+        def __init__(self, m: AASISTLHead, w: WavLMModel, t: float, layer_idx: int = 5) -> None:
             self.m = m
             self.w = w
             self.t = t
+            self.layer_idx = layer_idx
 
         def score(self, x: np.ndarray, sr: int) -> float:
             audio = np.asarray(x, dtype=np.float32).ravel()
@@ -353,12 +501,12 @@ def evaluate_demo_clips(
 
             with torch.no_grad():
                 w_out = self.w(inp, output_hidden_states=True)
-                feat = w_out.hidden_states[-1]
+                feat = w_out.hidden_states[self.layer_idx]
                 _, logits = self.m(feat.float())
                 raw_llr = float((logits[0, 1] - logits[0, 0]).item())
                 return raw_llr - self.t
 
-    cm_temp = _TempCM(model, wavlm, threshold)
+    cm_temp = _TempCM(model, wavlm, threshold, layer_idx=layer_index)
     pipe = DetectionPipeline(cm=cm_temp)
 
     # Enrol Modi using genuine demo audio
@@ -401,11 +549,14 @@ def train_recipe_a(
     patience: int = 5,
     init_weights: Optional[Path] = None,
     max_train_utts: Optional[int] = None,
+    max_dev_utts: Optional[int] = None,
     n_workers: int = 24,
+    layer_index: int = 5,
+    streaming_dev: bool = False,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
     dev = torch.device(device if (device.startswith("cuda") and torch.cuda.is_available()) else "cpu")
-    logger.info("Initializing Recipe A Retraining on device: %s", dev)
+    logger.info("Initializing Recipe A Retraining on device: %s (WavLM layer_index=%d)", dev, layer_index)
 
     # 1. Setup Audio Training Set & DataLoader
     train_set = AudioDataset(train_manifest)
@@ -429,15 +580,33 @@ def train_recipe_a(
     )
 
     # 2. Setup Dev Set & DataLoader
-    dev_set = FeatureDataset(dev_manifest)
-    dev_loader = FastPrefetchLoader(
-        dataset=dev_set,
-        batch_size=256,
-        shuffle=False,
-        drop_last=False,
-        n_threads=16,
-        queue_size=8,
-    )
+    is_audio_dev = streaming_dev or is_audio_manifest(dev_manifest)
+    if is_audio_dev:
+        logger.info(
+            "Dev validation configured in STREAMING mode directly from audio (%s)",
+            dev_manifest,
+        )
+        dev_set = AudioDevDataset(dev_manifest, limit=max_dev_utts)
+        dev_loader = FastAudioDevLoader(
+            dataset=dev_set,
+            batch_size=batch_size,
+            n_threads=min(16, n_workers),
+            queue_size=8,
+        )
+    else:
+        logger.info(
+            "Dev validation configured from pre-cached feature tensors (%s)",
+            dev_manifest,
+        )
+        dev_set = FeatureDataset(dev_manifest)
+        dev_loader = FastPrefetchLoader(
+            dataset=dev_set,
+            batch_size=256,
+            shuffle=False,
+            drop_last=False,
+            n_threads=16,
+            queue_size=8,
+        )
 
     # 3. Class-weighted Cross-Entropy: spoof_weight = n_bonafide / n_spoof
     # Class 0 = spoof, Class 1 = bonafide
@@ -478,11 +647,12 @@ def train_recipe_a(
     patience_counter = 0
 
     logger.info(
-        "Starting training loop: %d epochs, %d batches/epoch, lr=%.2e, patience=%d",
+        "Starting training loop: %d epochs, %d batches/epoch, lr=%.2e, patience=%d, layer_index=%d",
         epochs,
         len(train_loader),
         lr,
         patience,
+        layer_index,
     )
 
     for epoch in range(1, epochs + 1):
@@ -498,7 +668,7 @@ def train_recipe_a(
             # Frozen WavLM forward pass on GPU
             with torch.no_grad():
                 w_out = wavlm(audio_batch, output_hidden_states=True)
-                feats = w_out.hidden_states[-1]  # (B, 199, 768)
+                feats = w_out.hidden_states[layer_index]  # (B, 199, 768)
 
             optimizer.zero_grad()
             with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
@@ -534,23 +704,39 @@ def train_recipe_a(
         # -------------------------------------------------------------------
         # Validation on Dev Set
         # -------------------------------------------------------------------
-        logger.info("Evaluating epoch %d on dev set (140,950 records)...", epoch)
+        logger.info("Evaluating epoch %d on dev set (%d records)...", epoch, len(dev_set))
         t_val0 = time.perf_counter()
         model.eval()
         bon_scores = []
         spf_scores = []
 
         with torch.no_grad():
-            for feats, labels, _ in dev_loader:
-                feats = feats.to(dev, non_blocking=True)
-                with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
-                    _, logits = model(feats)
-                # Raw LLR: bonafide logit - spoof logit
-                llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
-                labels_np = labels.numpy()
-                mask = (labels_np == 1)
-                bon_scores.extend(llr[mask].tolist())
-                spf_scores.extend(llr[~mask].tolist())
+            if is_audio_dev:
+                for audio_batch, labels, _ in dev_loader:
+                    audio_batch = audio_batch.to(
+                        dev,
+                        dtype=torch.float16 if dev.type == "cuda" else torch.float32,
+                        non_blocking=True,
+                    )
+                    w_out = wavlm(audio_batch, output_hidden_states=True)
+                    feats = w_out.hidden_states[layer_index]
+                    with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                        _, logits = model(feats.float())
+                    llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
+                    labels_np = labels.numpy()
+                    mask = (labels_np == 1)
+                    bon_scores.extend(llr[mask].tolist())
+                    spf_scores.extend(llr[~mask].tolist())
+            else:
+                for feats, labels, _ in dev_loader:
+                    feats = feats.to(dev, non_blocking=True)
+                    with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                        _, logits = model(feats)
+                    llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
+                    labels_np = labels.numpy()
+                    mask = (labels_np == 1)
+                    bon_scores.extend(llr[mask].tolist())
+                    spf_scores.extend(llr[~mask].tolist())
 
         bon_arr = np.array(bon_scores)
         spf_arr = np.array(spf_scores)
@@ -561,7 +747,7 @@ def train_recipe_a(
         t_val1 = time.perf_counter()
 
         # Evaluate demo clips
-        demo_res = evaluate_demo_clips(model, wavlm, threshold_eer, dev)
+        demo_res = evaluate_demo_clips(model, wavlm, threshold_eer, dev, layer_index=layer_index)
         demo_01 = demo_res.get("demo_01_genuine.wav", {})
 
         elapsed_total = time.perf_counter() - t0
@@ -590,6 +776,7 @@ def train_recipe_a(
             patience_counter = 0
 
             # Save checkpoint immediately upon improvement
+            output_checkpoint = Path(output_checkpoint)
             output_checkpoint.parent.mkdir(parents=True, exist_ok=True)
             checkpoint_payload = {
                 "architecture": "aasist-l",
@@ -600,15 +787,17 @@ def train_recipe_a(
                 "eer_threshold": float(best_eer_threshold),
                 "dev_eer": float(best_dev_eer),
                 "dev_min_dcf": float(best_dev_mindcf),
+                "layer_index": int(layer_index),
             }
             torch.save(checkpoint_payload, str(output_checkpoint))
             _validate_checkpoint(checkpoint_payload, output_checkpoint)
             logger.info(
-                "*** New best checkpoint at epoch %d saved to %s (minDCF=%.4f, EER=%.3f%%) ***",
+                "*** New best checkpoint at epoch %d saved to %s (minDCF=%.4f, EER=%.3f%%, layer=%d) ***",
                 best_epoch,
                 output_checkpoint,
                 best_dev_mindcf,
                 best_dev_eer * 100.0,
+                layer_index,
             )
         else:
             patience_counter += 1
@@ -642,14 +831,36 @@ def main() -> None:
     parser.add_argument(
         "--dev-manifest",
         type=Path,
-        default=Path(r"C:\Users\singu\cm-features\dev\dev_features.tsv"),
-        help="Path to dev feature TSV",
+        default=Path(r"A:\cm-corpus\manifests\dev.tsv")
+        if Path(r"A:\cm-corpus\manifests\dev.tsv").is_file()
+        else Path(r"C:\Users\singu\cm-features\dev\dev_features.tsv"),
+        help="Path to dev manifest TSV (raw audio or pre-cached features)",
     )
     parser.add_argument(
+        "--output-checkpoint",
         "--output",
+        dest="output",
         type=Path,
-        default=REPO_ROOT / "data" / "cm_aasist.pt",
-        help="Output checkpoint path",
+        default=REPO_ROOT / "data" / "cm_aasist_layer5.pt",
+        help="Output checkpoint path (default: data/cm_aasist_layer5.pt)",
+    )
+    parser.add_argument(
+        "--layer-index",
+        type=int,
+        default=5,
+        help="WavLM hidden state layer index (default: 5 for Pan et al. middle layer)",
+    )
+    parser.add_argument(
+        "--streaming-dev",
+        action="store_true",
+        default=False,
+        help="Force streaming on-the-fly dev validation directly from raw audio",
+    )
+    parser.add_argument(
+        "--max-dev-utts",
+        type=int,
+        default=None,
+        help="Limit number of dev validation utterances for fast epoch evaluation",
     )
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -676,7 +887,10 @@ def main() -> None:
         patience=args.patience,
         init_weights=init_w,
         max_train_utts=args.max_train_utts,
+        max_dev_utts=args.max_dev_utts,
         n_workers=args.workers,
+        layer_index=args.layer_index,
+        streaming_dev=args.streaming_dev,
     )
 
 

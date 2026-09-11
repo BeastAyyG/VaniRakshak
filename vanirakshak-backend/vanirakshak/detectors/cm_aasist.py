@@ -92,6 +92,7 @@ class CMModelAASIST:
     eer_threshold: float = 0.0
     dev_eer: float = float("nan")
     dev_min_dcf: float = float("nan")
+    layer_index: int = -1
     natural_offset: float = field(
         default_factory=lambda: float(os.environ.get("VR_CM_NATURAL_OFFSET", "0.0"))
     )
@@ -155,6 +156,7 @@ class CMModelAASIST:
         self.eer_threshold = float(ckpt["eer_threshold"])
         self.dev_eer = float(ckpt["dev_eer"])
         self.dev_min_dcf = float(ckpt["dev_min_dcf"])
+        self.layer_index = int(ckpt.get("layer_index", ckpt.get("layer", -1)))
         self.name = f"aasist_l_wavlm_dev_eer_{self.dev_eer:.3f}"
 
         # Platt calibration metadata stored in checkpoint (deliberately not applied
@@ -207,7 +209,7 @@ class CMModelAASIST:
 
         with torch.inference_mode():
             outputs = wavlm(input_values, output_hidden_states=True)
-            hidden_state = outputs.hidden_states[-1]  # (1, T, 768)
+            hidden_state = outputs.hidden_states[self.layer_index]  # (1, T, 768)
             feat = hidden_state.to(torch.float32)
             _, logits = self._model(feat)
             # LLR = genuine_logit (index 1) - spoof_logit (index 0) - eer_threshold + natural_offset

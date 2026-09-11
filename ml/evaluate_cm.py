@@ -177,6 +177,7 @@ def evaluate_checkpoint_on_audio(
     limit: Optional[int] = None,
     apply_calibration: bool = False,
     workers: int = 16,
+    layer_index: Optional[int] = None,
 ) -> Dict[str, object]:
     """Evaluate an AASIST-L checkpoint directly on raw audio files via streaming feature extraction."""
     from concurrent.futures import ThreadPoolExecutor
@@ -189,6 +190,10 @@ def evaluate_checkpoint_on_audio(
 
     ckpt = torch.load(str(checkpoint_path), map_location="cpu")
     state_dict = ckpt["state_dict"]
+
+    if layer_index is None:
+        layer_index = int(ckpt.get("layer_index", ckpt.get("layer", -1)))
+    logger.info("Using WavLM layer index: %d", layer_index)
 
     in_dim = 768 if ckpt.get("frontend") == "microsoft/wavlm-base-plus" else 1024
     model = AASISTLHead(in_dim=in_dim).to(dev)
@@ -253,7 +258,7 @@ def evaluate_checkpoint_on_audio(
                 audio_t = audio_t.half()
 
             with torch.no_grad():
-                hidden = wavlm(audio_t, output_hidden_states=True).hidden_states[-1].float()
+                hidden = wavlm(audio_t, output_hidden_states=True).hidden_states[layer_index].float()
                 _, logits = model(hidden)
                 raw_llrs = (logits[:, 1] - logits[:, 0]).cpu().numpy()
                 llrs = cal_w * raw_llrs + cal_b
@@ -276,8 +281,10 @@ def evaluate_checkpoint_on_audio(
     results = evaluate_scores(
         np.array(bonafide_scores), np.array(spoof_scores), attack_scores
     )
+    results["layer_index"] = layer_index
 
     logger.info("=== Audio Evaluation Results for %s ===", checkpoint_path.name)
+    logger.info("Layer index: %d", layer_index)
     logger.info("minDCF    : %.4f", results.get("minDCF", float("nan")))
     logger.info("actDCF    : %.4f", results.get("actDCF", float("nan")))
     logger.info("actDCF(B) : %.4f", results.get("actDCF_bayes", float("nan")))
@@ -297,6 +304,12 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--out-report", type=Path, default=None, help="Save JSON report")
+    parser.add_argument(
+        "--layer-index",
+        type=int,
+        default=None,
+        help="WavLM hidden state layer index (default: None, reads ckpt.get('layer_index', -1))",
+    )
     parser.add_argument(
         "--audio-eval",
         action="store_true",
@@ -325,6 +338,7 @@ def main() -> None:
             limit=args.limit,
             apply_calibration=args.apply_calibration,
             workers=args.workers,
+            layer_index=args.layer_index,
         )
     else:
         results = evaluate_checkpoint_on_features(
