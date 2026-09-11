@@ -803,7 +803,14 @@ trusting this sentence to stay accurate.
   - `A:\cm-corpus\manifests\eval.tsv`: Rebuilt using `python ml/build_manifest.py --partition eval --only-existing` to index exactly the **628,848** verified audio files on Drive A (0 missing files on disk).
   - All 16 held-out evaluation attack families A17–A32 are fully represented in this set.
 * **Side-by-Side Eval Comparison (20,000 Representative Sample)**:
-  Evaluated on the exact same 20,000-utterance sample (4,058 bonafide, 15,942 spoof) using `python ml/evaluate_cm.py --manifest A:\cm-corpus\manifests\eval.tsv --audio-eval --limit 20000`:
+  Evaluated on the exact same 20,000-utterance sample (4,058 bonafide, 15,942 spoof) committed directly to git at [`data/eval_benchmark/eval_slice_20k.tsv`](file:///c:/VaniRakshak/data/eval_benchmark/eval_slice_20k.tsv) for full external reproducibility:
+  ```bash
+  # Reproduce Post-Augmentation Eval metrics:
+  python ml/evaluate_cm.py --checkpoint data/cm_aasist.pt --manifest data/eval_benchmark/eval_slice_20k.tsv --audio-eval --device cuda --out-report reports/cm_aasist_eval_partition.json
+
+  # Reproduce Pre-Augmentation Eval metrics:
+  python ml/evaluate_cm.py --checkpoint data/pre_aug_cm_aasist.pt --manifest data/eval_benchmark/eval_slice_20k.tsv --audio-eval --device cuda --out-report reports/cm_aasist_eval_partition_pre_aug.json
+  ```
   
   | Metric | Pre-Augmentation Checkpoint | Post-Augmentation Checkpoint | Delta / Interpretation |
   |---|---|---|---|
