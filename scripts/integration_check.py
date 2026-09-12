@@ -33,6 +33,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import io
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -544,6 +545,72 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
         )
 
 
+def check_auth(live: bool, checks: Checks) -> None:
+    """The authenticated path (docs/10 G5).
+
+    Auth is disabled by default -- that is the demo posture every other check
+    here runs under -- so this rebuilds the app's Authenticator with keys and
+    verifies the closed door, rather than leaving the whole feature untested
+    because the default config never exercises it.
+    """
+    print("\n-- auth (VR_API_KEYS configured) --")
+    if live:
+        checks.record("auth", True, "skipped in --live mode (server owns its own config)")
+        return
+    try:
+        import importlib
+        from fastapi.testclient import TestClient
+
+        app_module = importlib.import_module("vanirakshak.server.app")
+        from vanirakshak.server.auth import Authenticator
+
+        original = app_module.AUTH
+        try:
+            app_module.AUTH = Authenticator(
+                raw_keys="demo:s3cret:*:*,narrow:n4rrow:analyze:alice",
+                require_auth=False,
+                rate_limits={"analyze": 0, "enroll": 0},
+            )
+            c = TestClient(app_module.app)
+
+            checks.record("auth: /v1/audit rejects no key",
+                          c.get("/v1/audit").status_code == 401)
+            checks.record("auth: /v1/audit accepts a scoped key",
+                          c.get("/v1/audit",
+                                headers={"Authorization": "Bearer s3cret"}).status_code == 200)
+            checks.record("auth: /v1/health stays open (LB probe)",
+                          c.get("/v1/health").status_code == 200)
+
+            # The identity attack: a key limited to 'alice' claiming to be 'bob'.
+            r = c.post("/v1/analyze",
+                       files={"audio": ("a.wav", _silent_wav(), "audio/wav")},
+                       data={"claimed_identity": "bob"},
+                       headers={"Authorization": "Bearer n4rrow"})
+            checks.record("auth: key cannot act as another user_id",
+                          r.status_code == 403, f"status {r.status_code}")
+
+            with c.websocket_connect("/ws/stream") as ws:
+                ws.send_text('{"sample_rate": 16000, "api_key": "s3cret"}')
+                ack = ws.receive_json()
+            checks.record("auth: WS handshake accepts api_key",
+                          ack.get("type") == "session_ack")
+        finally:
+            app_module.AUTH = original
+    except Exception as e:  # pragma: no cover - diagnostic path
+        checks.record("auth", False, f"{type(e).__name__}: {e}")
+
+
+def _silent_wav(seconds: float = 1.0, sr: int = 16000) -> bytes:
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(np.zeros(int(sr * seconds), dtype="<i2").tobytes())
+    return buf.getvalue()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="VaniRakshak end-to-end integration check",
@@ -566,6 +633,7 @@ def main() -> int:
     check_verify_speaker(client, checks)
     check_audit(client, checks)
     check_ws_stream(args.live, args.base_url, checks)
+    check_auth(args.live, checks)
 
     print("\n" + "=" * 78)
     total = len(checks.rows)

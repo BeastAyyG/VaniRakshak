@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -37,6 +37,7 @@ from ..detectors.pipeline import DetectionPipeline
 from ..detectors.voice import vad_stats, zcr_variance
 from ..anchor import load_anchor
 from ..semantic import SEMANTIC_SIGNAL
+from .auth import ApiKey, AuthError, Authenticator, extract_secret
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +66,31 @@ PIPELINE = DetectionPipeline()
 # `vanirakshak/anchor.py` so the benchmark harness loads the same vector into
 # the same pipeline and the two report comparable numbers.
 ANCHOR_STATE: Dict[str, object] = load_anchor(PIPELINE)
+
+# API-key auth. Disabled (and loudly warned about) when VR_API_KEYS is unset,
+# so the demo and integration_check keep working; enforced the moment keys
+# exist. See server/auth.py for the key format and scope model.
+AUTH = Authenticator(
+    raw_keys=settings.auth.api_keys,
+    require_auth=settings.auth.require_auth,
+    rate_limits={
+        "analyze": settings.auth.rate_limit_analyze,
+        "enroll": settings.auth.rate_limit_enroll,
+    },
+)
+AUTH.warn_if_open()
+
+
+def _guard(
+    request: Request, scope: str, route: str, acting_as: Optional[str] = None
+) -> Optional[ApiKey]:
+    """Authenticate + authorize, translating AuthError into HTTPException."""
+    try:
+        key = AUTH.authenticate(extract_secret(request.headers))
+        AUTH.authorize(key, scope, route, acting_as=acting_as)
+        return key
+    except AuthError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail) from None
 
 
 def _resolve_claimed_identity(raw: str) -> str:
@@ -259,7 +285,8 @@ def health() -> dict:
 
 @app.get("/v1/enroll", response_model=EnrolledSpeakersResponse)
 @app.get("/api/v1/enroll", response_model=EnrolledSpeakersResponse)
-def list_enrolled() -> EnrolledSpeakersResponse:
+def list_enrolled(request: Request) -> EnrolledSpeakersResponse:
+    _guard(request, "enroll", "enroll_list")
     """Enrolled user_ids (family members / anchors) — lets the dashboard offer
     a claimed-identity picker instead of a single hardcoded anchor."""
     return EnrolledSpeakersResponse(
@@ -270,7 +297,12 @@ def list_enrolled() -> EnrolledSpeakersResponse:
 
 @app.post("/v1/enroll", response_model=EnrollResponse)
 @app.post("/api/v1/enroll", response_model=EnrollResponse)
-async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> EnrollResponse:
+async def enroll(
+    request: Request, user_id: str = Form(...), audio: UploadFile = File(...)
+) -> EnrollResponse:
+    # acting_as=user_id is the important part: enrolling a voiceprint under
+    # someone else's user_id is an identity attack, not a misconfiguration.
+    _guard(request, "enroll", "enroll", acting_as=user_id)
     data = await audio.read()
     x, sr = _read_wav_bytes(data)
     if x.size < int(0.5 * sr):
@@ -294,11 +326,16 @@ async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> Enr
 @app.post("/v1/analyze/audio", response_model=AnalyzeResponse)
 @app.post("/api/v1/analyze/audio", response_model=AnalyzeResponse)
 async def analyze(
+    request: Request,
     audio: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
     caller_id: str = Form("+91-0000000000"),
     claimed_identity: str = Form(""),
 ) -> AnalyzeResponse:
+    # claimed_identity may be "" here; the anchor fallback resolves it below,
+    # and an empty string means "no identity claimed", not "any identity".
+    _guard(request, "analyze", "analyze",
+           acting_as=claimed_identity or None)
     upload = audio or file
     if upload is None:
         raise HTTPException(400, "Audio payload required in form field 'audio' or 'file'")
@@ -570,10 +607,11 @@ class VerifySpeakerResponse(BaseModel):
 
 @app.post("/v1/verify-speaker", response_model=VerifySpeakerResponse)
 @app.post("/api/v1/verify-speaker", response_model=VerifySpeakerResponse)
-async def verify_speaker(
+async def verify_speaker(request: Request, 
     audio: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
 ) -> VerifySpeakerResponse:
+    _guard(request, "analyze", "verify_speaker")
     """Score a short voice chunk against the enrolled target speaker.
 
     Honest scope: the model answers identity ("Modi ji" vs "not Modi ji"),
@@ -617,7 +655,8 @@ async def verify_speaker(
 
 @app.post("/v1/sessions")
 @app.post("/api/v1/sessions")
-def start_session(req: SessionStartRequest) -> dict:
+def start_session(request: Request, req: SessionStartRequest) -> dict:
+    _guard(request, "stream", "sessions")
     sid = f"call-{uuid.uuid4().hex[:10]}"
     SESSIONS[sid] = CallSession(
         sid,
@@ -636,7 +675,8 @@ def start_session(req: SessionStartRequest) -> dict:
 
 @app.post("/v1/sessions/{sid}/challenge")
 @app.post("/api/v1/sessions/{sid}/challenge")
-def grade_challenge(sid: str, req: ChallengeGradeRequest) -> dict:
+def grade_challenge(request: Request, sid: str, req: ChallengeGradeRequest) -> dict:
+    _guard(request, "stream", "challenge")
     sess = SESSIONS.get(sid)
     if sess is None:
         raise HTTPException(404, "session not found")
@@ -645,7 +685,10 @@ def grade_challenge(sid: str, req: ChallengeGradeRequest) -> dict:
 
 @app.get("/v1/audit")
 @app.get("/api/v1/audit")
-def tail_audit(n: int = 50) -> dict:
+def tail_audit(request: Request, n: int = 50) -> dict:
+    # 'audit' is deliberately absent from the default scope set: this is a log
+    # of who was scored and when.
+    _guard(request, "audit", "audit")
     events = AUDIT.tail(n)
     return {
         "chain_valid": AUDIT.verify_chain(),
@@ -667,11 +710,26 @@ async def stream_endpoint(ws: WebSocket) -> None:
         await ws.close(code=1003)
         return
 
+    # Auth on the handshake. A browser cannot set headers on a WebSocket, so
+    # the key may travel in the handshake body as "api_key"; a header is still
+    # accepted for non-browser clients. Closed with 1008 (policy violation),
+    # distinct from the 1003 above, which means "first frame was not JSON".
+    presented = handshake.get("api_key") or extract_secret(ws.headers)
+    claimed = _resolve_claimed_identity(str(handshake.get("claimed_identity", "")))
+    try:
+        key = AUTH.authenticate(presented)
+        AUTH.authorize(key, "stream", "stream", acting_as=claimed or None)
+    except AuthError as e:
+        # Never echo the detail of a 401 back over the socket beyond its reason
+        # string; it is already non-specific about which key ids exist.
+        await ws.close(code=1008, reason=e.detail[:120])
+        return
+
     sid = handshake.get("session_id") or f"ws-{uuid.uuid4().hex[:8]}"
     sr = int(handshake.get("sample_rate", 16000))
     ctx = SessionContext(
         caller_id=str(handshake.get("caller_id", "")),
-        claimed_identity=_resolve_claimed_identity(str(handshake.get("claimed_identity", ""))),
+        claimed_identity=claimed,
         transaction_value_inr=float(handshake.get("transaction_value_inr", 0.0)),
         origin_country=str(handshake.get("origin_country", "IN")),
         prior_fraud_score=float(handshake.get("prior_fraud_score", 0.0)),

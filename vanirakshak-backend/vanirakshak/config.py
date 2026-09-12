@@ -163,12 +163,33 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class AuthConfig:
+    """API-key auth. Disabled when ``api_keys`` is empty (see server/auth.py).
+
+    Off by default so the demo, ``npm run dev:all`` and
+    ``scripts/integration_check.py`` keep working; the server logs a loud
+    warning in that state. ``VR_REQUIRE_AUTH=1`` refuses to start without keys.
+    """
+
+    # "key_id:secret[:scopes[:users]]", comma-separated.
+    api_keys: str = _env("VR_API_KEYS", "")
+    require_auth: bool = _env("VR_REQUIRE_AUTH", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    # Per-key, per-route ceilings in requests/minute; 0 disables that limit.
+    # /enroll is tighter than /analyze because it writes a voiceprint.
+    rate_limit_analyze: int = _env_int("VR_RATE_LIMIT_ANALYZE", 60)
+    rate_limit_enroll: int = _env_int("VR_RATE_LIMIT_ENROLL", 10)
+
+
+@dataclass(frozen=True)
 class Settings:
     audio: AudioConfig = field(default_factory=AudioConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     fusion: FusionConfig = field(default_factory=FusionConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")

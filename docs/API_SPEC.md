@@ -296,6 +296,19 @@ durable JSONL file (`VR_AUDIT_PATH`, default `data/audit_log.jsonl`) that is
 reloaded and re-verified on restart. Feature-only: no raw audio or embeddings are
 ever logged.
 
+## Authentication
+
+Disabled unless `VR_API_KEYS` is set, in which case every route below except
+`GET /v1/health` requires a key and returns **401** without one, **403** for a
+key lacking the needed scope or not permitted to act as the requested
+`user_id`/`claimed_identity`, and **429** past the per-key rate limit. Send it
+as `Authorization: Bearer <key>` or `X-API-Key: <key>`; on the WebSocket, as
+`api_key` in the handshake. Full key format and scopes in
+[PROTOCOL.md](PROTOCOL.md) §8.
+
+`GET /v1/health` stays open deliberately: a load balancer cannot hold a
+credential, and it exposes only backend names and whether an anchor loaded.
+
 ## Environment Variables
 
 See [PROTOCOL.md](PROTOCOL.md) §8 for the complete, current table — this file
@@ -307,6 +320,7 @@ does not duplicate it to avoid the two drifting apart again.
 |---|---|
 | `1000` | Normal closure |
 | `1003` | First frame was binary instead of a JSON handshake |
+| `1008` | Authentication failed (missing/invalid `api_key`) — only when `VR_API_KEYS` is set |
 
 `stream_endpoint`'s only `ws.close(code=...)` call in the codebase is the
 `1003` above. There is no `4000`/pipeline-error close code — an exception

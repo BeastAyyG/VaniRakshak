@@ -370,9 +370,10 @@ merge-12, stopped on patience-5 around epoch 8.
 EER is 0.86 pp *worse* than the best frozen model, right at the noise floor, so
 a wash at best. minDCF improved slightly and is nowhere near the bar. Seed 43
 was not run: two seeds are for claiming a win, not for confirming a clear miss.
-Recorded per ground rule 5. The scoring artifact was written on the
-training box and must be committed alongside the other benchmark reports;
-until it is, this row rests on prose, the same gap G2's uniform row had.
+Recorded per ground rule 5. Scoring artifact:
+`reports/cm_finetune_benchmark.json` — verified against the protected
+baselines (all four bit-identical) before committing, so this row no longer
+rests on prose.
 
 Four layers at 1e-5 for eight epochs is a reasonable fine-tune. It is not proof
 that no fine-tuning configuration could work, but it is evidence that the
@@ -460,14 +461,54 @@ behind a closed one, and it is roughly a day of work.
 - New `VR_*` settings go in `vanirakshak-backend/vanirakshak/config.py` **and**
   in `docs/PROTOCOL.md` §8, or `scripts/check_docs.py` fails.
 
-**Criteria:**
+**RESULT (2026-09-12): DONE.**
 
-- [ ] An unauthenticated request to every route returns 401, covered by a test.
-- [ ] `scripts/integration_check.py` extended to exercise the authenticated
-      path, and still passing.
-- [ ] `docs/PROTOCOL.md` and `docs/API_SPEC.md` document the scheme. Per
-      `AGENTS.md` §2 PROTOCOL.md is binding — frontend and backend must both
-      match it.
+- [x] Unauthenticated requests return 401 on `/v1/enroll` (GET and POST),
+      `/v1/analyze`, `/v1/verify-speaker`, `/v1/sessions`,
+      `/v1/sessions/{sid}/challenge` and `/v1/audit`; the WebSocket closes
+      **1008**. 25 tests in `vanirakshak-backend/tests/test_auth.py`.
+      `GET /v1/health` stays open on purpose — a load balancer cannot hold a
+      credential, and it exposes only backend names and whether an anchor
+      loaded.
+- [x] `scripts/integration_check.py` extended and passing **23/23** (was 18),
+      covering the closed door, a scoped key getting through, the open health
+      probe, the act-as-another-user refusal, and the WS `api_key` handshake.
+- [x] `docs/PROTOCOL.md` §1 and §8, `docs/API_SPEC.md`, and `docs/RUNBOOK.md`
+      document the scheme, the close code, and the deployment switch.
+
+**Design decisions worth knowing.**
+
+*Opt-in, not mandatory.* With `VR_API_KEYS` unset every route stays open and
+the server logs a warning at startup. That keeps the demo, `npm run dev:all`
+and the integration check working untouched, matching how the detector
+backends already ship — and 130 existing tests would otherwise have broken.
+`VR_REQUIRE_AUTH=1` makes the server refuse to start without keys, which is
+what a deployment sets. The hole is not closed by default; it is closed by
+configuration, and the server says so out loud.
+
+*`audit` is not a default scope.* A key with no explicit scopes gets
+`stream|analyze|enroll`. Reading the audit chain requires asking for it,
+because that chain records who was scored and when.
+
+*Per-key user allowlists are the identity-attack fix.* A key restricted to
+`alice` cannot enroll or claim `bob` — 403, tested and mutation-checked.
+Without this, authentication alone would still let any valid client enroll a
+voiceprint under any identity.
+
+*Rate limits are in-process.* Token bucket per (key, route), continuous
+refill so a client cannot burst 2x across a window boundary. It protects one
+box from one noisy client; it does not coordinate across workers or survive a
+restart. A multi-worker deployment needs a shared store, and that is a
+deployment decision this file cannot fake.
+
+*Secrets are compared with `hmac.compare_digest`, against every configured
+key* rather than one the caller names — comparing only against a named key
+would leak which key ids exist. Secrets are never logged.
+
+**Not done, and deliberately out of scope:** key rotation, per-key expiry,
+revocation lists, and any persistent key store. `VR_API_KEYS` is env-var
+configuration, which suits a single deployment and does not scale to many
+tenants.
 
 ---
 

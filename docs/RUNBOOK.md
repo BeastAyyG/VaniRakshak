@@ -116,7 +116,11 @@ $env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
 # 4. Semantic layer: pip install groq; $env:GROQ_API_KEY="gsk-..."
 # 5. Android: needs Android Studio (SDK + JDK 17); point
 #    VaniBackendConfig at the LAN host, e.g. ws://192.168.1.10:8000/v1/stream.
-# 6. Harden: behind gateway/VPN + auth (none built in); VR_HOST / VR_PORT
+# 6. Auth: VR_API_KEYS="client1:<secret>:stream|analyze:alice" and
+#    VR_REQUIRE_AUTH=1 so the server refuses to start open. Unset keys = every
+#    route open, including POST /v1/enroll and GET /v1/audit; the server logs a
+#    warning at startup in that state. Scopes/format: PROTOCOL.md section 8.
+# 7. Harden further: gateway/VPN in front; VR_HOST / VR_PORT
 #    to bind, VR_AUDIT_PATH to durable storage (default data/audit_log.jsonl).
 ```
 
@@ -166,6 +170,16 @@ npm run build
 
 Recorded here rather than silently carried, so nobody rediscovers these the
 hard way:
+
+- **Authentication is opt-in, and that is a deliberate default (decided).**
+  With `VR_API_KEYS` unset every route is open — including `POST /v1/enroll`
+  and `GET /v1/audit` — and the server logs a warning at startup saying so.
+  This keeps the demo, `npm run dev:all` and `scripts/integration_check.py`
+  working out of the box, matching how the detector backends already ship.
+  Any deployment must set `VR_API_KEYS` and `VR_REQUIRE_AUTH=1`, which makes
+  the server refuse to start without keys. Rate limits are per-key and
+  **in-process**: they protect one box from one noisy client and do not
+  coordinate across workers or survive a restart.
 
 - **Challenge is a one-shot gate, not a recovery path (decided).** A failed
   challenge always escalates to `BLOCK` permanently; a *passed* challenge
