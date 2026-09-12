@@ -155,7 +155,20 @@ across the whole state dict `0.0`. Bit-identical — stronger than the criterion
 required, and it confirms the per-item crop and augmentation RNGs are fixed,
 since differing crops would have produced differing weights. The weak absolute
 numbers are expected at this cap and say nothing about model quality; this is a
-determinism probe. **Negative control still outstanding.**
+determinism probe.
+
+**Negative control (2026-09-12): passed.** A third run at `--seed 8`, same cap,
+returned dev EER `0.3625328131` against seed 7's `0.3030003129` — threshold and
+minDCF moved too. `--seed` is genuinely reaching torch, CUDA, and the per-item
+crop/augmentation streams; the determinism above is real seeding, not an
+ignored flag. **G1 is complete.**
+
+> **Do not read the 5.95 pp seed-to-seed spread here as the noise floor.** This
+> is a 4,000-utterance, 2-epoch probe, where variance is naturally large and the
+> model is barely trained. The floor that governs G3 and G4 is the **0.770 pp**
+> measured between two full-corpus checkpoints computing an identical inference
+> function (see Ground rule 1). Quoting this run's spread as the floor would make
+> G3's 11.0 % target look unmeasurable, which is wrong.
 
 ---
 
