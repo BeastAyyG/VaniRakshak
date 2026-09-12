@@ -93,7 +93,9 @@ object VaniScamShieldController {
             callerNumber = activeCallerPhone,
             callerName = activeCallerName,
             peakRisk = finalPeak,
-            verdictSummary = summary
+            verdictSummary = summary,
+            receiptHash = lastSnapshot?.receiptHash,
+            serverTier = lastSnapshot?.tier?.takeIf { lastSnapshot.serverDriven }
         )
 
         isCallActive = false

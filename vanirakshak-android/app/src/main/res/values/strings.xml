@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VaniRakshak</string>
+    <string name="app_name">VaniRakshak Kavach</string>
     <string name="app_tagline">AI Voice-Clone Impersonation Shield</string>
     <string name="app_sih_code">SIH26104 • AICTE Cyber Security</string>
     
@@ -21,7 +21,7 @@
     <string name="status_not_enrolled">⚠️ Voice Not Enrolled</string>
     
     <!-- Call Screen -->
-    <string name="live_call_header">VaniRakshak Real-Time Voice Guard</string>
+    <string name="live_call_header">VaniRakshak Kavach — Real-Time Voice Guard</string>
     <string name="call_state_ongoing">Call in Progress • Audio Ingesting (16kHz)</string>
     <string name="risk_score_label">CALIBRATED CLONE RISK SCORE</string>
     
@@ -73,8 +73,23 @@
     <string name="verify_speaker_title">Verify Speaker (Modi ji)</string>
     <string name="verify_speaker_verified">Speaker verified — this is the enrolled voice (Modi ji).</string>
     <string name="verify_speaker_not_target">Speaker is NOT the enrolled Modi voice. Verify caller identity before any bank/transaction step.</string>
-    <string name="verify_speaker_unavailable">Speaker verify unavailable: backend not reachable. Ensure the PC backend is running and `adb reverse tcp:8000 tcp:8000` is set.</string>
+    <string name="verify_speaker_unavailable">Speaker verify unavailable: backend not reachable. Check the backend host in Settings (default 127.0.0.1:8000, or your PC LAN IP) and that the FastAPI server is running.</string>
     <string name="verify_speaker_no_audio">Speaker verify: not enough live audio captured yet.</string>
+    <!-- Server-driven verdict (WS streaming) -->
+    <string name="server_tier_allow">SERVER: ALLOW</string>
+    <string name="server_tier_challenge">SERVER: CHALLENGE</string>
+    <string name="server_tier_block">SERVER: BLOCK — interlock active</string>
+    <string name="server_offline_fallback">Offline fallback — on-device heuristic (server unreachable)</string>
+    <string name="receipt_hash_label">Receipt: %1$s</string>
+    <string name="challenge_grade_hint">Digits heard, in order</string>
+    <string name="challenge_grade_desc">Type the digits the caller spoke, in order. Advisory only — a pass never clears a server BLOCK.</string>
+    <string name="challenge_grade_pass">Challenge response accepted (advisory — server verdict still stands).</string>
+    <string name="challenge_grade_fail">Challenge response did not match. Treat the call as untrusted.</string>
+    <!-- Backend host settings -->
+    <string name="backend_settings_title">Backend connection</string>
+    <string name="backend_host_label">Backend: %1$s</string>
+    <string name="backend_host_hint">Host or IP (e.g. 127.0.0.1 or 192.168.1.5)</string>
+    <string name="backend_port_hint">Port (default 8000)</string>
     <string name="toast_call_blocked">Call from %1$s blocked. Incident report filed.</string>
 
     <!-- Setup -->

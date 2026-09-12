@@ -10,27 +10,29 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@drawable/bg_card"
+        android:background="@drawable/bg_sheet_top"
         android:elevation="12dp"
         android:orientation="vertical"
         android:padding="24dp">
 
-        <!-- Top Threat Header -->
+        <!-- Top Threat Header on rose pastel -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@drawable/bg_alert_danger"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:padding="14dp">
 
             <TextView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="@drawable/bg_alert_danger"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_chip_white"
                 android:fontFamily="sans-serif-black"
                 android:gravity="center"
                 android:text="!"
                 android:textColor="@color/error_tone"
-                android:textSize="20sp" />
+                android:textSize="22sp" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -54,7 +56,7 @@
                     android:fontFamily="sans-serif-medium"
                     android:text="Financial Application Detected"
                     android:textColor="@color/ink"
-                    android:textSize="17sp" />
+                    android:textSize="18sp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -75,7 +77,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_alert_warning"
-            android:padding="8dp"
+            android:padding="10dp"
             android:fontFamily="monospace"
             android:text="Target: com.phonepe.app"
             android:textColor="@color/warning_deep"
@@ -91,18 +93,18 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnEndCallInstead"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="52dp"
                 android:backgroundTint="@color/error_tone"
                 android:text="Return to Call Guard Screen"
                 android:textColor="@android:color/white"
                 android:textSize="14sp"
-                app:cornerRadius="8dp" />
+                app:cornerRadius="14dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnDismiss"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="match_parent"
-                android:layout_height="44dp"
+                android:layout_height="46dp"
                 android:layout_marginTop="6dp"
                 android:text="I Understand the Risk (Dismiss)"
                 android:textColor="@color/mute"

@@ -1,0 +1,723 @@
+# 10 — Quality and hardening plan
+
+The executable follow-on to `docs/08-cm-training-plan.md` (the countermeasure)
+and `docs/09-post-cm-roadmap.md` (everything else). Those two describe *what is
+true* and *what is missing*; this file is the ordered list of work, with
+acceptance criteria fixed in advance so no result can be graded after the fact.
+
+Read `docs/08-cm-training-plan.md` §12.7 before starting. It records four
+consecutive experiments that all landed inside measurement noise, and the
+reason they were not recognised as such at the time.
+
+---
+
+## Ground rules
+
+These are not style preferences. Each was learned by getting it wrong in §12.7
+and having to retract a published conclusion.
+
+1. **The noise floor is ~0.8 pp pooled EER.** Measured directly: two
+   checkpoints computing the *identical* function at inference
+   (`cm_aasist_attm_uniform.pt` 12.734 %, `cm_aasist_meanpool.pt` 13.504 %)
+   differ by 0.770 pp purely from training-run variance. Any difference below
+   that between separately trained checkpoints **means nothing** and must not
+   be reported as a win, a regression, or a ranking. Do not quote three decimal
+   places of a quantity you cannot resolve to one.
+2. **Two seeds minimum for any claim.** `--seed` exists now. A single run
+   cannot distinguish an improvement from a lucky initialisation.
+3. **Change one thing per run.** The `--freeze-merge` experiment was read as
+   evidence about attention when it was confounded with weight initialisation
+   and batch order. If two things differ, the run answers nothing.
+4. **State the success criterion before the run, in this file, and keep it.**
+   A criterion that moves after the numbers arrive is not a criterion.
+5. **A negative result is a result.** "We tried this and it did not help" is
+   publishable and useful. Re-running until something passes is not.
+6. **Never edit an existing `reports/` JSON.** They are the record. New runs
+   get new files.
+7. **Run the four gates before pushing:** `pytest vanirakshak-backend/tests/`,
+   `pytest tests/e2e/`, `python scripts/integration_check.py`,
+   `python scripts/check_docs.py`.
+
+---
+
+## Corpus integrity — verified 2026-09-12
+
+Checked directly against the manifests (synced from the training box to
+`.corpus-manifests/`, outside the repo tree). None of this had ever been
+verified; every number in §12.7 depends on it, so it is recorded rather than
+re-derived.
+
+| Check | Result |
+|---|---|
+| Partition sizes | train 182,357 · dev 140,950 · eval 628,848 |
+| Attack separation | train A01–A08 · dev A09–A16 · eval A17–A32 — disjoint, as ASVspoof 5 intends |
+| Duplicate utterances within a partition | 0 in all three |
+| train ∩ dev, train ∩ eval, dev ∩ eval | **0, 0, 0** — no leakage |
+| 20k eval slice ⊂ eval partition | **true**, and 0 overlap with train or dev |
+| Slice balance | 4,058 bonafide / 15,942 spoof, matching the reports |
+| Per-attack eval counts | 28,535–31,795, max/min ratio 1.11 — the missing 10th archive did not gut any attack |
+
+So the benchmark is measuring generalisation to unseen attacks, which is what
+it claims. The §12.7 results are weak, but they are not an artifact of a bad
+split.
+
+**A trap, since fixed.** The file formerly named `eval.tsv` was
+byte-identical to `eval_available.tsv` (same SHA-256): it was *not* the full
+official 680,774-utterance eval list, but the 628,848 actually downloaded —
+9 of 10 archives, the 10th halted for disk space (§12). The shortfall was
+disclosed in §12, but the filename invited the opposite assumption. It is now
+`eval_downloaded_628k.tsv` on the training box. §12 line 812 still describes
+it under the old name; that reference is historical and correct for its date.
+
+Two low counts worth knowing: A19 (28,535) and A20 (28,998) are the smallest
+attack sets *and* the two where the multi-layer models regressed hardest
+(~20 % and ~24 % against a pre-augmentation Layer-12 baseline of 9.0 % and
+6.4 %). At 28k samples that is not a sample-size artifact — the regression is
+real.
+
+---
+
+## Working across two machines
+
+The dev box and the training box both push to
+`fix/protocol-interlock-reconciliation` on the same remote (`origin` and
+`upstream` are the same GitHub repo). Syncthing mirrors `.corpus-manifests/`
+between them; it does **not** mirror the repo, and must never be pointed at
+one — syncing a `.git` directory between machines corrupts both.
+
+- **Pull before you start and before you push.** `git pull --rebase` — the
+  branch has taken concurrent pushes from both machines already. Never force-push.
+- **Checkpoints are write-once.** `data/` now tracks six `.pt` files. They are
+  binary and unmergeable: if both machines write the same path, the conflict
+  cannot be resolved and one side's run is lost. A new run gets a new filename.
+- **Never `git add -A` or `git add .`** in this repo. `.corpus-manifests/`
+  holds ~96 MB of corpus manifests and `handoff/` is the Syncthing exchange;
+  both are gitignored now, but stage files by name regardless — this is a
+  public repo.
+- **Corpus manifests are not in git on purpose.** They live in
+  `.corpus-manifests/` (Syncthing) and are regenerable from the corpus on
+  Drive A. Reference them by path in commands; never commit them.
+
+---
+
+## G0 — Preserve what already exists (5 minutes, do it first)
+
+`.gitignore` line 34 (`*.pt`) excludes the three checkpoints the entire §12.7
+benchmark is built on. They exist on exactly one machine. Three sibling
+checkpoints are already force-added, so the precedent is set.
+
+```bash
+git add -f data/cm_aasist_attm.pt data/cm_aasist_meanpool.pt data/cm_aasist_attm_uniform.pt
+```
+
+**Done when:** `git ls-files data/` lists six checkpoints and the repo is still
+well under 40 MB.
+
+---
+
+## G1 — Validate that `--seed` actually works
+
+Everything downstream depends on this. The seeding fix closed three separate
+nondeterminism sources (batch shuffle, per-item crop offset, per-item
+augmentation choice) but has never been tested end to end.
+
+Run the trainer twice with identical arguments and the same `--seed`, capped
+small — `--max-train-utts 4000 --epochs 2 --seed 7` — writing to two different
+output checkpoints.
+
+**Criterion (fixed in advance):** the two runs report **identical dev EER to at
+least 4 decimal places**. Bit-identical weights would be better but are not
+required; CUDA kernel nondeterminism can differ in the last bits without
+affecting the conclusion.
+
+**If they differ:** stop. Something is still unseeded and G3 is unreadable.
+Find it before continuing. Likely suspects in order: cuDNN algorithm selection
+(`torch.use_deterministic_algorithms(True)` plus `CUBLAS_WORKSPACE_CONFIG`),
+any remaining bare `np.random` call, thread-count-dependent reduction order.
+
+**Negative control — required, not optional.** Two same-seed runs matching
+proves the run is *deterministic*; it does not prove `--seed` is *wired in*. A
+build that ignored the seed entirely while being deterministic for some other
+reason would pass the test above and fail silently in G3, where the two-seed
+requirement would collapse into running one configuration twice and reporting
+a spread of zero. So run a third time with a **different** seed:
+
+**Criterion:** the `--seed 8` run's dev EER **differs** from the `--seed 7`
+runs. Any difference will do; the point is that it is not zero. If it matches
+bit-for-bit, the seed is not reaching the RNGs and G1 has not passed.
+
+Delete all test checkpoints afterwards; do not commit them.
+
+**Result (2026-09-12).** Two runs at `--seed 7`, 4,000 utterances, 2 epochs:
+dev EER `0.3030003129` both times, dev minDCF `0.9999680858` both times, EER
+threshold `1.7031353420` both times, and max absolute parameter difference
+across the whole state dict `0.0`. Bit-identical — stronger than the criterion
+required, and it confirms the per-item crop and augmentation RNGs are fixed,
+since differing crops would have produced differing weights. The weak absolute
+numbers are expected at this cap and say nothing about model quality; this is a
+determinism probe.
+
+**Negative control (2026-09-12): passed.** A third run at `--seed 8`, same cap,
+returned dev EER `0.3625328131` against seed 7's `0.3030003129` — threshold and
+minDCF moved too. `--seed` is genuinely reaching torch, CUDA, and the per-item
+crop/augmentation streams; the determinism above is real seeding, not an
+ignored flag. **G1 is complete.**
+
+> **Do not read the 5.95 pp seed-to-seed spread here as the noise floor.** This
+> is a 4,000-utterance, 2-epoch probe, where variance is naturally large and the
+> model is barely trained. The floor that governs G3 and G4 is the **0.770 pp**
+> measured between two full-corpus checkpoints computing an identical inference
+> function (see Ground rule 1). Quoting this run's spread as the floor would make
+> G3's 11.0 % target look unmeasurable, which is wrong.
+
+---
+
+## G2 — Calibrate the scores
+
+**The problem.** Every row in the §12.7 benchmark carries `"calibrated": false`.
+CLLR only has meaning for scores that are calibrated log-likelihood ratios, and
+nothing in the pipeline ever made them that. The raw CLLR figures (3.2–4.3)
+therefore overstate the failure: discrimination is real (EER 12.7 %), the
+scores are simply not on a probability scale.
+
+**Evidence it is fixable.** §12 records the post-augmentation model at
+**calibrated CLLR 0.7204** on the eval partition — under the 1.6238 bar — while
+the same model scores 1.6238 raw in the 6-way table. Calibration has already
+moved a model in this repo from failing to passing once.
+
+**Work.**
+
+0. **Check what already exists first.** `data/cm_aasist.pt` already carries a
+   fitted `calibration` block (`method: platt`, `scale_w: 0.369718`,
+   `bias_b: -3.616373`, `calibrated_cllr: 0.6536`). The work is fitting the
+   same thing for the checkpoints that lack it — `cm_aasist_attm.pt` and
+   `cm_aasist_attm_uniform.pt` — using the identical schema, not inventing a
+   new mechanism.
+1. Fit a two-parameter logistic (Platt) on **dev** scores only. Never fit on
+   eval; that is leakage and invalidates every number it touches.
+2. Store the two parameters in the checkpoint alongside the existing metadata.
+3. **Do not apply it in `score()`.** This is settled, not open. Read
+   `vanirakshak-backend/vanirakshak/detectors/cm_aasist.py:34-47`: the
+   decision was already made and the reason recorded — applying
+   `scale_w ≈ 0.37` inside `score()` compresses score variance and pushes
+   genuine demo clips into false CHALLENGE/BLOCK. `score()` also already
+   returns `raw_llr - eer_threshold + natural_offset`, which is itself a
+   shift-calibration, so a Platt fit applied there **stacks two calibrations**
+   rather than replacing one. The live fusion (`w_cm`, `intercept`, and the
+   weights in `scripts/fit_fusion_weights.py`) is tuned against the current
+   scale; changing it moves every tier decision while `integration_check.py`
+   still passes, because its gates have tolerance.
+
+   Apply calibration in the **eval/reporting path only**. All three G2 criteria
+   below are eval metrics, so this satisfies the goal in full and touches no
+   runtime behaviour. Re-scaling what the pipeline consumes is a separate
+   decision that requires refitting fusion weights and re-baselining the demo
+   expectations — not part of G2.
+4. Re-score the eval slice with a new script under `scripts/` and a new report
+   JSON. Report raw and calibrated columns side by side.
+
+**Criteria (fixed in advance):**
+
+- [x] **PASSED — Calibrated CLLR < 1.0** on the eval slice (1.0 is
+      uninformative). AttM **0.5984** (raw 3.2391); Uniform **0.6041** (raw
+      3.5112). This was the criterion that mattered and it passed decisively:
+      the scores were never badly *discriminating*, they were badly *scaled*,
+      exactly as G2 predicted.
+- [ ] ~~Calibrated actDCF within **10 %** of minDCF — that gap *is* the
+      calibration error, and closing it is the entire point.~~
+      **RETRACTED 2026-09-12 as mis-specified. Original kept above per ground
+      rule 4.** Measured: actDCF_bayes fell 13.2390 -> 1.8579 (AttM) and
+      13.8099 -> 1.7871 (Uniform), a ~7x reduction, but still ~105-111 % above
+      minDCF.
+
+      **Why the criterion was wrong, and why this is not a failure.**
+      Criteria 1 and 2 are *mutually exclusive* under a single affine
+      transform at this discrimination level. CLLR is minimised when the score
+      is a true log-likelihood ratio; actDCF at the fixed Bayes threshold is
+      minimised when that threshold happens to sit at the DCF-optimal
+      operating point. Those coincide only when discrimination is good enough
+      that tau_Bayes is near-optimal. With minDCF ~ 0.88 — barely better than
+      the trivial decision — the DCF-optimal threshold sits far out in the
+      tail, nowhere near where a correctly calibrated LLR places tau_Bayes.
+
+      Demonstrated on synthetic scores matched to this system's class ratios
+      and separation: max-likelihood Platt gives CLLR 1.097 with a 235 %
+      actDCF gap; shifting the bias to put tau_Bayes exactly at the
+      DCF-optimal point closes the gap to **0.0 %** and blows CLLR out to
+      **3.191**. One knob, two objectives, opposite directions. No fitting
+      procedure satisfies both.
+
+      The other-AI explanation on record — dev-to-eval prior/channel shift
+      defeating a global affine map — is **not** the cause. The conflict is
+      structural and reproduces with dev and eval drawn from identical
+      distributions.
+
+      **What the residual gap actually measures: discrimination, not
+      calibration.** An actDCF/minDCF gap that survives optimal calibration is
+      a statement about minDCF ~ 0.88, which is G3's problem, not G2's.
+
+- [ ] **Replacement criterion for future calibration work: CLLR vs minCLLR.**
+      CLLR decomposes as discrimination loss (minCLLR, the CLLR after the
+      optimal monotonic transform) plus calibration loss. `minCLLR` is the
+      only metric here that isolates calibration quality, and
+      `benchmarks/compute_mindcf.py` does not currently compute it — it has
+      `compute_cllr` and nothing else. Add it, then the criterion is
+      `CLLR - minCLLR` small. Do this before any future calibration claim.
+
+**Bug fixed.** `data/cm_aasist_attm_uniform.pt` previously carried `eer_threshold` 10.698028928450064 and `dev_eer` 0.14286875159620163 — byte-copied from `cm_aasist_attm.pt`. Both values were independently remeasured on dev and rewritten to the checkpoint: `dev_eer`: **0.146083** (14.608%), `eer_threshold`: **11.165016**. Both `cm_aasist_attm.pt` and `cm_aasist_attm_uniform.pt` now also store fitted `calibration` blocks (`method: platt`, `scale_w`, `bias_b`, etc.) matching the contract.
+
+**Benchmark artifact.** Full raw vs calibrated evaluation published to `reports/cm_calibrated_benchmark.json`.
+
+**Cost:** hours, CPU, no retraining. Do this before G3 — it is the cheapest
+real improvement available and it reveals how much of the apparent failure was
+never a modelling problem.
+
+---
+
+## G3 — Fine-tune the WavLM encoder
+
+**The problem, stated plainly.** `ml/train_cm.py:686-688` loads WavLM in fp16
+and sets `requires_grad = False` on every parameter. The run trains **85,064
+parameters against 182,357 utterances**. The model is not data-starved; it is
+capacity-starved. That is why four consecutive layer-selection and merging
+experiments all landed inside the noise floor — they rearranged the same frozen
+features. Fine-tuning the SSL encoder is the largest single lever available,
+and frozen-feature systems characteristically land about where this one did.
+
+**Work.**
+
+- Unfreeze the **top 3–6** transformer layers. Not all 12: it overfits and will
+  not fit comfortably in 16 GB.
+- **bf16, not fp16.** Blackwell supports bf16; fp16 encoder fine-tuning tends
+  to diverge. This means changing the `.half()` call on line 686.
+- Discriminative learning rates: ~**1e-5** encoder, ~**1e-4** head.
+- Gradient checkpointing if 16 GB gets tight. Reduce batch to 32 before
+  reducing the number of unfrozen layers.
+- Expose as `--unfreeze-top-n` (default 0, preserving today's behaviour) and
+  record it in the checkpoint.
+- **Run two seeds.** With a 0.8 pp floor, one run establishes nothing.
+- Name the flag `--unfreeze-top-n`, dashed, like every other flag in the file
+  (`--max-train-utts`, `--merge-layers`, `--freeze-merge`). argparse maps it to
+  the underscored attribute on its own.
+- Pass `--merge-layers 12` on every G3 run, smoke runs included. Every model in
+  the G2 table is a 12-layer merge; omitting it trains a different
+  architecture and the comparison is void.
+
+**Decided (2026-09-12) — checkpoint contents.** Save **only the unfrozen
+top-N encoder layers**, never the whole frontend. WavLM-base-plus is ~94.7 M
+parameters: a full `frontend_state_dict` is **379 MB at fp32, 189 MB at
+bf16**, per checkpoint, against a 28 MB repo in which checkpoints have been
+force-added. Two seeds of that would be unrecoverable in a public history.
+
+**Decided (2026-09-12) — fine-tuned checkpoints stay out of git.** G0
+force-added six frozen-encoder checkpoints because they were ~400 KB each and
+otherwise unreproducible. Neither is true now: fine-tuned checkpoints are
+large, and `--seed` makes them reproducible. Keep them on the training box and
+in the Syncthing exchange. Commit the **report JSON**, which is what the
+argument actually rests on.
+
+**Decided (2026-09-12) — the backend must hard-fail, not fall back.** A head
+trained on fine-tuned features and scored against a stock frontend produces
+**silently wrong** scores: no exception, no missing key, just garbage that
+still passes the integration check. `cm_aasist.py` pins
+`_FRONTEND = "microsoft/wavlm-base-plus"` and loads stock weights, so this is
+the default behaviour today. So: if a checkpoint records `unfreeze_top_n > 0`,
+loading **must raise** unless the matching encoder weights are present and
+actually applied. "Always load when present" is not the safe rule — it says
+nothing about the absent case, which is the dangerous one. Add a test that a
+fine-tuned checkpoint stripped of its encoder weights raises rather than
+scores.
+
+**Decided (2026-09-12) — one dtype end to end.** Training, the eval harnesses,
+and runtime must agree. Training bf16 while `scripts/evaluate_*.py` score in
+fp16 (`.half()`, which they all do today) and runtime scores in a third dtype
+would make every G3 number incomparable with the G2 table. Pick bf16 on CUDA
+for fine-tuned checkpoints and carry it through all three; leave the existing
+fp16 path untouched for the frozen-encoder checkpoints so the published
+numbers stay reproducible.
+
+**Watch item — `.eval()` vs `.train()`.** The frontend is currently
+`.eval()`, so dropout is off. Fine-tuning normally wants the unfrozen layers
+in train mode, which changes feature statistics and is therefore a **second
+variable** moving alongside the unfreeze, against ground rule 3. It is
+intrinsic to fine-tuning rather than avoidable, so it does not block G3 — but
+record which mode you used, because a later comparison will need it.
+
+**Criteria (fixed in advance):**
+
+- [ ] Pooled eval EER **below 11.0 %** on `data/eval_benchmark/eval_slice_20k.tsv`
+      — beating the best existing model (12.666 %) by more than twice the noise
+      floor, on **both** seeds.
+- [ ] minDCF **below 0.75**. This matters more than EER. Every current model
+      sits at 0.87–0.92, and 1.0 means "no better than the trivial decision" —
+      so the system today recovers roughly a tenth of the available cost.
+      minDCF is the number that says whether this is usable at the operating
+      point that matters.
+- [ ] Report the seed-to-seed spread. If it exceeds 0.8 pp, the floor is wider
+      than believed and every prior conclusion needs revisiting.
+
+**RESULT (2026-09-12): MISSED. Seed 43 not run.**
+
+`data/cm_aasist_ft4_s42.pt` -- 4 layers unfrozen (7-10), encoder LR 1e-5,
+merge-12, stopped on patience-5 around epoch 8.
+
+| | seed 42 (ft4) | best frozen | bar |
+|---|---|---|---|
+| Pooled eval EER | **13.529 %** | 12.666 % | <11.0 — **miss** |
+| minDCF | **0.8515** | 0.8731 | <0.75 — **miss** |
+| Dev EER | 14.323 % | 14.287 % (AttM) | — |
+
+EER is 0.86 pp *worse* than the best frozen model, right at the noise floor, so
+a wash at best. minDCF improved slightly and is nowhere near the bar. Seed 43
+was not run: two seeds are for claiming a win, not for confirming a clear miss.
+Recorded per ground rule 5. Scoring artifact:
+`reports/cm_finetune_benchmark.json` — verified against the protected
+baselines (all four bit-identical) before committing, so this row no longer
+rests on prose.
+
+Four layers at 1e-5 for eight epochs is a reasonable fine-tune. It is not proof
+that no fine-tuning configuration could work, but it is evidence that the
+obvious one does not, on this corpus, at this scale.
+
+---
+
+## The augmentation finding — G4's premise is backwards
+
+G4 was written on the assumption that A19/A20 blindness is a *generalisation
+gap* to be closed with more augmentation. The baseline table says the opposite,
+and this only became visible once there were enough columns to compare.
+
+Pre-aug L12 and post-aug L12 are the same architecture, same layer, same head.
+The **only** difference is the codec/telephony augmenter:
+
+| | A19 | A20 | A27 | A32 | minDCF | CLLR |
+|---|---|---|---|---|---|---|
+| pre-aug L12 | **9.04** | **6.41** | **7.10** | **11.24** | 0.8834 | 1.8171 |
+| post-aug L12 | 21.32 | 23.19 | 12.49 | 17.23 | **0.8048** | **1.6238** |
+
+A19 got 2.4x worse and A20 3.6x worse **when augmentation was added**. These
+attacks were never blind — they were detectable at 9.0 % and 6.4 %, and the
+augmentation is what cost them. Every model since is built on the augmented
+recipe and none has recovered them; the multi-layer merges inherited the damage
+rather than causing it.
+
+So **adding RawBoost on top is the opposite of what the evidence indicates.**
+G4 as written should not be run.
+
+**But it was a trade, not a mistake.** Post-aug L12 has the best minDCF
+(0.8048) and best CLLR (1.6238) in the entire table, and still does after six
+experiments. Augmentation bought cost-metric performance and paid for it in
+per-attack discrimination on four attacks. Whether that is the right trade is a
+*product* question — telephony robustness matters for a system that scores real
+phone calls — not something the eval slice can settle.
+
+**If anyone does want one more CM experiment**, the one the data supports is:
+retrain the current recipe with the codec augmenter's probabilities reduced (or
+off), and see whether A19/A20 return. That tests the hypothesis the evidence
+actually raises. It is not scheduled, and it is not a prerequisite for anything.
+
+**Standing recommendation: stop CM work here.** Six experiments — layer
+selection, attentive merging, uniform merging, calibration, encoder
+fine-tuning — have not beaten `data/cm_aasist.pt` on the metrics that decide
+cost. That checkpoint is already the backend default. The work was not wasted:
+it established a noise floor, fixed the seeding, made the scores usable as
+likelihood ratios, and retired several claims that were not true. But the next
+real gain is not in this subsystem. **Go to G5.**
+
+---
+
+## G4 — Attack diversity (conditional — only if G3 misses)
+
+The training partition contains only A01–A08 (§12). A13/A19/A20 blindness is a
+generalisation gap, not a modelling bug. RawBoost-style augmentation is the
+standard cheap mitigation and composes with the existing codec/telephony
+augmenter in `ml/augment.py`.
+
+**Criterion:** A19 and A20 eval EER both **below 12 %** without pooled EER
+regressing beyond the noise floor. Current best on those two is ~20 % and
+~24 %, against a pre-augmentation Layer-12 baseline of 9.0 % and 6.4 % — the
+multi-layer models gave those attacks away and never got them back.
+
+---
+
+## Finding — the impostor interlock threshold is scale-wrong (2026-09-12)
+
+`demo_04_impostor.wav` returns **CHALLENGE** where ground truth and
+`docs/RUNBOOK.md` both say **BLOCK**. Reproduced independently on the dev box
+(REST 67.8) and the training box (WS 67.7), with real backends
+(`VR_CM_BACKEND=aasist VR_ASV_BACKEND=ecapa`). It is systemic, not
+environmental, and `RUNBOOK.md:96`'s "Risk 70.0 BLOCK / asv ~ 0.011" is stale.
+
+**Root cause.** `impostor_block_below` (`vanirakshak/config.py:57`, default
+`0.10`) is a single global constant, but the two ASV backends produce scores
+on entirely different scales:
+
+| backend | non-target (impostor) | target (genuine) | threshold 0.10 |
+|---|---|---|---|
+| stub (the default) | mean 0.982, max 0.991 | min 0.994 | **can never fire** |
+| ecapa | mean 0.199, max 0.328 | min 0.713 | fires only on extreme mismatch |
+
+Both figures come from the anchors' own calibration blocks
+(`data/anchor_asv_embedding.json`, `data/anchor_asv_embedding_ecapa.json`).
+Under the stub, no score is ever below 0.10, so the interlock is dead code.
+Under ECAPA, demo_04 scores 0.044–0.135 — comfortably impostor by ECAPA's own
+calibration, since even its *mean* non-target is 0.199 — yet the final window's
+0.135 clears 0.10 and the override declines to fire.
+
+**Not a windowing artifact.** All six windows are full 4.04 s, `speech_ratio`
+1.000, `is_voiced` true. Similarity climbs monotonically 0.044 → 0.135 across
+the clip; that is real content, not padding.
+
+**Measured separation across all four demo clips (ECAPA):**
+
+| clip | min | max | required behaviour |
+|---|---|---|---|
+| `demo_01_genuine` | 0.854 | 0.917 | must not block |
+| `demo_02_degraded_copy` | **0.610** | 0.858 | must not block (same speaker) |
+| `demo_03_partial_splice` | 0.054 | 0.851 | blocks (correctly) |
+| `demo_04_impostor` | 0.044 | **0.135** | must block |
+
+Any threshold in **0.135 < t < 0.610** separates all four. The ECAPA anchor's
+measured non-target maximum, **0.328**, sits near the centre of that window
+with ~1.9x margin either side, and is derived from enrollment data rather than
+chosen.
+
+**Recommended fix — derive the threshold from the loaded anchor's calibration
+rather than hardcoding one constant for every backend.** Each anchor already
+ships `nontarget_scores.max` and a logistic `mid`; using them makes the
+interlock correct on both scales automatically and revives it under the stub.
+Keep `VR_IMPOSTOR_BLOCK_BELOW` as an explicit override.
+
+**This also dissolves the `/analyze` pooling problem.** At 0.328 demo_04
+blocks on *every* window, so the `VR_ANALYZE_POOLING=last` default stops
+deciding the verdict. Today it does: five of six windows are below 0.10 and
+only the last is above, so the REST path clears a clip that any other window
+would have blocked. Fix the threshold first and pooling becomes a preference
+rather than a correctness issue.
+
+**Decided 2026-09-12: fix it, but after G5.** Approved in principle; deferred
+so the auth work lands first. Tracked as **G8** below — this is scheduled
+work, not an open question.
+
+---
+
+## G5 — Authentication (product P0, independent of all CM work)
+
+`docs/09-post-cm-roadmap.md` P0 #1. Every REST route and the WebSocket accept
+unauthenticated connections. Anyone who can reach the port can enroll a
+voiceprint under someone else's `user_id`, stream audio, read the audit chain,
+or exhaust the box.
+
+**This is worth more than any countermeasure improvement in G2–G4.** A
+world-class detector behind an open endpoint is worth less than a mediocre one
+behind a closed one, and it is roughly a day of work.
+
+**Work.**
+
+- Per-client credentials on the WS handshake and on REST.
+- Authorization specifically on `POST /v1/enroll` — enrolling a voiceprint for
+  another user's `user_id` is an identity attack, not a misconfiguration.
+- Rate limits on `/analyze` and `/enroll`.
+- Restrict `GET /v1/audit`; it is a log of who was scored and when.
+- New `VR_*` settings go in `vanirakshak-backend/vanirakshak/config.py` **and**
+  in `docs/PROTOCOL.md` §8, or `scripts/check_docs.py` fails.
+
+**RESULT (2026-09-12): DONE.**
+
+- [x] Unauthenticated requests return 401 on `/v1/enroll` (GET and POST),
+      `/v1/analyze`, `/v1/verify-speaker`, `/v1/sessions`,
+      `/v1/sessions/{sid}/challenge` and `/v1/audit`; the WebSocket closes
+      **1008**. 25 tests in `vanirakshak-backend/tests/test_auth.py`.
+      `GET /v1/health` stays open on purpose — a load balancer cannot hold a
+      credential, and it exposes only backend names and whether an anchor
+      loaded.
+- [x] `scripts/integration_check.py` extended and passing **23/23** (was 18),
+      covering the closed door, a scoped key getting through, the open health
+      probe, the act-as-another-user refusal, and the WS `api_key` handshake.
+- [x] `docs/PROTOCOL.md` §1 and §8, `docs/API_SPEC.md`, and `docs/RUNBOOK.md`
+      document the scheme, the close code, and the deployment switch.
+
+**Design decisions worth knowing.**
+
+*Opt-in, not mandatory.* With `VR_API_KEYS` unset every route stays open and
+the server logs a warning at startup. That keeps the demo, `npm run dev:all`
+and the integration check working untouched, matching how the detector
+backends already ship — and 130 existing tests would otherwise have broken.
+`VR_REQUIRE_AUTH=1` makes the server refuse to start without keys, which is
+what a deployment sets. The hole is not closed by default; it is closed by
+configuration, and the server says so out loud.
+
+*`audit` is not a default scope.* A key with no explicit scopes gets
+`stream|analyze|enroll`. Reading the audit chain requires asking for it,
+because that chain records who was scored and when.
+
+*Per-key user allowlists are the identity-attack fix.* A key restricted to
+`alice` cannot enroll or claim `bob` — 403, tested and mutation-checked.
+Without this, authentication alone would still let any valid client enroll a
+voiceprint under any identity.
+
+*Rate limits are in-process.* Token bucket per (key, route), continuous
+refill so a client cannot burst 2x across a window boundary. It protects one
+box from one noisy client; it does not coordinate across workers or survive a
+restart. A multi-worker deployment needs a shared store, and that is a
+deployment decision this file cannot fake.
+
+*Secrets are compared with `hmac.compare_digest`, against every configured
+key* rather than one the caller names — comparing only against a named key
+would leak which key ids exist. Secrets are never logged.
+
+**Not done, and deliberately out of scope:** key rotation, per-key expiry,
+revocation lists, and any persistent key store. `VR_API_KEYS` is env-var
+configuration, which suits a single deployment and does not scale to many
+tenants.
+
+---
+
+## G6 — Reconcile the semantic layer with the zero-retention claim
+
+`docs/09-post-cm-roadmap.md` P0 #2. `vanirakshak/semantic/signal.py` uploads
+the caller's 4.04 s audio window to Groq, a third-party US cloud, while the
+system advertises zero retention and cites DPDP Act 2023 §8(7).
+
+This is a **decision, not a bug**, and it belongs to the product owner rather
+than to whoever is holding the keyboard. The options are: disable the semantic
+layer by default; keep it and state the third-party transfer explicitly in the
+compliance surface and the consent flow; or replace Groq with local ASR.
+Whichever is chosen, the docs and the code must then agree — today they do not.
+
+**DECIDED AND DONE (2026-09-13): off by default, disclosed when on.**
+Options 1 and 2 combined. Local ASR (option 3) was the only way to keep the
+feature *and* stay literally zero-retention, and was rejected on cost: the
+semantic signal is advisory (fusion weight 0.4 against 2.4 for the
+countermeasure), so disabling it by default costs little detection.
+
+- `VR_SEMANTIC_ENABLED` (default off) gates the layer in
+  `vanirakshak/semantic/signal.py` **before the ASR client is even imported**,
+  so a disabled layer never constructs anything that could upload audio.
+- **A `GROQ_API_KEY` alone does not enable it.** That key sits in `.env` for the
+  separate SACH and IndicConformer prototypes; keying the upload off its mere
+  presence would have shipped caller audio abroad silently. Tested, and
+  mutation-checked — removing the gate fails that test.
+- When enabled, `GET /v1/health` reports `zero_retention: false` and
+  `third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block
+  reports `zero_retention_verified: false` with the same list. Declared from
+  config rather than inferred after a call, so it fails toward disclosure.
+- Disabled, the `semantic` block still returns the full documented key set with
+  `available: false` and a reason naming the flag.
+
+Tests: `vanirakshak-backend/tests/test_semantic_gate.py` (7). Documented in
+`docs/PROTOCOL.md` s.8, `docs/API_SPEC.md`, `docs/RUNBOOK.md`.
+
+**Not done, and stated so:** a consent flow. Disclosure in the compliance fields
+tells an integrator; it does not obtain the caller's consent. Anyone enabling
+the layer in production owns that.
+
+---
+
+## G7 — Make ASV real by default
+
+`vanirakshak/config.py:180-181`: `VR_ASV_BACKEND` and `VR_CM_BACKEND` both
+default to `"stub"`. The stub ASV is a **random projection**, not biometrics.
+So the impostor interlock that produces the demo BLOCK — and every
+`asv_consistency` value the dashboard renders — runs on synthetic similarity
+unless someone sets `ecapa`.
+
+The honest-by-default posture is defensible for a demo and is documented. But
+"ships with real detectors off" should be a decision made on purpose, not an
+accident of defaults. Either flip the default and make
+`vanirakshak-backend/requirements-asv.txt` a hard dependency, or make the
+dashboard state unmissably that the similarity shown is synthetic.
+
+**Decided 2026-09-13 — label, don't flip the default.** The second option was
+taken. Flipping the default to `ecapa` was rejected *for now* because it makes
+`requirements-asv.txt` (speechbrain plus a VoxCeleb checkpoint download) a hard
+dependency of a demo whose other detector is also a stub — a real cost for a
+number the stub does not actually improve. The dashboard now states unmissably
+that the similarity is synthetic, and the backend announces it, so the two can
+never disagree.
+
+What shipped:
+- `detectors/asv.py::ASVModel.is_synthetic` → `True`; `asv_ecapa.py` overrides
+  it to `False`. Read from the *running instance*, not the requested env var,
+  so a degraded `ecapa`→stub fallback still reads synthetic.
+- `detectors/pipeline.py::DetectionPipeline.asv_is_synthetic` exposes it.
+- `session.py` sends `metrics.asv_synthetic` on every WS verdict;
+  `GET /v1/health` gains `models.asv_synthetic`; `AnalyzeResponse` gains
+  `asv_synthetic` (top-level and in `breakdown`).
+- `ForensicVerdictCard.tsx` relabels the tile "TARGET ANCHOR ASV (SYNTHETIC)"
+  with an amber "Demo projection — NOT a voiceprint" note, and the
+  `IMPOSTOR_SPEAKER` blurb no longer cites "ECAPA-TDNN similarity" when the stub
+  is what ran. `page.tsx` threads `asv_synthetic` through the WS path.
+- Regression guard: `tests/test_asv_backend_label.py`, plus `asv_synthetic`
+  added to `test_stream_e2e.py`'s `REQUIRED_METRICS`.
+
+**Criterion met:** `GET /v1/health`'s `models.asv_backend` /
+`models.asv_synthetic` and the dashboard agree about what is actually running,
+and a random projection cannot be mistaken for a voiceprint.
+
+---
+
+## Sequencing
+
+| # | Goal | Depends on | Cost | Why here |
+|---|---|---|---|---|
+| 1 | G0 preserve checkpoints | — | 5 min | Irreversible loss otherwise |
+| 2 | G1 validate `--seed` | G0 | ~1 h | Everything after is unreadable without it |
+| 3 | G2 calibration | G1 | hours | Cheapest real gain; no GPU |
+| 4 | G5 auth | — | ~1 day | Largest product gain; runs parallel to CM work |
+| 5 | G3 encoder fine-tune | G1, G2 | long | Largest detection gain |
+| 6 | G4 attack diversity | G3 misses | long | Conditional only |
+| 7 | G6 semantic decision | — | decision | Needs the product owner |
+| 8 | G7 ASV default | G5 | hours | Decide with auth, ship together |
+| 9 | G8 anchor-derived impostor threshold | G5 | hours | Approved 2026-09-12, deferred behind auth |
+
+G5 depends on no CM work and can proceed alongside it.
+
+---
+
+## G8 — Derive the impostor threshold from the anchor (approved, deferred behind G5)
+
+Full measurements and root cause in "the impostor interlock threshold is
+scale-wrong" above. Approved 2026-09-12; scheduled after G5 so the auth work
+lands first.
+
+**Work.** Replace the single hardcoded `impostor_block_below`
+(`vanirakshak/config.py:57`, default `0.10`) with a threshold read from the
+loaded anchor's own calibration block, which already ships
+`nontarget_scores.max` and a logistic `mid`. Keep `VR_IMPOSTOR_BLOCK_BELOW` as
+an explicit operator override, and fall back to it when an anchor carries no
+calibration.
+
+**Criteria (fixed in advance):**
+
+- [ ] `demo_04_impostor` → **BLOCK** on the REST *and* WS paths, under
+      `VR_ASV_BACKEND=ecapa`.
+- [ ] `demo_01_genuine` → **ALLOW** and `demo_02_degraded_copy` → not BLOCK.
+      0.610 is the binding constraint; a threshold above it blocks the
+      enrolled speaker on a degraded line.
+- [ ] The override fires on **every** window of demo_04, not just some — that
+      is what makes the result independent of `VR_ANALYZE_POOLING`.
+- [ ] Under the stub backend the interlock becomes reachable at all. Today no
+      stub score is ever below 0.10, so it is dead code on the default config.
+      Add a test asserting it can fire, which nothing currently covers.
+- [ ] `scripts/integration_check.py` tier gates pass without being relaxed.
+      `demo_03_partial_splice` → BLOCK stays a documented deviation
+      (`RUNBOOK.md`); do not "fix" it by widening the gate.
+- [ ] `docs/PROTOCOL.md` §3/§8 and `docs/RUNBOOK.md` updated — PROTOCOL.md is
+      binding per `AGENTS.md` §2, and this rule produces tiers.
+
+**Do not** simply retune the constant to 0.328. That number is this anchor's
+non-target maximum; hardcoding it reproduces the original defect one enrollment
+later. The point is that the threshold follows the anchor.
+
+---
+
+## What not to do
+
+- Do not run further layer-selection, merging, or pooling experiments. §12.7
+  contains four of them; all four are inside the noise floor. The frozen
+  encoder is the ceiling, and G3 is the only thing that lifts it.
+- Do not report a difference smaller than 0.8 pp pooled EER as a result.
+- Do not fit calibration on eval data.
+- Do not change the criteria in this file after seeing numbers. Add a dated
+  note explaining why a criterion was wrong and keep the original visible.

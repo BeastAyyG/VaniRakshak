@@ -43,6 +43,22 @@ class SessionContext:
         return float(min(1.0, w))
 
 
+_SEMANTIC_IDLE: Dict[str, object] = {
+    "available": False,
+    "transcript": "",
+    "hinglish_text": "",
+    "language": None,
+    "matches": [],
+    "categories_hit": [],
+    "semantic_risk": 0.0,
+    "keyword_risk": 0.0,
+    "claim_risk": 0.0,
+    "claim_findings": [],
+    "provider": None,
+    "reason": "not started",
+}
+
+
 @dataclass
 class ChunkResult:
     timestamp_ms: int
@@ -54,6 +70,7 @@ class ChunkResult:
     interlock_active: bool
     receipt_hash: str
     challenge: Optional[dict] = None  # only present the first time a challenge fires
+    semantic: Dict[str, object] = field(default_factory=lambda: dict(_SEMANTIC_IDLE))
 
 
 class CallSession:
@@ -85,6 +102,14 @@ class CallSession:
         self._challenge_passed = False
         self._blocked = False
         self._sr = settings.audio.sample_rate
+        # Parallel semantic (ASR + keyword) context signal — see
+        # vanirakshak/semantic/. Updated asynchronously by the WS layer
+        # (Groq calls are network I/O and must not block push_chunk), so a
+        # given window's fusion sees the *previous* window's transcript.
+        # That one-window lag is an accepted trade-off for keeping this a
+        # non-blocking, advisory signal rather than a bottleneck.
+        self._semantic_state: Dict[str, object] = dict(_SEMANTIC_IDLE)
+        self._pending_window: Optional[np.ndarray] = None
 
     @property
     def blocked(self) -> bool:
@@ -119,14 +144,23 @@ class CallSession:
         if window is None:
             return None
 
+        # Hand this window's raw int16 audio to the WS layer so it can
+        # schedule a non-blocking ASR pass (see pop_pending_window()).
+        self._pending_window = window.copy()
+
         # detection
         wr = self.pipeline.analyse(
             window.astype(np.float32) / 32768.0,
             self._sr,
             claimed_user=self.context.claimed_identity or None,
         )
-        # fuse
-        decision = self.fusion.update(wr, context_risk=self.context.risk_weight())
+        # fuse — acoustic evidence stays primary; semantic_risk is the
+        # advisory ASR/keyword term from the most recently completed window.
+        decision = self.fusion.update(
+            wr,
+            context_risk=self.context.risk_weight(),
+            semantic_risk=float(self._semantic_state.get("semantic_risk", 0.0)),
+        )
 
         # challenge logic
         trigger = False
@@ -158,6 +192,12 @@ class CallSession:
                 "cm_score": wr.cm_score,
                 "cm_genuine_prob": wr.features.get("cm_genuine_prob", 0.5),
                 "asv_consistency": wr.asv_score,
+                "asv_evaluated": wr.asv_enrolled,
+                # Whether the ASV backend behind asv_consistency is the
+                # synthetic random-projection stub rather than real biometrics
+                # (G7). Always sent so the dashboard can label the number
+                # honestly — never let a projection read as a voiceprint.
+                "asv_synthetic": self.pipeline.asv_is_synthetic,
                 "channel_anomaly": wr.channel_anomaly,
                 "prosody_unnatural": wr.prosody_unnatural,
                 "snr_db": wr.snr_db,
@@ -166,20 +206,61 @@ class CallSession:
             interlock_active=self._blocked,
             receipt_hash=ev.receipt_hash,
             challenge=self._active_challenge.to_dict() if (trigger and self._active_challenge is not None) else None,
+            semantic=dict(self._semantic_state),
         )
         cr.metrics["codec_guess"] = wr.codec_guess
         self._history.append(cr)
         return cr
 
+    def pop_pending_window(self) -> Optional[tuple[np.ndarray, int]]:
+        """Consume the raw audio for the window just scored, for async ASR.
+
+        Returns ``None`` once already consumed for this window, so the WS
+        layer never schedules the same window's transcription twice.
+        """
+        if self._pending_window is None:
+            return None
+        window, self._pending_window = self._pending_window, None
+        return window, self._sr
+
+    def update_semantic(self, result: Dict[str, object]) -> None:
+        """Called by the WS layer once a background ASR pass completes."""
+        self._semantic_state = result
+
     def grade_challenge(self, response_text: str, response_latency_ms: int) -> dict:
         if self._active_challenge is None:
             return {"ok": False, "reason": "no_active_challenge"}
         passed, reason, conf = self.challenge.grade(self._active_challenge, response_text, response_latency_ms)
+
+        # DECIDED (Option B — one-shot gate, not a recovery path): a pass
+        # only prevents an escalation that hasn't happened yet; it never
+        # clears `_blocked` and never re-arms `_triggered_challenge`.
+        # Rationale: grading checks digit order + 400-4000ms latency only
+        # (challenge/engine.py::grade) — no voice biometrics — so it cannot
+        # override strong acoustic evidence (risk>=70 or asv<0.10). Fail
+        # escalates to BLOCK permanently; pass leaves the latch as-is.
+        # The challenge is consumed on first grading to prevent oracle
+        # probing; a second grade returns `no_active_challenge`.
         if passed:
             self._challenge_passed = True
         else:
             # failed challenge => escalate to BLOCK
             self._blocked = True
+        self._active_challenge = None
+
+        last = self._history[-1] if self._history else None
+        self.audit.append(
+            session_id=self.session_id,
+            caller_id=self.context.caller_id,
+            claimed_identity=self.context.claimed_identity,
+            risk_score=last.risk if last else 0.0,
+            tier="BLOCK" if not passed else (last.tier if last else "ALLOW"),
+            features={
+                "challenge_passed": 1.0 if passed else 0.0,
+                "challenge_confidence": float(conf),
+                "response_latency_ms": float(response_latency_ms),
+            },
+        )
         return {
             "ok": passed,
             "reason": reason,

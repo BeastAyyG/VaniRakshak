@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- modal-card: white sheet, 32dp top radius per DESIGN.md rounded.lg -->
+<!-- modal sheet: white, 28dp top radius -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="@color/canvas" />
-    <corners android:topLeftRadius="32dp" android:topRightRadius="32dp" />
+    <corners android:topLeftRadius="28dp" android:topRightRadius="28dp" />
 </shape>

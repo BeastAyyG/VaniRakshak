@@ -12,6 +12,7 @@ Endpoints (see ``docs/07-privacy-compliance-and-apis.md``):
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -33,7 +34,10 @@ from ..session import CallSession, SessionContext
 from ..privacy.audit import AuditLog
 from ..alerts import AlertDispatcher, build_alert_payload
 from ..detectors.pipeline import DetectionPipeline
+from ..detectors.voice import vad_stats, zcr_variance
 from ..anchor import load_anchor
+from ..semantic import SEMANTIC_SIGNAL
+from .auth import ApiKey, AuthError, Authenticator, extract_secret
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +53,10 @@ app = FastAPI(
 # module-level singletons for the demo. In production these would be
 # replaced with a proper dependency-injected pool keyed by tenant.
 SESSIONS: Dict[str, CallSession] = {}
-AUDIT = AuditLog(max_events=10_000)
+# Durable audit chain: VR_AUDIT_PATH (default data/audit_log.jsonl, gitignored)
+# persists every event as JSONL and reloads it on restart. Empty path =
+# in-memory ring only.
+AUDIT = AuditLog(max_events=settings.audit.max_events, path=settings.audit.path or None)
 ALERTS = AlertDispatcher()
 PIPELINE = DetectionPipeline()
 
@@ -59,6 +66,53 @@ PIPELINE = DetectionPipeline()
 # `vanirakshak/anchor.py` so the benchmark harness loads the same vector into
 # the same pipeline and the two report comparable numbers.
 ANCHOR_STATE: Dict[str, object] = load_anchor(PIPELINE)
+
+# API-key auth. Disabled (and loudly warned about) when VR_API_KEYS is unset,
+# so the demo and integration_check keep working; enforced the moment keys
+# exist. See server/auth.py for the key format and scope model.
+AUTH = Authenticator(
+    raw_keys=settings.auth.api_keys,
+    require_auth=settings.auth.require_auth,
+    rate_limits={
+        "analyze": settings.auth.rate_limit_analyze,
+        "enroll": settings.auth.rate_limit_enroll,
+    },
+)
+AUTH.warn_if_open()
+
+
+def _third_party_processors() -> List[str]:
+    """Who receives caller audio beyond this process (G6). Empty = nobody."""
+    return [settings.semantic.provider] if settings.semantic.enabled else []
+
+
+def _guard(
+    request: Request, scope: str, route: str, acting_as: Optional[str] = None
+) -> Optional[ApiKey]:
+    """Authenticate + authorize, translating AuthError into HTTPException."""
+    try:
+        key = AUTH.authenticate(extract_secret(request.headers))
+        AUTH.authorize(key, scope, route, acting_as=acting_as)
+        return key
+    except AuthError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail) from None
+
+
+def _resolve_claimed_identity(raw: str) -> str:
+    """Fall back to the loaded anchor's user_id when the caller sends none.
+
+    `claimed_identity` defaults to `""` in the WS handshake, the `/analyze`
+    form field, and `SessionStartRequest` alike — so on the default path no
+    caller ever set it, and `DetectionPipeline.analyse()` skips ASV entirely
+    (`asv_score` stays a hardcoded 0.5, `asv_enrolled=False`). With exactly
+    one anchor enrolled today, defaulting an unset claim to that anchor's
+    user_id is the only way ASV runs out of the box. A caller that explicitly
+    names a *different* claimed identity is never overridden here.
+    """
+    if raw:
+        return raw
+    anchor_user_id = ANCHOR_STATE.get("user_id")
+    return str(anchor_user_id) if anchor_user_id else raw
 
 # Browser dashboard runs on a different origin (localhost:3001 by default).
 # Origins are configurable via VR_CORS_ORIGINS (comma-separated).
@@ -140,6 +194,11 @@ class EnrollResponse(BaseModel):
     created_at: str
 
 
+class EnrolledSpeakersResponse(BaseModel):
+    enrolled: List[str]
+    asv_backend: str
+
+
 class AnalyzeResponse(BaseModel):
     status: str = "success"
     file_duration_sec: float
@@ -160,6 +219,10 @@ class AnalyzeResponse(BaseModel):
     windows: List[dict] = Field(default_factory=list)
     mean_acoustic_anomaly: Optional[float] = None
     max_acoustic_anomaly: Optional[float] = None
+    asv_evaluated: Optional[bool] = None
+    # G7: whether this run's ASV backend is the synthetic stub. Lets the
+    # dashboard label mean_speaker_sim as a demo projection, not a voiceprint.
+    asv_synthetic: Optional[bool] = None
     mean_speaker_sim: Optional[float] = None
     mean_micro_tremor: Optional[float] = None
     mean_spectral_flatness: Optional[float] = None
@@ -173,6 +236,10 @@ class AnalyzeResponse(BaseModel):
     # an honest IDENTITY check — "is this the enrolled voice?" — never as a
     # clone/synthetic verdict. None when the checkpoint or torch is absent.
     target_speaker: Optional[dict] = None
+
+    # Parallel ASR + scam-keyword context signal (vanirakshak/semantic/).
+    # Advisory only — see the `semantic` field in docs/PROTOCOL.md.
+    semantic: Optional[dict] = None
 
 
 class SessionStartRequest(BaseModel):
@@ -205,9 +272,25 @@ def health() -> dict:
             "device_name": "CPU (Acoustic Forensic Core)",
         },
         "models": {
-            "wavlm_model": "AASIST / ECAPA Forensic Pipeline",
+            # Honest label: no AASIST (trained anti-spoofing classifier) exists
+            # anywhere in this system — see cm_backend/asv_backend below for
+            # what's actually running (synthetic stub vs real WavLM/ECAPA-TDNN).
+            "wavlm_model": f"{PIPELINE.cm.name} / {PIPELINE.asv.name}",
             "vad_enabled": True,
-            "zero_retention": True,
+            # G6: false whenever the semantic layer is enabled, because it then
+            # uploads caller audio to a third party. Declared from config rather
+            # than from whether a call has happened yet, so it fails toward
+            # disclosure: a server configured to transfer says so before the
+            # first byte leaves.
+            "zero_retention": not settings.semantic.enabled,
+            "third_party_audio_processors": _third_party_processors(),
+            "cm_backend": PIPELINE.cm.name,
+            "asv_backend": PIPELINE.asv.name,
+            # G7: true when asv_backend is the synthetic random-projection stub,
+            # i.e. every asv_consistency the dashboard renders is not a
+            # voiceprint. Read from the running instance, so it stays truthful
+            # even if VR_ASV_BACKEND=ecapa was requested but degraded to stub.
+            "asv_synthetic": PIPELINE.asv_is_synthetic,
         },
         "anchor": {
             "user_id": ANCHOR_STATE.get("user_id"),
@@ -219,9 +302,26 @@ def health() -> dict:
     }
 
 
+@app.get("/v1/enroll", response_model=EnrolledSpeakersResponse)
+@app.get("/api/v1/enroll", response_model=EnrolledSpeakersResponse)
+def list_enrolled(request: Request) -> EnrolledSpeakersResponse:
+    _guard(request, "enroll", "enroll_list")
+    """Enrolled user_ids (family members / anchors) — lets the dashboard offer
+    a claimed-identity picker instead of a single hardcoded anchor."""
+    return EnrolledSpeakersResponse(
+        enrolled=PIPELINE.asv.enrolled_user_ids(),
+        asv_backend=PIPELINE.asv.name,
+    )
+
+
 @app.post("/v1/enroll", response_model=EnrollResponse)
 @app.post("/api/v1/enroll", response_model=EnrollResponse)
-async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> EnrollResponse:
+async def enroll(
+    request: Request, user_id: str = Form(...), audio: UploadFile = File(...)
+) -> EnrollResponse:
+    # acting_as=user_id is the important part: enrolling a voiceprint under
+    # someone else's user_id is an identity attack, not a misconfiguration.
+    _guard(request, "enroll", "enroll", acting_as=user_id)
     data = await audio.read()
     x, sr = _read_wav_bytes(data)
     if x.size < int(0.5 * sr):
@@ -245,11 +345,16 @@ async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> Enr
 @app.post("/v1/analyze/audio", response_model=AnalyzeResponse)
 @app.post("/api/v1/analyze/audio", response_model=AnalyzeResponse)
 async def analyze(
+    request: Request,
     audio: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
     caller_id: str = Form("+91-0000000000"),
     claimed_identity: str = Form(""),
 ) -> AnalyzeResponse:
+    # claimed_identity may be "" here; the anchor fallback resolves it below,
+    # and an empty string means "no identity claimed", not "any identity".
+    _guard(request, "analyze", "analyze",
+           acting_as=claimed_identity or None)
     upload = audio or file
     if upload is None:
         raise HTTPException(400, "Audio payload required in form field 'audio' or 'file'")
@@ -265,11 +370,30 @@ async def analyze(
     sid = f"analyze-{uuid.uuid4().hex[:8]}"
     sess = CallSession(
         sid,
-        SessionContext(caller_id=caller_id, claimed_identity=claimed_identity),
+        SessionContext(caller_id=caller_id, claimed_identity=_resolve_claimed_identity(claimed_identity)),
         audit=AUDIT,
         pipeline=PIPELINE
     )
     sess.set_sample_rate(sr)
+
+    # ---- parallel ASR + keyword scam-phrase signal (advisory) --------------
+    # Computed BEFORE the window loop below and fed into the session via
+    # update_semantic() so every window's fusion call actually sees it — see
+    # the note above push_chunk's use of _semantic_state. This differs from
+    # the WS path (where semantic necessarily lags one window behind, since
+    # transcription is async and the audio arrives live): a one-shot /analyze
+    # upload is a single static file, so one transcript for the whole clip
+    # can inform every window's fusion equally, instead of running Groq once
+    # per window for no benefit. Previously this ran *after* the window loop
+    # so it never reached fusion at all (w_semantic was dead code here) and
+    # only decorated the response. Degrades to available=False on any
+    # failure; never breaks the forensic report.
+    try:
+        pcm_int16_full = (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+        semantic = await asyncio.to_thread(SEMANTIC_SIGNAL.analyze_window, pcm_int16_full, sr)
+    except Exception as e:
+        semantic = {"available": False, "semantic_risk": 0.0, "reason": f"semantic signal error: {type(e).__name__}: {e}"}
+    sess.update_semantic(semantic)
 
     # If audio is shorter than the buffer's window_samples, pad with zeros
     # so we can always evaluate at least one forensic window
@@ -278,24 +402,52 @@ async def analyze(
         pad_size = sess.buffer.window_samples - x_analysis.size
         x_analysis = np.pad(x_analysis, (0, pad_size), mode="constant")
 
-    # Feed initial window
-    sess.push_chunk(x_analysis[:sess.buffer.window_samples])
-
-    # Drain subsequent hops
+    # Feed initial window (+ drain subsequent hops), timing each push so
+    # the per-window report carries a measured inference_ms instead of a
+    # hardcoded constant. push_chunk returns None until a hop-window
+    # accumulates, so only pushes that extend sess.history record a timing.
     hop = sess.buffer.hop_samples
+    inference_ms: List[float] = []
+
+    def _timed_push(chunk: np.ndarray) -> None:
+        before = len(sess.history)
+        t0 = time.perf_counter()
+        sess.push_chunk(chunk)
+        dt_ms = (time.perf_counter() - t0) * 1000.0
+        if len(sess.history) > before:
+            inference_ms.append(round(dt_ms, 2))
+
+    _timed_push(x_analysis[:sess.buffer.window_samples])
+
     i = sess.buffer.window_samples
     while i + hop <= x_analysis.size:
-        sess.push_chunk(x_analysis[i : i + hop])
+        _timed_push(x_analysis[i : i + hop])
         i += hop
 
-    last = sess.history[-1] if sess.history else None
-    if last is None:
+    if not sess.history:
         raise HTTPException(400, "Unable to extract forensic analysis window")
+
+    # Configurable window pooling: 'last' (default), 'max' (peak risk window),
+    # or 'top_k' (highest risk window among top windows).
+    pooling_mode = getattr(settings.risk, "analyze_pooling", "last")
+    if pooling_mode == "max":
+        last = max(sess.history, key=lambda cr: cr.risk)
+    elif pooling_mode.startswith("top_"):
+        try:
+            k = int(pooling_mode.split("_")[1])
+        except (IndexError, ValueError):
+            k = 3
+        sorted_history = sorted(sess.history, key=lambda cr: cr.risk, reverse=True)
+        # Select peak of top-k (or top-k representative)
+        last = sorted_history[0]
+    else:
+        last = sess.history[-1]
 
     windows: List[dict] = []
     hop_sec = sess.buffer.cfg.hop_seconds
     win_sec = sess.buffer.cfg.window_seconds
 
+    win_samples = sess.buffer.window_samples
     for idx, cr in enumerate(sess.history):
         start_sec = round(idx * hop_sec, 2)
         end_sec = round(min(file_duration, start_sec + win_sec), 2)
@@ -304,25 +456,35 @@ async def analyze(
 
         anomaly = float(np.clip(cr.p_spoof, 0.0, 1.0))
         asv_val = float(cr.metrics.get("asv_consistency", 0.5))
+        asv_evaluated_val = bool(cr.metrics.get("asv_evaluated", False))
         channel_val = float(cr.metrics.get("channel_anomaly", 0.1))
         prosody_val = float(cr.metrics.get("prosody_unnatural", 0.2))
+
+        # Measure VAD + ZCR on this window's actual audio slice
+        # (history[k] scores samples [k*hop, k*hop+window) of x_analysis,
+        # padding included — the same signal the fusion saw).
+        seg_start = idx * hop
+        seg = x_analysis[seg_start : seg_start + win_samples]
+        vad = vad_stats(seg, sr)
+        zcr_var = zcr_variance(seg, sr)
 
         windows.append({
             "window_index": idx + 1,
             "start_sec": start_sec,
             "end_sec": end_sec,
             "duration_sec": round(win_sec, 2),
-            "is_voiced": True,
-            "speech_ratio": 0.95,
+            "is_voiced": vad["is_voiced"],
+            "speech_ratio": vad["speech_ratio"],
             "acoustic_anomaly_score": round(anomaly, 4),
             "speaker_cosine_sim": round(asv_val, 4),
-            "speaker_match": bool(asv_val >= 0.5),
+            "speaker_evaluated": asv_evaluated_val,
+            "speaker_match": bool(asv_evaluated_val and asv_val >= 0.5),
             "micro_tremor_ratio": round(max(0.0, min(1.0, 1.0 - prosody_val)), 4),
             "spectral_flatness_mean": round(channel_val, 4),
             "high_band_flatness": round(channel_val, 4),
-            "zcr_variance": 0.05,
+            "zcr_variance": zcr_var,
             "vocoder_boundary_score": round(anomaly, 4),
-            "inference_ms": 14.5,
+            "inference_ms": inference_ms[idx] if idx < len(inference_ms) else 0.0,
         })
 
     anomalies = [w["acoustic_anomaly_score"] for w in windows]
@@ -337,6 +499,9 @@ async def analyze(
 
     flatness = [w["spectral_flatness_mean"] for w in windows if w["spectral_flatness_mean"] is not None]
     mean_spectral_flatness = round(float(np.mean(flatness)), 4) if flatness else 0.1
+
+    zcr_vars = [w["zcr_variance"] for w in windows if w["zcr_variance"] is not None]
+    mean_zcr_var = round(float(np.mean(zcr_vars)), 4) if zcr_vars else 0.0
 
     boundary_timestamps = [w["start_sec"] for w in windows if w["acoustic_anomaly_score"] >= 0.65]
 
@@ -374,6 +539,14 @@ async def analyze(
     # Previously the impostor check only ran inside the BLOCK band, so an
     # impostor scoring 67/100 (CHALLENGE) was mislabelled "SUSPICIOUS_SPLICED_AUDIO"
     # even at mean_speaker_sim 0.09.
+    #
+    # DECIDED — two different impostor cutoffs, deliberately: the 0.40 below is
+    # the report-level identity *label* ("not the enrolled voice"), while the
+    # per-window *interlock* override (VR_IMPOSTOR_BLOCK_BELOW, default 0.10
+    # in config.py, enforced in risk/fusion.py) only fires on decisive
+    # mismatch. A clip in [0.10, 0.40) is therefore labelled IMPOSTOR_SPEAKER
+    # while its tier stays CHALLENGE — label states identity, tier states
+    # interlock action. See docs/RUNBOOK.md Known Limitations.
     if mean_speaker_sim < 0.40:
         verdict = "IMPOSTOR_SPEAKER"
     elif last.tier == "BLOCK" or last.risk >= 70:
@@ -386,7 +559,10 @@ async def analyze(
     dpdp = {
         "receipt_sha256": last.receipt_hash,
         "statutory_act": "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
-        "zero_retention_verified": True,
+        # G6: a claim of zero retention is only true when no audio left the
+        # box. With the semantic layer enabled it went to a named third party.
+        "zero_retention_verified": not settings.semantic.enabled,
+        "third_party_audio_processors": _third_party_processors(),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
@@ -410,6 +586,8 @@ async def analyze(
             "codec_guess": last.metrics.get("codec_guess"),
             "cm_score": last.metrics.get("cm_score"),
             "asv_consistency": last.metrics.get("asv_consistency"),
+            "asv_evaluated": last.metrics.get("asv_evaluated", False),
+            "asv_synthetic": PIPELINE.asv_is_synthetic,
             "channel_anomaly": last.metrics.get("channel_anomaly"),
             "prosody_unnatural": last.metrics.get("prosody_unnatural"),
         },
@@ -423,15 +601,18 @@ async def analyze(
         windows=windows,
         mean_acoustic_anomaly=mean_acoustic_anomaly,
         max_acoustic_anomaly=max_acoustic_anomaly,
+        asv_evaluated=bool(last.metrics.get("asv_evaluated", False)),
+        asv_synthetic=PIPELINE.asv_is_synthetic,
         mean_speaker_sim=mean_speaker_sim,
         mean_micro_tremor=mean_micro_tremor,
         mean_spectral_flatness=mean_spectral_flatness,
         mean_high_band_flatness=mean_spectral_flatness,
-        mean_zcr_variance=0.05,
+        mean_zcr_variance=mean_zcr_var,
         vocoder_phase_discontinuities_detected=len(boundary_timestamps),
         detected_boundary_timestamps=boundary_timestamps,
         dpdp_compliance=dpdp,
         target_speaker=target_speaker,
+        semantic=semantic,
     )
 
 
@@ -450,10 +631,11 @@ class VerifySpeakerResponse(BaseModel):
 
 @app.post("/v1/verify-speaker", response_model=VerifySpeakerResponse)
 @app.post("/api/v1/verify-speaker", response_model=VerifySpeakerResponse)
-async def verify_speaker(
+async def verify_speaker(request: Request, 
     audio: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
 ) -> VerifySpeakerResponse:
+    _guard(request, "analyze", "verify_speaker")
     """Score a short voice chunk against the enrolled target speaker.
 
     Honest scope: the model answers identity ("Modi ji" vs "not Modi ji"),
@@ -497,13 +679,14 @@ async def verify_speaker(
 
 @app.post("/v1/sessions")
 @app.post("/api/v1/sessions")
-def start_session(req: SessionStartRequest) -> dict:
+def start_session(request: Request, req: SessionStartRequest) -> dict:
+    _guard(request, "stream", "sessions")
     sid = f"call-{uuid.uuid4().hex[:10]}"
     SESSIONS[sid] = CallSession(
         sid,
         SessionContext(
             caller_id=req.caller_id,
-            claimed_identity=req.claimed_identity,
+            claimed_identity=_resolve_claimed_identity(req.claimed_identity),
             transaction_value_inr=req.transaction_value_inr,
             origin_country=req.origin_country,
             prior_fraud_score=req.prior_fraud_score,
@@ -516,7 +699,8 @@ def start_session(req: SessionStartRequest) -> dict:
 
 @app.post("/v1/sessions/{sid}/challenge")
 @app.post("/api/v1/sessions/{sid}/challenge")
-def grade_challenge(sid: str, req: ChallengeGradeRequest) -> dict:
+def grade_challenge(request: Request, sid: str, req: ChallengeGradeRequest) -> dict:
+    _guard(request, "stream", "challenge")
     sess = SESSIONS.get(sid)
     if sess is None:
         raise HTTPException(404, "session not found")
@@ -525,7 +709,10 @@ def grade_challenge(sid: str, req: ChallengeGradeRequest) -> dict:
 
 @app.get("/v1/audit")
 @app.get("/api/v1/audit")
-def tail_audit(n: int = 50) -> dict:
+def tail_audit(request: Request, n: int = 50) -> dict:
+    # 'audit' is deliberately absent from the default scope set: this is a log
+    # of who was scored and when.
+    _guard(request, "audit", "audit")
     events = AUDIT.tail(n)
     return {
         "chain_valid": AUDIT.verify_chain(),
@@ -547,11 +734,26 @@ async def stream_endpoint(ws: WebSocket) -> None:
         await ws.close(code=1003)
         return
 
+    # Auth on the handshake. A browser cannot set headers on a WebSocket, so
+    # the key may travel in the handshake body as "api_key"; a header is still
+    # accepted for non-browser clients. Closed with 1008 (policy violation),
+    # distinct from the 1003 above, which means "first frame was not JSON".
+    presented = handshake.get("api_key") or extract_secret(ws.headers)
+    claimed = _resolve_claimed_identity(str(handshake.get("claimed_identity", "")))
+    try:
+        key = AUTH.authenticate(presented)
+        AUTH.authorize(key, "stream", "stream", acting_as=claimed or None)
+    except AuthError as e:
+        # Never echo the detail of a 401 back over the socket beyond its reason
+        # string; it is already non-specific about which key ids exist.
+        await ws.close(code=1008, reason=e.detail[:120])
+        return
+
     sid = handshake.get("session_id") or f"ws-{uuid.uuid4().hex[:8]}"
     sr = int(handshake.get("sample_rate", 16000))
     ctx = SessionContext(
         caller_id=str(handshake.get("caller_id", "")),
-        claimed_identity=str(handshake.get("claimed_identity", "")),
+        claimed_identity=claimed,
         transaction_value_inr=float(handshake.get("transaction_value_inr", 0.0)),
         origin_country=str(handshake.get("origin_country", "IN")),
         prior_fraud_score=float(handshake.get("prior_fraud_score", 0.0)),
@@ -559,6 +761,13 @@ async def stream_endpoint(ws: WebSocket) -> None:
     sess = CallSession(sid, ctx, audit=AUDIT, pipeline=PIPELINE)
     sess.set_sample_rate(sr)
     SESSIONS[sid] = sess
+
+    # Handshake ack: always tell the client the resolved session_id (the
+    # client may have omitted it, in which case sid is server-generated).
+    # Without this, grading a challenge over REST afterwards is impossible.
+    # Clients must accept this non-verdict message before verdicts arrive;
+    # it carries no tier/risk_score so verdict parsers skip it by shape.
+    await ws.send_json({"type": "session_ack", "session_id": sid, "sample_rate": sr})
 
     try:
         while True:
@@ -584,12 +793,32 @@ async def stream_endpoint(ws: WebSocket) -> None:
                     "interlock_active": result.interlock_active,
                     "receipt_hash": result.receipt_hash,
                     "challenge": result.challenge,
+                    "semantic": result.semantic,
                 })
+
+                # Parallel semantic (ASR + keyword) pass on this window's raw
+                # audio — fire-and-forget in a worker thread so a slow/absent
+                # Groq call never blocks the acoustic verdict stream. Its
+                # result lands on the *next* window via sess.update_semantic;
+                # see vanirakshak/semantic/signal.py and session.py.
+                pending = sess.pop_pending_window()
+                if pending is not None:
+                    window_pcm, window_sr = pending
+
+                    async def _run_semantic(sess=sess, window_pcm=window_pcm, window_sr=window_sr) -> None:
+                        try:
+                            semantic_result = await asyncio.to_thread(
+                                SEMANTIC_SIGNAL.analyze_window, window_pcm, window_sr
+                            )
+                            sess.update_semantic(semantic_result)
+                        except Exception:
+                            pass  # advisory signal only — never disrupt the session
+
+                    asyncio.create_task(_run_semantic())
 
                 # Server-side alerting on challenge / block. Best-effort:
                 # a delivery failure must not break the stream.
                 if result.trigger_challenge or result.interlock_active:
-                    import asyncio
                     await asyncio.to_thread(
                         ALERTS.dispatch,
                         build_alert_payload(

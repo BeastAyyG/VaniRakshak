@@ -22,8 +22,9 @@
     <!-- Lets the incoming-call alert surface over the lock screen. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Required to reach the VaniRakshak backend over `adb reverse tcp:8000 tcp:8000`
-         (the app POSTs voice chunks to http://127.0.0.1:8000/v1/verify-speaker). -->
+    <!-- Required to reach the VaniRakshak backend: default 127.0.0.1:8000 over
+         `adb reverse tcp:8000 tcp:8000`, or a LAN IP set in the app's backend
+         settings (see VaniBackendConfig). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application

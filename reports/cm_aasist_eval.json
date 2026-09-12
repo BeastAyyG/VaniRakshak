@@ -1,0 +1,44 @@
+{
+  "checkpoint": "data\\cm_aasist.pt",
+  "partition": "dev",
+  "n_bonafide": 31334,
+  "n_spoof": 109616,
+  "metrics": {
+    "min_dcf": 0.9911987376355943,
+    "act_dcf": 3.281015460394291,
+    "act_dcf_bayes": 10.145766395081095,
+    "cllr": 2.0988194579258765,
+    "eer": 0.1641471947479808,
+    "minDCF": 0.9911987376355943,
+    "actDCF": 3.281015460394291,
+    "actDCF_bayes": 10.145766395081095,
+    "CLLR": 2.0988194579258765,
+    "EER": 0.1641471947479808,
+    "threshold_eer": 7.360414746131711,
+    "threshold_mindcf": 14.55078125,
+    "threshold_actdcf": 7.360414746131711,
+    "threshold_bayes": -0.6444820085786643,
+    "threshold_source": "explicit",
+    "calibrated": false
+  },
+  "per_attack_eer": {
+    "A09": 0.06278,
+    "A10": 0.06406,
+    "A11": 0.09246,
+    "A12": 0.21533,
+    "A13": 0.39239,
+    "A14": 0.047,
+    "A15": 0.23148,
+    "A16": 0.03233
+  },
+  "calibration": {
+    "method": "platt",
+    "scale_w": 0.369718,
+    "bias_b": -3.616373,
+    "calibrated_eer": 0.164147,
+    "calibrated_mindcf": 0.991199,
+    "calibrated_cllr": 0.653616,
+    "calibrated_actdcf_bayes": 2.879631,
+    "calibrated_threshold_bayes": -0.644482
+  }
+}

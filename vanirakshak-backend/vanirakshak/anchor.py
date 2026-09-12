@@ -27,7 +27,18 @@ from .detectors.pipeline import DetectionPipeline
 
 # vanirakshak-backend/vanirakshak/anchor.py -> up three levels is the repo root.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_ANCHOR_PATH = _REPO_ROOT / "data" / "anchor_asv_embedding.json"
+# Each ASV backend embeds into its own vector space (the stub's hand-crafted
+# random projection vs. real ECAPA-TDNN), so each has its own anchor file —
+# picked by `pipeline.asv.name`, exactly what `scripts/enroll_anchor.py`
+# tags every anchor it writes with. Loading the wrong one silently misfires:
+# cosine similarities in the wrong space land near the calibration's
+# non-target cluster, which the impostor-block override then reads as every
+# caller being an impostor.
+_ANCHOR_PATHS_BY_BACKEND = {
+    "synthetic_asv_v1": _REPO_ROOT / "data" / "anchor_asv_embedding.json",
+    "ecapa_tdnn_voxceleb": _REPO_ROOT / "data" / "anchor_asv_embedding_ecapa.json",
+}
+DEFAULT_ANCHOR_PATH = _ANCHOR_PATHS_BY_BACKEND["synthetic_asv_v1"]
 
 
 def load_anchor(
@@ -39,7 +50,8 @@ def load_anchor(
     Never raises: a missing or corrupt anchor must degrade the system, not stop
     it. Returns a state dict suitable for reporting over `/api/v1/health`.
     """
-    resolved = Path(str(path or os.environ.get("VR_ANCHOR_EMBEDDING") or DEFAULT_ANCHOR_PATH))
+    backend_default = _ANCHOR_PATHS_BY_BACKEND.get(pipeline.asv.name, DEFAULT_ANCHOR_PATH)
+    resolved = Path(str(path or os.environ.get("VR_ANCHOR_EMBEDDING") or backend_default))
     state: Dict[str, Any] = {
         "user_id": None,
         "enrolled": False,
@@ -55,6 +67,14 @@ def load_anchor(
 
     try:
         payload = json.loads(resolved.read_text(encoding="utf-8"))
+        anchor_model = str(payload.get("model", ""))
+        if anchor_model != pipeline.asv.name:
+            state["error"] = (
+                f"anchor at {resolved} was embedded by '{anchor_model}' but the running "
+                f"ASV backend is '{pipeline.asv.name}' — refusing to load (incompatible "
+                "vector spaces). Run scripts/enroll_anchor.py with the matching --backend."
+            )
+            return state
         user_id = str(payload["user_id"])
         vec = np.asarray(payload["embedding"], dtype=np.float32)
         vec = vec / (np.linalg.norm(vec) + 1e-9)

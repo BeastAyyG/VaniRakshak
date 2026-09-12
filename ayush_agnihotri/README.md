@@ -1,3 +1,13 @@
+> **Note:** this directory describes a real-time claim fact-checking system
+> (Tavily + Gemini web-search verification) — a different product from the
+> acoustic voice-forensics system the rest of this repository documents (see
+> `docs/ARCHITECTURE.md` and `docs/PROTOCOL.md`). `docs/FLOWCHARTS_CORRECTED.md`
+> explicitly explains why the shipped system does not do open-ended,
+> web-search-based fact-checking — this prototype predates or explores that
+> alternative direction. Treated the same way `docs/ARCHITECTURE.md` already
+> treats `vanirakshak_sotto/` and `vanirakshak_indic_conformer/`: a standalone
+> prototype under this repo, not the currently-running system.
+
 # 👋 Ayush Agnihotri — Creator of VaniRakshak
 
 | | |

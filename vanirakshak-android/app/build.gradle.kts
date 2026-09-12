@@ -1,15 +1,18 @@
 plugins {
     alias(libs.plugins.android.application)
+    // All sources under app/src/*/kotlin are Kotlin — without this plugin
+    // the Kotlin sources are never compiled and the build fails.
+    alias(libs.plugins.kotlin.android)
 }
 
 android {
     namespace = "com.vericall"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.vericall.temp"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
@@ -41,6 +44,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)

@@ -24,6 +24,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.vericall.R
 import com.vericall.data.VaniSampleData
 import com.vericall.databinding.ActivityTempContactsBinding
+import com.vericall.util.VaniBackendConfig
 import com.vericall.util.VaniCallRouter
 import com.vericall.util.VaniNotificationHelper
 
@@ -81,11 +82,24 @@ class TempContactsActivity : AppCompatActivity() {
 
         binding.btnEnableScreening.setOnClickListener { requestScreeningRole() }
         binding.btnEnableAlerts.setOnClickListener { requestNotificationAccess() }
+        binding.btnBackendSettings.setOnClickListener { showBackendSettingsDialog() }
+        refreshBackendLabel()
 
         // Runs the real detection path end to end, so the incoming-call alert
-        // can be demonstrated without an actual phone call.
+        // can be demonstrated without an actual phone call. Opens the guard
+        // screen as a LIVE call (the "answer" step): that is what starts the
+        // guard service, mic capture and server streaming — otherwise the WS
+        // path would never run and the backend would see zero sessions.
+        // NOTE: must NOT open the stored c1 profile screen — that path runs
+        // the in-process demo analyzer only (isLiveCall=false).
         binding.btnSimulateIncoming.setOnClickListener {
+            // Fresh-session semantics: stop any lingering guard and drop the
+            // previous call's verdict, or the new screen would replay stale
+            // bus state and never start a new server session.
+            VaniCallRouter.onEnded(this)
             VaniCallRouter.onRinging(this, SIMULATED_CALLER_NUMBER)
+            val caller = VaniCallRouter.resolve(this, SIMULATED_CALLER_NUMBER)
+            openLiveGuard(caller)
         }
 
         adapter = TempContactAdapter(
@@ -125,7 +139,6 @@ class TempContactsActivity : AppCompatActivity() {
             adapter.getItem(position)?.let { openDetail(it.id) }
         }
     }
-
     fun openDetail(contactId: String) {
         val contact = VaniSampleData.getContactById(contactId) ?: VaniSampleData.contacts[0]
         // Show real-time Android Notification with risk score
@@ -138,7 +151,76 @@ class TempContactsActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * Opens the guard screen as a LIVE call (same intent the ringing-alert
+     * notification builds): the detail screen then starts the guard service,
+     * mic capture and server streaming.
+     */
+    fun openLiveGuard(caller: VaniCallRouter.Caller) {
+        startActivity(
+            Intent(this, TempContactDetailActivity::class.java).apply {
+                putExtra(EXTRA_CONTACT_ID, "live_call")
+                putExtra(VaniNotificationHelper.EXTRA_CALLER_NAME, caller.name)
+                putExtra(VaniNotificationHelper.EXTRA_CALLER_PHONE, caller.phone)
+                putExtra(VaniNotificationHelper.EXTRA_CALLER_ENROLLED, caller.enrolled)
+            }
+        )
+    }
+
     // -------------------------------------------------------------- setup state
+
+    private fun refreshBackendLabel() {
+        val gate = if (VaniBackendConfig.isKeywordGate(this)) "keyword-gate ON" else "always-stream"
+        binding.tvBackendHost.text =
+            "Backend: ${VaniBackendConfig.getHost(this)}:${VaniBackendConfig.getPort(this)} • $gate"
+    }
+
+    /** Debug settings: LAN IP for real devices, 127.0.0.1 + adb reverse for emulator. */
+    private fun showBackendSettingsDialog() {
+        val input = android.widget.EditText(this).apply {
+            setText("${VaniBackendConfig.getHost(this@TempContactsActivity)}:${VaniBackendConfig.getPort(this@TempContactsActivity)}")
+            hint = "host:port (e.g. 192.168.1.5:8000)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+        }
+        val gateCheck = android.widget.CheckBox(this).apply {
+            text = "Wake server only on money-talk keywords (saves data/battery)"
+            isChecked = VaniBackendConfig.isKeywordGate(this@TempContactsActivity)
+        }
+        val padded = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+            addView(input)
+            addView(gateCheck)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Backend settings")
+            .setMessage("Use your PC's LAN IP on a real device. 127.0.0.1 needs `adb reverse tcp:8000 tcp:8000`. Applies to the next call.")
+            .setView(padded)
+            .setPositiveButton("Save") { _, _ ->
+                val parts = input.text.toString().trim().split(":")
+                val host = parts.getOrNull(0)?.trim().orEmpty()
+                val port = parts.getOrNull(1)?.trim()?.toIntOrNull()
+                    ?: VaniBackendConfig.getPort(this)
+                VaniBackendConfig.setKeywordGate(this, gateCheck.isChecked)
+                if (host.isNotEmpty()) {
+                    VaniBackendConfig.setHostPort(this, host, port)
+                    refreshBackendLabel()
+                    Toast.makeText(this, "Backend set to $host:$port", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Host cannot be empty", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Reset") { _, _ ->
+                VaniBackendConfig.setHostPort(
+                    this, VaniBackendConfig.DEFAULT_HOST, VaniBackendConfig.DEFAULT_PORT
+                )
+                refreshBackendLabel()
+            }
+            .show()
+    }
 
     private fun hasNotificationAccess(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -301,6 +383,7 @@ class TempContactsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshBackendLabel()
         if (::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }

@@ -34,7 +34,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from benchmarks.compute_mindcf import evaluate_system
-from ml.dataset import FeatureDataset, ForensicAudioDataset
+from ml.dataset import ASVspoofDataset, FeatureDataset, ForensicAudioDataset
 from ml.loss import AdditiveMarginSoftmaxLoss, ForensicDetectionCostLoss
 from ml.model import AcousticForensicClassifier
 
@@ -108,6 +108,20 @@ def evaluate_metrics(
     return metrics
 
 
+def _drop_last(n_samples: int, batch_size: int) -> bool:
+    """Whether the training loader should drop a ragged final batch.
+
+    `AcousticForensicClassifier.fc_embed` contains a BatchNorm1d, which raises
+    "Expected more than 1 value per channel when training" on a batch of size 1.
+    Any dataset where `len % batch_size == 1` would crash mid-epoch — dropping
+    the ragged tail avoids it. Guarded so a dataset smaller than one batch
+    still yields something rather than an empty loader.
+    """
+    if batch_size <= 1 or n_samples <= batch_size:
+        return False
+    return n_samples % batch_size == 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Train VaniRakshak Target Verification Model")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs (default: 50)")
@@ -128,6 +142,30 @@ def main() -> int:
         help="Output directory for model checkpoints",
     )
     parser.add_argument("--synthetic_samples", "--synthetic-samples", dest="synthetic_samples", type=int, default=None, help="Synthetic fallback count")
+
+    # --- Real ASVspoof corpus (the only path to an honest countermeasure) ----
+    # Without these, training falls back to identity/synthetic data, which
+    # cannot teach clone detection — see ml/dataset.py::ASVspoofDataset.
+    parser.add_argument(
+        "--asvspoof-protocol", "--asvspoof_protocol", dest="asvspoof_protocol", type=str, default=None,
+        help="ASVspoof CM protocol .txt (e.g. ASVspoof2019.LA.cm.train.trn.txt). Enables real CM training.",
+    )
+    parser.add_argument(
+        "--asvspoof-audio-dir", "--asvspoof_audio_dir", dest="asvspoof_audio_dir", type=str, default=None,
+        help="Directory holding the .flac/.wav files that protocol refers to.",
+    )
+    parser.add_argument(
+        "--asvspoof-val-protocol", "--asvspoof_val_protocol", dest="asvspoof_val_protocol", type=str, default=None,
+        help="Optional separate dev/eval protocol. Defaults to a held-out slice of --asvspoof-protocol.",
+    )
+    parser.add_argument(
+        "--asvspoof-val-audio-dir", "--asvspoof_val_audio_dir", dest="asvspoof_val_audio_dir", type=str, default=None,
+        help="Audio directory for --asvspoof-val-protocol (defaults to --asvspoof-audio-dir).",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="Cap utterances loaded from the protocol (useful for a quick smoke run).",
+    )
 
     args = parser.parse_args()
 
@@ -155,7 +193,57 @@ def main() -> int:
     test_file = test_split_csv if test_split_csv.is_file() else (test_split_json if test_split_json.is_file() else None)
 
     # Prepare dataset
-    if train_file and features_dir.is_dir():
+    #
+    # `is_countermeasure` decides which checkpoint name this run writes. Only
+    # the ASVspoof path trains an actual countermeasure ("was this machine
+    # generated?"); the other two paths train an identity/synthetic model
+    # ("is this the enrolled speaker?"). Conflating them under one filename is
+    # what produced `countermeasure_cm.pt` — a byte-identical copy of the
+    # identity model wearing a countermeasure's name.
+    is_countermeasure = bool(args.asvspoof_protocol)
+
+    if is_countermeasure:
+        if not args.asvspoof_audio_dir:
+            logger.error("--asvspoof-protocol requires --asvspoof-audio-dir")
+            return 2
+        logger.info(f"Training a COUNTERMEASURE on real ASVspoof data: {args.asvspoof_protocol}")
+        train_dataset = ASVspoofDataset(
+            protocol_path=args.asvspoof_protocol,
+            audio_dir=args.asvspoof_audio_dir,
+            augment=True,
+            is_train=True,
+            limit=args.limit,
+        )
+        if args.asvspoof_val_protocol:
+            val_dataset = ASVspoofDataset(
+                protocol_path=args.asvspoof_val_protocol,
+                audio_dir=args.asvspoof_val_audio_dir or args.asvspoof_audio_dir,
+                augment=False,
+                is_train=False,
+                limit=args.limit,
+            )
+        else:
+            # No separate dev protocol given: hold out the tail of the train
+            # protocol. Utterance-level, not speaker-disjoint — good enough for
+            # a smoke run, NOT good enough to quote a generalisation figure.
+            logger.warning(
+                "No --asvspoof-val-protocol given; holding out the last 20%% of the train "
+                "protocol. This split is not speaker-disjoint — do not quote its EER as "
+                "generalisation performance."
+            )
+            n_hold = max(1, len(train_dataset) // 5)
+            val_dataset = torch.utils.data.Subset(train_dataset, range(len(train_dataset) - n_hold, len(train_dataset)))
+            train_dataset = torch.utils.data.Subset(train_dataset, range(0, len(train_dataset) - n_hold))
+
+        bs = min(args.batch_size, len(train_dataset))
+        train_loader = DataLoader(
+            train_dataset, batch_size=bs, shuffle=True, drop_last=_drop_last(len(train_dataset), bs)
+        )
+        val_loader = DataLoader(val_dataset, batch_size=min(args.batch_size, len(val_dataset)), shuffle=False)
+        sample_x, _ = train_dataset[0]
+        input_dim = sample_x.shape[-1]
+        logger.info(f"Detected input feature dimension: {input_dim}")
+    elif train_file and features_dir.is_dir():
         logger.info(f"Loading feature dataset from splits: {train_file.name}, {test_file.name if test_file else 'N/A'}")
         train_dataset = FeatureDataset(split_path=train_file, features_dir=features_dir, is_train=True)
         val_dataset = FeatureDataset(split_path=test_file or train_file, features_dir=features_dir, is_train=False)
@@ -165,7 +253,10 @@ def main() -> int:
         class_counts = {0: max(1, labels.count(0)), 1: max(1, labels.count(1))}
         weights = [1.0 / class_counts[l] for l in labels]
         sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
-        train_loader = DataLoader(train_dataset, batch_size=min(args.batch_size, len(train_dataset)), sampler=sampler)
+        _bs = min(args.batch_size, len(train_dataset))
+        train_loader = DataLoader(
+            train_dataset, batch_size=_bs, sampler=sampler, drop_last=_drop_last(len(train_dataset), _bs)
+        )
         val_loader = DataLoader(val_dataset, batch_size=min(args.batch_size, len(val_dataset)), shuffle=False)
 
         # Detect input feature dimension (e.g. 40 for MFCC, 768 for WavLM)
@@ -177,7 +268,12 @@ def main() -> int:
         logger.info(f"Fallback to synthetic audio dataset ({synth_count} samples)")
         train_dataset = ForensicAudioDataset(synthetic_count=synth_count, augment=True)
         val_dataset = ForensicAudioDataset(synthetic_count=max(40, synth_count // 4), augment=True)
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            drop_last=_drop_last(len(train_dataset), args.batch_size),
+        )
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
         input_dim = 768
 
@@ -195,6 +291,8 @@ def main() -> int:
 
     best_mindcf = float("inf")
     best_metrics = {}
+    # Named for what this run actually learns — see the save block below.
+    ckpt_path = checkpoint_dir / ("countermeasure_asvspoof.pt" if is_countermeasure else "best_model.pt")
 
     print("\n" + "=" * 65)
     print("  [VANIRAKSHAK MODEL TRAINING & FINE-TUNING]")
@@ -226,14 +324,41 @@ def main() -> int:
         if mindcf <= best_mindcf:
             best_mindcf = mindcf
             best_metrics = val_metrics
-            ckpt_path = checkpoint_dir / "countermeasure_cm.pt"
+            # One run writes ONE checkpoint (path chosen above), named for what
+            # it actually learned. This previously saved the same weights to both
+            # `countermeasure_cm.pt` and `best_model.pt`, so an identity model
+            # shipped under a countermeasure's filename and was read as proof of
+            # clone detection.
             torch.save(model.state_dict(), ckpt_path)
-            # Also save best_model.pt alias
-            torch.save(model.state_dict(), checkpoint_dir / "best_model.pt")
 
-    # Calibrated operating thresholds
+    # Calibrated operating thresholds.
+    #
+    # `task` and `trained_on` are written alongside the metrics on purpose:
+    # a bare "EER 0.00%" in this file was previously read as "clone detection
+    # solved", when the run that produced it had never seen a clone. The
+    # metrics are only interpretable next to what the run was actually asked.
+    if is_countermeasure:
+        task = "countermeasure"
+        task_note = (
+            "Answers 'was this audio machine-generated?'. Speaker-independent. "
+            "Safe to read as clone/spoof detection performance ON THIS CORPUS."
+        )
+        trained_on = str(args.asvspoof_protocol)
+    else:
+        task = "speaker_identity"
+        task_note = (
+            "Answers 'is this the enrolled speaker?' — NOT clone detection. This run saw no "
+            "cloned or synthetic-TTS audio, so a good clone of the enrolled voice would very "
+            "likely score as a MATCH. Do not cite these metrics as anti-spoofing performance."
+        )
+        trained_on = "identity/synthetic split (see --splits-dir / synthetic fallback)"
+
     thresholds = {
         "calibrated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "task": task,
+        "task_note": task_note,
+        "trained_on": trained_on,
+        "checkpoint": ckpt_path.name,
         "input_feature_dim": input_dim,
         "best_min_dcf": round(float(best_mindcf), 4),
         "validation_eer_pct": round(float(best_metrics.get("EER", 0.0)), 2),
@@ -245,16 +370,18 @@ def main() -> int:
         "bayes_operating_threshold": -0.644,
     }
 
-    thresh_path = checkpoint_dir / "thresholds.json"
+    thresh_path = checkpoint_dir / ("thresholds_asvspoof.json" if is_countermeasure else "thresholds.json")
     thresh_path.write_text(json.dumps(thresholds, indent=2), encoding="utf-8")
 
     print("-" * 65)
     print(" [OK] Training completed successfully:")
-    print(f"  * Checkpoint    : {checkpoint_dir / 'countermeasure_cm.pt'}")
-    print(f"  * Best Model    : {checkpoint_dir / 'best_model.pt'}")
+    print(f"  * Task          : {task}")
+    print(f"  * Checkpoint    : {ckpt_path}")
     print(f"  * Thresholds    : {thresh_path}")
     print(f"  * Best minDCF   : {best_mindcf:.4f}")
     print(f"  * Validation EER: {best_metrics.get('EER', 0.0):.2f}%")
+    if not is_countermeasure:
+        print("  * NOTE          : identity model — these metrics are NOT clone detection.")
     print("=" * 65 + "\n")
 
     return 0

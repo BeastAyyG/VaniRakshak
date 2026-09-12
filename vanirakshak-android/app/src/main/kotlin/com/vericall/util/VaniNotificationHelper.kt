@@ -134,6 +134,10 @@ object VaniNotificationHelper {
     /**
      * RINGING state. Honest: no risk number is shown because nothing has been
      * analyzed yet. Returns true when the notification actually reached the shade.
+     *
+     * Android 14+: full-screen intent requires the user to grant
+     * USE_FULL_SCREEN_INTENT (visible in Settings). When it is revoked we
+     * degrade to a heads-up notification instead of silently posting nothing.
      */
     fun showIncomingAlert(context: Context, caller: VaniCallRouter.Caller): Boolean {
         createChannels(context)
@@ -144,7 +148,7 @@ object VaniNotificationHelper {
             context.getString(R.string.notif_incoming_unknown)
         }
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ALERT)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(R.drawable.ic_stat_shield)
             .setContentTitle(context.getString(R.string.notif_incoming_title, caller.name))
             .setContentText(body)
@@ -152,7 +156,6 @@ object VaniNotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setContentIntent(guardPendingIntent(context, caller.name, caller.phone, 11, caller.enrolled))
-            .setFullScreenIntent(guardPendingIntent(context, caller.name, caller.phone, 12, caller.enrolled), true)
             .addAction(
                 0,
                 context.getString(R.string.notif_action_open),
@@ -161,9 +164,29 @@ object VaniNotificationHelper {
             .setColor(ContextCompat.getColor(context, R.color.risk_neutral))
             .setAutoCancel(true)
             .setOngoing(false)
-            .build()
 
-        return notifySafe(context, TAG_ALERT, ID_ALERT, notification)
+        if (canUseFullScreenIntent(context)) {
+            builder.setFullScreenIntent(
+                guardPendingIntent(context, caller.name, caller.phone, 12, caller.enrolled), true
+            )
+        } else {
+            // Heads-up fallback: same tap target, no FSI.
+            builder.setFullScreenIntent(null, false)
+        }
+
+        return notifySafe(context, TAG_ALERT, ID_ALERT, builder.build())
+    }
+
+    /** Android 14+ (API 34): true when the FSI permission is granted (default on). */
+    fun canUseFullScreenIntent(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 34) return true
+        return try {
+            val manager = context.getSystemService(NotificationManager::class.java)
+                ?: return true
+            manager.canUseFullScreenIntent()
+        } catch (e: Exception) {
+            true
+        }
     }
 
     // ------------------------------------------------------------------ live meter
@@ -204,17 +227,22 @@ object VaniNotificationHelper {
         speakerMatch: Int,
         level: RiskLevel,
         message: String,
-        enrolled: Boolean = false
+        enrolled: Boolean = false,
+        tier: String? = null,
+        receiptHash: String? = null
     ) {
         createChannels(context)
 
-        val label = levelLabel(context, level)
+        val label = tier ?: levelLabel(context, level)
         val detail = context.getString(
             R.string.notif_live_detail,
             syntheticScore,
             speakerMatch
         )
-        val body = "$message • $detail"
+        var body = "$message • $detail"
+        if (!receiptHash.isNullOrBlank()) {
+            body += " • receipt ${receiptHash.take(8)}…"
+        }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_LIVE)
             .setSmallIcon(R.drawable.ic_stat_shield)

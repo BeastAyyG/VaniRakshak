@@ -230,7 +230,10 @@ class GroqWhisperASR(ASRProvider):
             "segments": segments,
             "language_code": detected_lang.lower(),
             "language": lang_display,
-            "language_probability": 0.99,
+            # Groq verbose_json returns no language confidence — None, not a
+            # fabricated 0.99. No consumer reads this key (nothing in
+            # vanirakshak-backend references language_probability).
+            "language_probability": None,
             "duration": round(duration, 2),
             "inference_sec": round(inference_sec, 3),
             "device": "Groq Cloud LPU"

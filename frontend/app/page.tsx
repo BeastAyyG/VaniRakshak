@@ -15,6 +15,7 @@ import DemoQuickSelector, { BENCHMARKS, BenchmarkItem } from "./components/DemoQ
 import AudioUploadZone from "./components/AudioUploadZone";
 import WaveformEvidenceTimeline from "./components/WaveformEvidenceTimeline";
 import ForensicVerdictCard, { ForensicReportData } from "./components/ForensicVerdictCard";
+import EnrolledSpeakersPanel from "./components/EnrolledSpeakersPanel";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000/ws/stream";
@@ -45,7 +46,7 @@ function issueLocalChallenge(): LocalChallenge {
   return {
     phrase: `${w1}, ${d1}, ${w2}, ${d2}.`,
     expected_digits: [d1, d2],
-    expected_full: `${d1} ${d2}`,
+    expected_full: `${w1} ${d1} ${w2} ${d2}`,
     instructions: "Now repeat ONLY the digits, in order, quickly.",
     issued_at_ms: Date.now(),
     seed: Math.floor(Math.random() * 1_000_000),
@@ -75,6 +76,30 @@ type EventLog = {
   severity: "info" | "warning" | "critical";
   hash?: string;
 };
+
+// The wire contract (docs/PROTOCOL.md) is 16 kHz mono int16. We request
+// 16 kHz on getUserMedia and the AudioContext, but a browser may honor a
+// different hardware rate — sending that through while claiming 16000 in
+// the handshake silently corrupts every downstream detector. Resample to
+// the contract rate (linear interpolation is fine for speech) whenever
+// the context rate disagrees.
+const STREAM_RATE = 16000;
+
+function resampleToStreamRate(input: Float32Array, fromRate: number): Float32Array {
+  if (fromRate === STREAM_RATE || input.length === 0) return input;
+  const ratio = fromRate / STREAM_RATE;
+  const outLen = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * ratio;
+    const i0 = Math.floor(src);
+    const frac = src - i0;
+    const a = input[i0];
+    const b = input[Math.min(i0 + 1, input.length - 1)];
+    out[i] = a + (b - a) * frac;
+  }
+  return out;
+}
 
 export default function Home() {
   // Backend health & system state
@@ -123,7 +148,12 @@ export default function Home() {
   // Where the active challenge came from. Only a server-issued phrase can be
   // graded by the backend (it grades against its OWN challenge), so a locally
   // generated drill phrase must be graded locally.
+  // The ref is read inside async event handlers (submitChallengeResponse),
+  // where it must be the freshest value. The state mirror below is what
+  // render may read — a ref read during render is not reactive, so the
+  // interlock could compute its tier from a stale source. Keep both in sync.
   const challengeSourceRef = useRef<"server" | "local">("local");
+  const [challengeSource, setChallengeSource] = useState<"server" | "local">("local");
   const [activeChallenge, setActiveChallenge] = useState<LocalChallenge | null>(null);
   const [challengeStatus, setChallengeStatus] = useState<"none" | "awaiting" | "passed" | "failed">("none");
   const [challengeResponseText, setChallengeResponseText] = useState<string>("");
@@ -326,7 +356,7 @@ export default function Home() {
           ws.send(
             JSON.stringify({
               session_id: sessionId,
-              sample_rate: 16000,
+              sample_rate: STREAM_RATE,
               caller_id: "+91-STREAM-MIC",
               claimed_identity: claimedIdentityRef.current || CLAIMED_IDENTITY_FALLBACK,
               transaction_value_inr: 0,
@@ -341,8 +371,19 @@ export default function Home() {
           mediaStreamRef.current = stream;
 
           const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-          const audioContext = new AudioContextClass({ sampleRate: 16000 });
+          const audioContext = new AudioContextClass({ sampleRate: STREAM_RATE });
           audioContextRef.current = audioContext;
+
+          // The browser may ignore the requested rate (hardware constraints,
+          // Safari). Everything downstream is resampled to STREAM_RATE so the
+          // handshake's sample_rate claim stays truthful.
+          const contextRate = audioContext.sampleRate;
+          if (contextRate !== STREAM_RATE) {
+            addEvent(
+              `Audio hardware runs at ${contextRate} Hz — resampling to ${STREAM_RATE} Hz in-client`,
+              "warning"
+            );
+          }
 
           const source = audioContext.createMediaStreamSource(stream);
 
@@ -354,7 +395,7 @@ export default function Home() {
 
             workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
               if (ws.readyState !== WebSocket.OPEN) return;
-              const input = e.data;
+              const input = resampleToStreamRate(e.data, contextRate);
 
               let sum = 0;
               for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
@@ -382,7 +423,7 @@ export default function Home() {
 
             processor.onaudioprocess = (e) => {
               if (ws.readyState !== WebSocket.OPEN) return;
-              const input = e.inputBuffer.getChannelData(0);
+              const input = resampleToStreamRate(e.inputBuffer.getChannelData(0), contextRate);
 
               let sum = 0;
               for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
@@ -416,12 +457,24 @@ export default function Home() {
       ws.onmessage = (msg) => {
         try {
           const telemetry = JSON.parse(msg.data);
+          // Handshake ack (docs/PROTOCOL.md §2): the server echoes the
+          // resolved session_id first — adopt it so REST challenge-grading
+          // targets the right session even if we omitted session_id.
+          if (telemetry.type === "session_ack" && typeof telemetry.session_id === "string") {
+            sessionIdRef.current = telemetry.session_id;
+            addEvent(`Stream session acknowledged (${telemetry.session_id})`, "info");
+            return;
+          }
           // Backend telemetry contract (docs/PROTOCOL.md)
           if (telemetry.risk_score !== undefined || telemetry.tier !== undefined) {
             const risk = Math.round(telemetry.risk_score ?? 0);
             const tier: string = telemetry.tier || "ALLOW";
             const pSpoof: number = telemetry.p_spoof ?? risk / 100;
             const asv: number | null = telemetry.metrics?.asv_consistency ?? null;
+            const asvEvaluated: boolean = Boolean(telemetry.metrics?.asv_evaluated);
+            // G7: is the ASV behind this number a real voiceprint or the
+            // synthetic random-projection stub? Drives the "(SYNTHETIC)" label.
+            const asvSynthetic: boolean = Boolean(telemetry.metrics?.asv_synthetic);
             const snr: number | null = telemetry.metrics?.snr_db ?? null;
             const interlockActive: boolean = Boolean(
               telemetry.interlock_active || tier === "BLOCK" || risk >= 70
@@ -444,6 +497,7 @@ export default function Home() {
                 };
                 activeChallengeRef.current = ch;
                 challengeSourceRef.current = "server";
+                setChallengeSource("server");
                 challengeIssuedAtRef.current = Date.now();
                 setActiveChallenge(ch);
                 setChallengeStatus("awaiting");
@@ -490,7 +544,10 @@ export default function Home() {
                   ? "SUSPICIOUS_SPLICED_AUDIO"
                   : "AUTHENTIC_TARGET",
               mean_acoustic_anomaly: pSpoof,
+              asv_evaluated: asvEvaluated,
+              asv_synthetic: asvSynthetic,
               mean_speaker_sim: asv,
+              semantic: telemetry.semantic ?? prev?.semantic ?? null,
               dpdp_compliance: {
                 receipt_sha256: telemetry.receipt_hash || "hash-chain-verified",
                 statutory_act: "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
@@ -568,6 +625,7 @@ export default function Home() {
     activeChallengeRef.current = null;
     challengePendingRef.current = false;
     challengeSourceRef.current = "local";
+    setChallengeSource("local");
     setActiveChallenge(null);
     setChallengeStatus("none");
     setChallengeResponseText("");
@@ -589,10 +647,40 @@ export default function Home() {
     : "ALLOW";
 
   const liveTier = micLive ? currentTier : reportTier;
+  // The backend owns the interlock decision (AGENTS.md §2). Once a live
+  // stream is running and the active challenge was issued by the server,
+  // the next WS verdict already reflects whatever the backend's grading
+  // decided — so challengeStatus must never override tier here, or a
+  // caller the server has since re-BLOCKed would show as unlocked. Local
+  // overrides are only for the demo carve-out docs/PROTOCOL.md §5
+  // describes: a manual drill (no server challenge exists to track) or the
+  // backend being unreachable (no live verdict to trust either way).
+  // Reads `challengeSource` (state), NOT challengeSourceRef.current. A ref
+  // read during render is not reactive, so the previous version could
+  // evaluate against a stale source — and this predicate is what decides
+  // whether the client may unlock a transaction the server has blocked.
+  //
+  // Permissive (||), deliberately. Each condition marks a case where there
+  // is no server verdict to defer to:
+  //   challengeSource === "local"  — a manual drill; the backend has no
+  //     challenge of its own to grade, so it will never speak to this one.
+  //   !backendOnline               — nothing to defer to at all.
+  //   !micLive                     — no live stream, so `liveTier` came
+  //     from a one-shot report rather than a streamed verdict.
+  //
+  // The case that governs the choice: a SERVER-issued challenge, backend
+  // online, mic live, graded pass — then the next window streams BLOCK.
+  // All three conditions are false there, so the override does not engage
+  // and liveTier (BLOCK) stands. That is the AGENTS.md §2 invariant, and
+  // it holds without needing &&. Requiring all three instead would disable
+  // the drill carve-out docs/PROTOCOL.md §5 documents, buying no safety
+  // the || form doesn't already give.
+  const useLocalChallengeOverride =
+    challengeSource === "local" || !backendOnline || !micLive;
   const effectiveTier: string =
-    challengeStatus === "passed"
+    useLocalChallengeOverride && challengeStatus === "passed"
       ? "ALLOW"
-      : challengeStatus === "failed"
+      : useLocalChallengeOverride && challengeStatus === "failed"
       ? "BLOCK"
       : liveTier;
 
@@ -641,6 +729,13 @@ export default function Home() {
       reason = g.reason;
     }
 
+    // Release the pending-challenge gate now that this one is graded, so a
+    // *second* server challenge in the same session (e.g. risk climbs again
+    // after a pass) can register in ws.onmessage instead of only logging an
+    // event with no UI update — the gate exists to stop this same challenge
+    // from being captured twice, not to block all future ones.
+    challengePendingRef.current = false;
+
     if (passed) {
       setChallengeStatus("passed");
       addEvent(
@@ -662,6 +757,7 @@ export default function Home() {
     const ch = issueLocalChallenge();
     activeChallengeRef.current = ch;
     challengeSourceRef.current = "local";
+    setChallengeSource("local");
     challengeIssuedAtRef.current = Date.now();
     setActiveChallenge(ch);
     setChallengeStatus("awaiting");
@@ -819,6 +915,23 @@ export default function Home() {
                 <span>Run challenge drill</span>
               </button>
             </div>
+          </div>
+
+          {/* Multi-speaker enrollment — lets the operator switch which
+              enrolled voice is being protected, or enrol a new one, instead
+              of being locked to the single hardcoded anchor. */}
+          <div>
+            <EnrolledSpeakersPanel
+              backendUrl={BACKEND_URL}
+              claimedIdentity={claimedIdentity}
+              disabled={micLive}
+              onSelectIdentity={(id) => {
+                claimedIdentityRef.current = id;
+                setClaimedIdentity(id);
+                addEvent(`Claimed identity set to "${id.replace(/_/g, " ")}"`, "info");
+              }}
+              onEvent={addEvent}
+            />
           </div>
 
           {/* Step 1: Standardized Forensic Benchmark Suite */}

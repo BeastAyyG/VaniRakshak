@@ -1,5 +1,5 @@
 """
-VaniRakshak Sotto Edition — Local OpenVINO Dictation & Scam Shield Server
+VaniRakshak SACH — Local OpenVINO Dictation & Scam Shield Server
 Engine: Sotto OpenVINO Hardware Accelerated Whisper (Intel CPU/GPU/NPU)
 Port: 8082 (Runs side-by-side with original Faster-Whisper on 8080)
 """
@@ -38,7 +38,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
-from google import genai
+import google.genai as genai
 from google.genai import types
 
 from sotto_engine import transcribe_with_sotto, get_openvino_device, get_sotto_model
@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(
-    title="VaniRakshak Sotto Edition — OpenVINO Voice Scam Shield",
+    title="VaniRakshak SACH — OpenVINO Voice Scam Shield",
     version="2.1.0",
     description="Local Sotto OpenVINO Whisper Speech Recognition & Crawl4AI Fact Grounding",
     lifespan=lifespan
@@ -178,7 +178,7 @@ async def discover_and_crawl_sources(query_text: str, user_urls: Optional[List[s
     return scraped_results
 
 def evaluate_threat_and_scam(transcript: str, client: genai.Client) -> dict:
-    prompt = f"""You are VaniRakshak Sotto's elite cyber-fraud defense engine.
+    prompt = f"""You are VaniRakshak SACH's elite cyber-fraud defense engine.
 Analyze the following phone audio transcript (in English, Hindi, or Hinglish) for voice scams, financial fraud, impersonation, or social engineering tactics.
 
 TRANSCRIPT:
@@ -332,7 +332,7 @@ async def health_check():
     ov_device = get_openvino_device()
     return {
         "status": "online",
-        "app": "VaniRakshak Sotto Edition v2.1",
+        "app": "VaniRakshak SACH v2.1",
         "stt_engine": f"Sotto Whisper (Groq Cloud LPU + OpenVINO Host: {ov_device})",
         "model": "whisper-large-v3-turbo",
         "openvino_device": ov_device,

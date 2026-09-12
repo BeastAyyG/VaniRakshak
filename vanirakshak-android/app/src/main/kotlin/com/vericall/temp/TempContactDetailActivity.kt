@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.vericall.R
+import com.vericall.audio.VaniChallengeGrader
 import com.vericall.audio.VaniLiveVoiceAnalyzer
 import com.vericall.data.VaniSampleData
 import com.vericall.databinding.ActivityTempContactDetailBinding
@@ -23,6 +24,7 @@ import com.vericall.model.RiskLevel
 import com.vericall.model.VaniContact
 import com.vericall.shield.VaniIncidentLogger
 import com.vericall.shield.VaniScamShieldController
+import com.vericall.util.VaniBackendConfig
 import com.vericall.util.VaniCallRouter
 import com.vericall.util.VaniNotificationHelper
 import com.vericall.util.VaniRiskBus
@@ -36,6 +38,8 @@ class TempContactDetailActivity : AppCompatActivity() {
     private var isLiveCall = false
     private var riskListener: ((VaniRiskBus.Snapshot) -> Unit)? = null
     private var amplitudeListener: ((Float) -> Unit)? = null
+    private var latestSnapshot: VaniRiskBus.Snapshot? = null
+    private var challengeIssuedAtMs: Long = 0L
 
     private val speakerPollHandler = Handler(Looper.getMainLooper())
     private val speakerPollRunnable = object : Runnable {
@@ -72,6 +76,9 @@ class TempContactDetailActivity : AppCompatActivity() {
 
         binding.btnTriggerChallenge.setOnClickListener {
             triggerLivenessChallenge()
+        }
+        binding.btnGradeChallenge.setOnClickListener {
+            gradeLivenessChallenge()
         }
 
         binding.btnBlockCall.setOnClickListener {
@@ -165,7 +172,9 @@ class TempContactDetailActivity : AppCompatActivity() {
         VaniRiskBus.addAmplitudeListener(amplitudeListener!!)
 
         riskListener = { snapshot ->
+            latestSnapshot = snapshot
             applyRisk(snapshot.risk, snapshot.synthetic, snapshot.speakerMatch, snapshot.level, snapshot.message)
+            renderServerVerdict(snapshot)
         }
         VaniRiskBus.addListener(riskListener!!)
 
@@ -259,34 +268,133 @@ class TempContactDetailActivity : AppCompatActivity() {
             ContextCompat.getColorStateList(this, R.color.mute)
     }
 
+    /** Server-driven verdict extras: tier badge + receipt hash + server challenge phrase. */
+    private fun renderServerVerdict(snapshot: VaniRiskBus.Snapshot) {
+        if (snapshot.listenState == VaniRiskBus.ListenState.LISTENING) {
+            binding.tvServerTier.visibility = View.VISIBLE
+            binding.tvServerTier.text = "👂 ${snapshot.message}"
+        } else if (snapshot.serverDriven && !snapshot.tier.isNullOrEmpty()) {
+            binding.tvServerTier.visibility = View.VISIBLE
+            val mode = if (snapshot.interlockActive) " • interlock ${snapshot.interlockActive}" else ""
+            binding.tvServerTier.text = "Server: ${snapshot.tier}$mode"
+        } else if (!snapshot.serverDriven && snapshot.risk > 0) {
+            binding.tvServerTier.visibility = View.VISIBLE
+            binding.tvServerTier.text = "On-device fallback (backend unreachable)"
+        } else {
+            binding.tvServerTier.visibility = View.GONE
+        }
+
+        if (!snapshot.receiptHash.isNullOrEmpty()) {
+            binding.tvReceiptHash.visibility = View.VISIBLE
+            binding.tvReceiptHash.text = "Receipt: ${snapshot.receiptHash}"
+        } else {
+            binding.tvReceiptHash.visibility = View.GONE
+        }
+
+        // Server-issued challenge phrase wins over the local demo list.
+        if (!snapshot.challengePhrase.isNullOrEmpty()) {
+            binding.cardChallengeBox.visibility = View.VISIBLE
+            binding.tvChallengePhrase.text = snapshot.challengePhrase
+            val instructions = snapshot.challengeInstructions
+            binding.tvChallengeResult.text = if (!instructions.isNullOrEmpty()) {
+                instructions
+            } else {
+                "Ask the caller to repeat the phrase above, then grade the response."
+            }
+            binding.tvChallengeResult.setTextColor(
+                ContextCompat.getColor(this, R.color.warning_deep)
+            )
+            challengeIssuedAtMs = System.currentTimeMillis()
+        }
+    }
+
     private fun triggerLivenessChallenge() {
+        // Prefer the live server phrase if the backend already issued one.
+        val serverPhrase = latestSnapshot?.challengePhrase?.takeIf { it.isNotEmpty() }
         binding.cardChallengeBox.visibility = View.VISIBLE
-        val phrases = listOf(
-            "Mango, 8, Nadi, 4, Blue",
-            "Surya, 9, Chai, 3, Red",
-            "Amber, 5, Sagar, 7, Green",
-            "Pavan, 2, Bharat, 6, Yellow"
-        )
-        binding.tvChallengePhrase.text = phrases.random()
-        binding.tvChallengeResult.text = "Ingesting telephony response, measuring synthesis latency..."
+        if (serverPhrase != null) {
+            binding.tvChallengePhrase.text = serverPhrase
+            binding.tvChallengeResult.text =
+                latestSnapshot?.challengeInstructions
+                    ?: "Ask the caller to repeat the phrase above, then grade the response."
+        } else {
+            val phrases = listOf(
+                "Mango, 8, Nadi, 4, Blue",
+                "Surya, 9, Chai, 3, Red",
+                "Amber, 5, Sagar, 7, Green",
+                "Pavan, 2, Bharat, 6, Yellow"
+            )
+            binding.tvChallengePhrase.text = phrases.random()
+            binding.tvChallengeResult.text =
+                "Offline demo phrase. Connect the backend for a server-graded challenge."
+        }
         binding.tvChallengeResult.setTextColor(ContextCompat.getColor(this, R.color.warning_deep))
+        challengeIssuedAtMs = System.currentTimeMillis()
 
         binding.btnTriggerChallenge.isEnabled = false
-
         Handler(Looper.getMainLooper()).postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
-            binding.btnTriggerChallenge.isEnabled = true
-
-            if (liveLevel == RiskLevel.DANGER) {
-                binding.tvChallengeResult.text =
-                    "Liveness failed. Response latency 1820ms vs human ~350ms - deepfake replay confirmed."
-                binding.tvChallengeResult.setTextColor(ContextCompat.getColor(this, R.color.error_tone))
-            } else {
-                binding.tvChallengeResult.text =
-                    "Liveness passed. Human response latency 340ms - natural pitch contour matched."
-                binding.tvChallengeResult.setTextColor(ContextCompat.getColor(this, R.color.success_deep))
-            }
+            if (!isFinishing && !isDestroyed) binding.btnTriggerChallenge.isEnabled = true
         }, 1800)
+    }
+
+    /**
+     * Grades what the user heard against the issued phrase.
+     * A pass is advisory only — it never clears an active BLOCK interlock.
+     */
+    private fun gradeLivenessChallenge() {
+        val heard = binding.etChallengeResponse.text.toString().trim()
+        if (heard.isEmpty()) {
+            Toast.makeText(this, "Enter the digits you heard first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val latencyMs = (System.currentTimeMillis() - challengeIssuedAtMs).coerceAtLeast(0L)
+        val sid = latestSnapshot?.sessionId
+        if (sid.isNullOrEmpty()) {
+            // Offline: honest local digit check, advisory only (never server-graded).
+            val expected = binding.tvChallengePhrase.text.toString().filter { it.isDigit() }
+            val got = heard.filter { it.isDigit() }
+            val passed = expected.isNotEmpty() && expected == got
+            binding.tvChallengeResult.text = if (passed) {
+                "Offline check: digits match (not server-graded)."
+            } else {
+                "Offline check: digits do not match expected $expected (not server-graded)."
+            }
+            binding.tvChallengeResult.setTextColor(
+                ContextCompat.getColor(this, if (passed) R.color.success_deep else R.color.error_tone)
+            )
+            return
+        }
+        binding.tvChallengeResult.text = "Grading with backend…"
+        VaniChallengeGrader.grade(VaniBackendConfig.httpBase(this), sid, heard, latencyMs) { result ->
+            runOnUiThread {
+                if (result == null) {
+                    binding.tvChallengeResult.text = "Grading failed — backend unreachable."
+                    binding.tvChallengeResult.setTextColor(
+                        ContextCompat.getColor(this, R.color.error_tone)
+                    )
+                    return@runOnUiThread
+                }
+                val conf = result.confidence?.let { " (confidence ${(it * 100).toInt()}%)" } ?: ""
+                binding.tvChallengeResult.text = if (result.passed) {
+                    "Server grade: PASS$conf — advisory only, interlock unchanged."
+                } else {
+                    "Server grade: FAIL — treat the call as untrusted."
+                }
+                binding.tvChallengeResult.setTextColor(
+                    ContextCompat.getColor(
+                        this,
+                        if (result.passed) R.color.success_deep else R.color.error_tone
+                    )
+                )
+                if (latestSnapshot?.interlockActive == true) {
+                    Toast.makeText(
+                        this,
+                        "Interlock stays BLOCK — grading never overrides it here.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 
     private fun blockAndTerminateCall(callerName: String) {

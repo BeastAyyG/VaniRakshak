@@ -305,6 +305,42 @@ def test_shared_pipeline_enrollment() -> None:
     assert_(s2.is_enrolled("alice"), "s2 sees alice enrollment from s1 via shared pipeline")
 
 
+def test_analyze_pooling() -> None:
+    """Verify that /api/v1/analyze/audio respects analyze_pooling setting."""
+    print("[test] /api/v1/analyze/audio window pooling modes")
+    from fastapi.testclient import TestClient
+    from vanirakshak.server.app import app
+    from vanirakshak.config import settings
+
+    client = TestClient(app)
+    import io, wave, struct
+    sr = 16000
+    duration = 6.0
+    n_samples = int(sr * duration)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(struct.pack(f"<{n_samples}h", *([1000] * n_samples)))
+    wav_bytes = buf.getvalue()
+
+    # Test last
+    object.__setattr__(settings.risk, "analyze_pooling", "last")
+    r1 = client.post("/api/v1/analyze/audio", files={"file": ("test.wav", wav_bytes, "audio/wav")})
+    assert_(r1.status_code == 200, "analyze last mode returned 200")
+    assert_("overall_risk_score" in r1.json(), "overall_risk_score in response")
+
+    # Test max
+    object.__setattr__(settings.risk, "analyze_pooling", "max")
+    r2 = client.post("/api/v1/analyze/audio", files={"file": ("test.wav", wav_bytes, "audio/wav")})
+    assert_(r2.status_code == 200, "analyze max mode returned 200")
+    assert_("overall_risk_score" in r2.json(), "overall_risk_score in response")
+
+    # Revert to last
+    object.__setattr__(settings.risk, "analyze_pooling", "last")
+
+
 def main() -> int:
     tests = [
         test_cm_signs,
@@ -319,6 +355,7 @@ def main() -> int:
         test_audit_receives_events_after_analyze,
         test_short_audio_no_keyerror,
         test_shared_pipeline_enrollment,
+        test_analyze_pooling,
     ]
     t0 = time.time()
     for t in tests:

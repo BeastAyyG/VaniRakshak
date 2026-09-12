@@ -1,11 +1,19 @@
 package com.vericall
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.vericall.shield.VaniIncidentLogger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class VaniIncidentLoggerTest {
 
     @Before
@@ -49,5 +57,41 @@ class VaniIncidentLoggerTest {
 
         VaniIncidentLogger.clearActiveOverlayTriggers()
         assertTrue(VaniIncidentLogger.getActiveOverlayTriggers().isEmpty())
+    }
+
+    @Test
+    fun receiptAndTierRoundTripThroughSqlite() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val id = VaniIncidentLogger.recordIncident(
+            context = context,
+            callerNumber = "+919876543210",
+            callerName = "Unknown",
+            peakRisk = 91,
+            verdictSummary = "Server verdict: BLOCK",
+            receiptHash = "deadbeef",
+            serverTier = "BLOCK"
+        )
+        assertTrue(id > 0)
+        val read = VaniIncidentLogger.getIncident(context, id)
+        assertEquals("+919876543210", read?.callerNumber)
+        assertEquals(91, read?.peakRisk)
+        assertEquals("deadbeef", read?.receiptHash)
+        assertEquals("BLOCK", read?.serverTier)
+    }
+
+    @Test
+    fun missingReceiptReadsBackNull() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val id = VaniIncidentLogger.recordIncident(
+            context = context,
+            callerNumber = "123",
+            callerName = "Local",
+            peakRisk = 20,
+            verdictSummary = "offline estimate"
+        )
+        val read = VaniIncidentLogger.getIncident(context, id)
+        assertNull(read?.receiptHash)
+        assertNull(read?.serverTier)
+        assertNull(VaniIncidentLogger.getIncident(context, -999L))
     }
 }

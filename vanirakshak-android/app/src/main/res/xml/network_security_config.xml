@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- The backend runs on the dev PC and is reached via `adb reverse tcp:8000 tcp:8000`,
-         so it appears as localhost on the device. Allow cleartext HTTP to localhost only. -->
+    <!-- The backend runs on the dev PC. Default path is `adb reverse tcp:8000 tcp:8000`
+         (appears as localhost on the device). For Wi-Fi LAN testing set the host in
+         the app Settings to the PC LAN IP (e.g. 192.168.1.5) — cleartext HTTP to
+         other hosts falls back to usesCleartextTraffic="true" in the manifest.
+         10.0.2.2 is the emulator alias for the host loopback. -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
     </domain-config>
 </network-security-config>

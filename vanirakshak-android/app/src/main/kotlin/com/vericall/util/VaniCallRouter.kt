@@ -123,6 +123,10 @@ object VaniCallRouter {
         VaniNotificationHelper.cancelAlert(context)
         context.stopService(Intent(context, VaniCallGuardService::class.java))
         CallStateStore.clear(context)
+        // A new call must never replay the previous call's verdict: without
+        // this, the guard screen sees a cached snapshot and skips starting
+        // the service, so no fresh analysis (and no server session) happens.
+        VaniRiskBus.reset()
     }
 
     /**
@@ -142,7 +146,16 @@ object VaniCallRouter {
         }
         ContextCompat.startForegroundService(context, intent)
         true
+    } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+        // Android 12+: FGS launch from background is denied. Caller falls back
+        // to the foreground guard screen, which may then start the service.
+        android.util.Log.w("VaniCallRouter", "FGS start denied (background): ${e.message}")
+        false
+    } catch (e: SecurityException) {
+        android.util.Log.w("VaniCallRouter", "FGS start denied (security): ${e.message}")
+        false
     } catch (e: Exception) {
+        android.util.Log.w("VaniCallRouter", "FGS start failed: ${e.message}")
         false
     }
 }

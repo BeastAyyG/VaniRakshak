@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 def _env(name: str, default: str) -> str:
@@ -55,6 +56,12 @@ class RiskConfig:
     # fused score. Set to <= 0 to disable.
     impostor_block_below: float = _env_float("VR_IMPOSTOR_BLOCK_BELOW", 0.10)
 
+    # Window aggregation mode for one-shot file analysis (/analyze/audio).
+    # Options: 'last' (default, evaluates final rolling window),
+    #          'max' (peak risk / anomaly across all evaluated windows),
+    #          'top_k' (average of top k windows, or top-k max pooling).
+    analyze_pooling: str = _env("VR_ANALYZE_POOLING", "last").lower()
+
 
 @dataclass(frozen=True)
 class FusionConfig:
@@ -72,6 +79,13 @@ class FusionConfig:
     w_channel: float = _env_float("VR_FUSION_W_CHANNEL", 0.9)
     w_context: float = _env_float("VR_FUSION_W_CONTEXT", 0.5)
 
+    # Weight for the ASR/keyword semantic signal (vanirakshak/semantic/).
+    # Deliberately smaller than the acoustic weights: this is a parallel,
+    # advisory context term (scam-phrase keyword hits in the live transcript),
+    # not a primary detector — the acoustic evidence stays authoritative.
+    # 0.0 (and semantic_risk absent) reproduces the pre-ASR fusion exactly.
+    w_semantic: float = _env_float("VR_FUSION_W_SEMANTIC", 0.4)
+
 
 # A more aggressive preset for demos where the synthetic detector can't
 # always tell genuine from spoofed on the first window. Override by
@@ -83,9 +97,58 @@ _DEMO_OVERRIDES = {
         "w_prosody": 1.2,
         "w_channel": 1.5,
         "w_context": 1.0,
+        "w_semantic": 0.6,
         "intercept": -2.4,
     },
 }
+
+# Real-detector-backend preset (VR_ASV_BACKEND=ecapa / VR_CM_BACKEND=wavlm).
+#
+# Swapping in real ECAPA-TDNN and WavLM features changes each detector's
+# score distribution completely — the stub-era weights fail
+# scripts/integration_check.py's tier-match gate outright when real backends
+# are active. w_prosody/w_channel are left at the stub-era defaults — that
+# script's fitting exercise found the real anchor (formal speeches) vs.
+# other-speaker (casual audio) recordings differ systematically in prosody
+# for reasons unrelated to genuine-vs-spoofed, so refitting those two from
+# that dataset would encode the confound rather than a real signal.
+#
+# w_asv=2.0 came from scripts/fit_fusion_weights.py's isolated ASV-axis fit
+# (real anchor vs. real other-speaker recordings), capped well below the raw
+# MLE — see that script's printed caveat for why the raw number isn't
+# trustworthy at this sample size.
+#
+# w_cm did NOT end up near that script's fitted value. The CM axis was fit
+# on synthetic_speech()/synthetic_spoofed() clips, which separate very
+# cleanly under WavLM's anomaly heuristic — but the actual demo clips (real
+# recordings) showed the heuristic reads a higher baseline "anomaly" on real
+# genuine speech than the synthetic generator does, so the synthetic fit's
+# weight pushed genuine real clips into CHALLENGE. w_cm=1.5 (below even the
+# stub's 2.4) was reached by checking against scripts/integration_check.py's
+# tier gate directly, not by the isolated synthetic fit — an honest sign
+# that a synthetic-only calibration set doesn't fully transfer to real audio
+# for this detector. See docs/archive/AUDIT_REPORT.md for the residual gap this leaves:
+# demo_02 (degraded copy) and demo_03 (splice) still land one tier hotter
+# than their hand-labeled expectation, because a real anomaly-sensitive
+# detector plausibly does react somewhat to real distortion/splice
+# artifacts — a legitimate difference from the stub, not necessarily a
+# miscalibration, but not validated against real labeled data either.
+_REAL_BACKEND_OVERRIDES = {
+    "w_cm": 1.5,
+    "w_asv": 2.0,
+}
+
+
+@dataclass(frozen=True)
+class AuditConfig:
+    # Durable JSONL path for the hash-chained audit log. Empty disables
+    # persistence (in-memory ring only). The default lives under the repo's
+    # data/ dir and is gitignored — it is a runtime artifact, not source.
+    path: str = _env(
+        "VR_AUDIT_PATH",
+        str(Path(__file__).resolve().parent.parent.parent / "data" / "audit_log.jsonl"),
+    )
+    max_events: int = _env_int("VR_AUDIT_MAX_EVENTS", 10_000)
 
 
 @dataclass(frozen=True)
@@ -100,16 +163,80 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class SemanticConfig:
+    """ASR / scam-phrase semantic layer (docs/10 G6).
+
+    **Off by default.** When on, every 4.04 s caller audio window is uploaded
+    to Groq -- a third-party, US-hosted service -- for transcription, which
+    contradicts the zero-retention claim this system otherwise makes under
+    DPDP Act 2023 s.8(7). So it requires an explicit opt-in, and turning it on
+    flips ``zero_retention`` to false on /v1/health and names the processor in
+    every ``dpdp_compliance`` block.
+
+    Deliberately *not* keyed off GROQ_API_KEY alone: that key sits in .env for
+    the separate SACH and IndicConformer prototypes, and its mere presence must
+    not silently start shipping caller audio abroad.
+    """
+
+    enabled: bool = _env("VR_SEMANTIC_ENABLED", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    # Named so the compliance surface can disclose exactly who receives audio.
+    provider: str = "groq"
+
+
+@dataclass(frozen=True)
+class AuthConfig:
+    """API-key auth. Disabled when ``api_keys`` is empty (see server/auth.py).
+
+    Off by default so the demo, ``npm run dev:all`` and
+    ``scripts/integration_check.py`` keep working; the server logs a loud
+    warning in that state. ``VR_REQUIRE_AUTH=1`` refuses to start without keys.
+    """
+
+    # "key_id:secret[:scopes[:users]]", comma-separated.
+    api_keys: str = _env("VR_API_KEYS", "")
+    require_auth: bool = _env("VR_REQUIRE_AUTH", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    # Per-key, per-route ceilings in requests/minute; 0 disables that limit.
+    # /enroll is tighter than /analyze because it writes a voiceprint.
+    rate_limit_analyze: int = _env_int("VR_RATE_LIMIT_ANALYZE", 60)
+    rate_limit_enroll: int = _env_int("VR_RATE_LIMIT_ENROLL", 10)
+
+
+@dataclass(frozen=True)
 class Settings:
     audio: AudioConfig = field(default_factory=AudioConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     fusion: FusionConfig = field(default_factory=FusionConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    audit: AuditConfig = field(default_factory=AuditConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
+    semantic: SemanticConfig = field(default_factory=SemanticConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")
         if preset in _DEMO_OVERRIDES:
             object.__setattr__(self, "fusion", FusionConfig(**_DEMO_OVERRIDES[preset]))
+            return
+
+        real_backend_active = (
+            os.environ.get("VR_ASV_BACKEND", "stub").lower() == "ecapa"
+            or os.environ.get("VR_CM_BACKEND", "stub").lower() in ("wavlm", "aasist")
+        )
+        if real_backend_active:
+            # An explicit VR_FUSION_W_CM / VR_FUSION_W_ASV env var always wins —
+            # this preset only fills in the ones the user didn't set themselves.
+            overrides = {
+                k: v
+                for k, v in _REAL_BACKEND_OVERRIDES.items()
+                if os.environ.get(f"VR_FUSION_W_{k[2:].upper()}") is None
+            }
+            if overrides:
+                object.__setattr__(
+                    self, "fusion", FusionConfig(**{**self.fusion.__dict__, **overrides})
+                )
 
 
 settings = Settings()

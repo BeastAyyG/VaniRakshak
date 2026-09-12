@@ -41,7 +41,16 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 ANCHOR_DIR = REPO_ROOT / "data" / "anchor_speaker"
 OTHER_DIR = REPO_ROOT / "data" / "other_speakers"
-OUT_PATH = REPO_ROOT / "data" / "anchor_asv_embedding.json"
+# Each ASV backend embeds into a different vector space, so each gets its own
+# anchor file — anchor.py's load_anchor() picks the matching one for
+# whichever backend is actually running (VR_ASV_BACKEND) and refuses to load
+# a mismatched one. Loading an ecapa-space anchor into the stub (or vice
+# versa) produces near-random cosine similarities that silently misfire the
+# impostor-block override on every caller, real or not.
+OUT_PATHS = {
+    "stub": REPO_ROOT / "data" / "anchor_asv_embedding.json",
+    "ecapa": REPO_ROOT / "data" / "anchor_asv_embedding_ecapa.json",
+}
 
 USER_ID = "narendra_modi"
 TARGET_SR = 16000
@@ -112,7 +121,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--evaluate", action="store_true", help="score anchor vs other speakers after enrolling")
     ap.add_argument("--anchor-dir", default=str(ANCHOR_DIR))
-    ap.add_argument("--out", default=str(OUT_PATH))
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="defaults to the backend-specific path in OUT_PATHS (data/anchor_asv_embedding.json "
+        "for --backend stub, data/anchor_asv_embedding_ecapa.json for --backend ecapa)",
+    )
     ap.add_argument(
         "--holdout",
         type=int,
@@ -120,9 +134,29 @@ def main() -> int:
         help="keep the last N clips out of enrolment (default 3) so the demo suite "
         "can be built from audio the anchor never saw",
     )
+    ap.add_argument(
+        "--backend",
+        choices=["stub", "ecapa"],
+        default="stub",
+        help="'stub' (default): zero-dependency numpy/scipy embedding. "
+        "'ecapa': real speechbrain ECAPA-TDNN embedding (requires "
+        "requirements-asv.txt) — produces an anchor that actually carries "
+        "voice biometrics, needed for real multi-speaker enrollment.",
+    )
     args = ap.parse_args()
 
-    from vanirakshak.detectors.asv import ASVModel  # type: ignore
+    if args.backend == "ecapa":
+        from vanirakshak.detectors.asv_ecapa import ASVModelECAPA  # type: ignore
+
+        def ASVModel():  # noqa: N802 - shadows the stub factory used below
+            inst = ASVModelECAPA.try_create()
+            if inst is None:
+                print("!! --backend ecapa requested but the real model failed to load")
+                print("   (missing `speechbrain`? run: pip install -r requirements-asv.txt)")
+                raise SystemExit(1)
+            return inst
+    else:
+        from vanirakshak.detectors.asv import ASVModel  # type: ignore
 
     anchor_dir = Path(args.anchor_dir)
     all_clips = load_dir(anchor_dir)
@@ -198,12 +232,15 @@ def main() -> int:
         "calibration": calibration,
         "embedding": [round(float(v), 6) for v in emb],
         "note": (
-            "Embedding from the serving ASV stub (Welch-PSD features, seeded random "
+            "Real speechbrain/spkrec-ecapa-voxceleb ECAPA-TDNN embedding — "
+            "genuine voice biometrics, actually discriminates speakers."
+            if args.backend == "ecapa"
+            else "Embedding from the serving ASV stub (Welch-PSD features, seeded random "
             "projection) — NOT ECAPA-TDNN. Signal-dependent and target-conditioned, "
             "but far weaker than a real speaker model."
         ),
     }
-    out = Path(args.out)
+    out = Path(args.out) if args.out else OUT_PATHS[args.backend]
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"Wrote {out.relative_to(REPO_ROOT)}  ({out.stat().st_size} bytes, no audio retained)")

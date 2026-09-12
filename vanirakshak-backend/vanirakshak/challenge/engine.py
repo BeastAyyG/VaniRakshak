@@ -76,7 +76,7 @@ class ChallengeEngine:
             if i < len(digits):
                 tokens.append(digits[i])
         phrase = ", ".join(tokens) + "."
-        expected_full = " ".join(digits)
+        expected_full = " ".join(tokens)
         return Challenge(
             phrase=phrase,
             expected_digits=digits,

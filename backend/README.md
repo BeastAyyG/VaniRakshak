@@ -1,33 +1,29 @@
-# VaniRakshak Enterprise Deep Learning Backend
+# backend/ — shared model-loading modules (not a standalone service)
 
-Enterprise FastAPI backend leveraging deep neural acoustic architectures:
-- Intermediate 768-dimensional representations from `microsoft/wavlm-base-plus` across 2.0s sliding windows.
-- Speaker verification using 192-dimensional embeddings from `speechbrain/spkrec-ecapa-voxceleb`.
-- High-frequency Wiener entropy (spectral flatness) and vocoder phase boundary localization.
-- Energy-based Voice Activity Detection (VAD).
+This directory used to run its own FastAPI server with a heavier, GPU-oriented
+detection pipeline (WavLM + ECAPA-TDNN) alongside `vanirakshak-backend/`'s
+lightweight numpy/scipy one. Running two live backends with two incompatible
+WebSocket protocols was confusing and only one (`vanirakshak-backend/`) was
+ever wired to the dashboard — so the standalone server here has been retired.
 
-## Architecture
+What's left, and why it's still here:
 
-```
-backend/
-├── Dockerfile           # Production container definition
-├── requirements.txt     # Deep learning dependencies (torch, torchaudio, transformers, speechbrain)
-├── app/
-│   ├── main.py          # FastAPI application entrypoint & WebSocket /ws/stream handler
-│   ├── config.py        # Hardware auto-detection, thresholds, model identifiers
-│   ├── api/             # REST API routers (/api/v1/health, /api/v1/analyze/audio, /api/v1/enroll)
-│   ├── core/            # In-memory audio tensor standardization and forensic signal DSP
-│   ├── engine/          # Sliding window buffer and multi-factor risk fusion engine
-│   └── models/          # WavLM feature extractor & ECAPA speaker verifier
-└── tests/               # Forensic DSP and signal processing test suite
-```
+- `app/models/ecapa_verifier.py`, `app/models/wavlm_detector.py` — the two
+  genuinely working pieces of this backend: real pretrained-model loading
+  (`speechbrain/spkrec-ecapa-voxceleb`, `microsoft/wavlm-base-plus`). Ported
+  into `vanirakshak-backend/vanirakshak/detectors/{asv_ecapa,cm_wavlm}.py`
+  as optional real-model backends behind the same `CMModel`/`ASVModel`
+  interface the stub detectors use (`VR_ASV_BACKEND=ecapa`,
+  `VR_CM_BACKEND=wavlm`). Kept here as the canonical source rather than
+  duplicated, and imported by `vanirakshak-backend` via a `sys.path` insert —
+  the same pattern `vanirakshak/semantic/signal.py` already uses for
+  `services/asr/` below.
+- `services/asr/` — the ASR + transliteration stack, already depended on by
+  `vanirakshak-backend/vanirakshak/semantic/signal.py` for the live
+  transcript/keyword signal. Unrelated to the model files above; kept for
+  the same reason.
 
-## Running the Backend
-
-```bash
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## Lightweight Alternative
-
-For resource-constrained laptop environments without CUDA GPUs or deep learning wheels, see `vanirakshak-backend/`, which provides a pure NumPy / SciPy implementation capable of sub-25ms latency on a single CPU core.
+Everything else (`app/main.py`, `api/`, `engine/`, `core/`, `tests/`,
+`Dockerfile`) was the standalone server and has been removed. The single
+integrated backend is `vanirakshak-backend/` — see its `README.md` and
+`docs/PROTOCOL.md` for the actual, currently-running system.

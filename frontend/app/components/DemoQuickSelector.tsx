@@ -105,15 +105,15 @@ export const BENCHMARKS: BenchmarkItem[] = [
     audioUrl: "/demo/demo_04_impostor.wav",
     expectedVerdict: "IMPOSTOR_SPEAKER",
     measuredVerdict: "IMPOSTOR_SPEAKER",
-    measuredRisk: 67.0,
+    measuredRisk: 70.0,
     measuredSpeakerSim: 0.0903,
     badge: "BENCHMARK 4 • IMPOSTOR",
     color: "purple",
     description:
-      "A genuinely different, unenrolled speaker. Similarity collapses to 0.09 against the anchor and risk rises into the CHALLENGE band.",
+      "A genuinely different, unenrolled speaker. Similarity collapses to 0.09 against the anchor, and the deterministic impostor override forces the tier to BLOCK.",
     keyDetails: [
       "Speaker similarity 0.09 vs anchor",
-      "Risk 67.0/100 — CHALLENGE band",
+      "Risk 70.0/100 — BLOCK band",
       "Zero-retention audit logged",
     ],
     caveat:

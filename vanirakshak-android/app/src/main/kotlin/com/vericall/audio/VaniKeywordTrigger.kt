@@ -25,7 +25,7 @@ import android.util.Log
  */
 class VaniKeywordTrigger(
     private val context: Context,
-    private val keywords: Set<String> = VaniCallGuardKeywords,
+    private val keywords: Set<String> = DEFAULT_KEYWORDS,
     private val onKeyword: (String) -> Unit
 ) {
     private var recognizer: SpeechRecognizer? = null
@@ -66,8 +66,7 @@ class VaniKeywordTrigger(
         runCatching { recognizer?.startListening(intent) }
     }
 
-    private val listener = object : RecognitionListener {
-        override fun onResults(results: Bundle?) = handle(results)
+    private val listener = object : RecognitionListener {        override fun onResults(results: Bundle?) = handle(results)
         override fun onPartialResults(results: Bundle?) = handle(results)
         override fun onError(error: Int) {
             // Restart on transient errors (e.g. no speech). Stop only on fatal ones.
@@ -85,8 +84,7 @@ class VaniKeywordTrigger(
 
     private fun handle(results: Bundle?) {
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: return
-        val text = matches.joinToString(" ").lowercase()
-        val hit = keywords.firstOrNull { kw -> text.contains(kw) }
+        val hit = findKeyword(matches.joinToString(" "), keywords)
         if (hit != null) {
             isRunning = false
             onKeyword(hit)
@@ -97,12 +95,37 @@ class VaniKeywordTrigger(
         }
     }
 
-    private companion object {
+    companion object {
         const val TAG = "VaniKeywordTrigger"
-        // Mirrors VaniCallGuardService.TRIGGER_KEYWORDS without a hard import cycle.
-        val VaniCallGuardKeywords = setOf(
-            "bank", "banking", "rupee", "rupees", "rupay", "rs ", "rs.", "payment",
-            "transaction", "transfer", "account", "otp", "पैसा", "बैंक", "रुपया", "भुगतान"
+        /**
+         * Canonical money-talk trigger set (English + Hindi). Single source of
+         * truth — the guard service references this instead of its own copy.
+         */
+        val DEFAULT_KEYWORDS = setOf(
+            "money", "cash", "bank", "banking", "rupee", "rupees", "rupay",
+            "payment", "pay now", "transaction", "transfer", "account",
+            "otp", "upi", "pin", "card", "cvv", "kyc",
+            "loan", "emi", "prize", "lottery", "refund", "deposit", "withdraw",
+            "reward", "bonus", "invest", "profit", "double your money",
+            "gift card", "voucher", "recharge", "premium", "policy", "claim",
+            "ransom", "verify", "verification", "customer care",
+            "rs ", "rs.", "पैसा", "बैंक", "रुपया", "रुपये", "भुगतान", "खाता", "ओटीपी"
         )
+
+        /**
+         * Pure matcher, unit-tested. Short tokens (pin, otp, upi, emi, rs)
+         * use word boundaries so "shopping" doesn't trip "pin"; longer
+         * phrases use substring matching for partial-result tolerance.
+         */
+        fun findKeyword(text: String, keywords: Set<String> = DEFAULT_KEYWORDS): String? {
+            val lower = text.lowercase()
+            return keywords.firstOrNull { kw ->
+                if (kw.length <= 4 && kw.all { it.isLetterOrDigit() }) {
+                    Regex("\\b${Regex.escape(kw)}\\b").containsMatchIn(lower)
+                } else {
+                    lower.contains(kw)
+                }
+            }
+        }
     }
 }

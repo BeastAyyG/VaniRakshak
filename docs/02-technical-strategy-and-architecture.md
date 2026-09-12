@@ -150,6 +150,17 @@ $$P(\text{spoof} \mid \mathbf{x}) = \sigma(z) = \frac{1}{1 + e^{-z}}$$
 - ASV verification weight ($w_{\text{asv}}$ / `VR_FUSION_W_ASV`): $1.60$
 - Prosody weight ($w_{\text{prosody}}$ / `VR_FUSION_W_PROSODY`): $0.70$
 - Channel anomaly weight ($w_{\text{channel}}$ / `VR_FUSION_W_CHANNEL`): $0.90$
+
+These apply to the default zero-dependency stub detectors and were hand-picked, not fit to any
+measured distribution — `scripts/fit_fusion_weights.py` says so in its own header. When real
+detector backends are active (`VR_ASV_BACKEND=ecapa`, `VR_CM_BACKEND=wavlm` — see the Production
+Upgrade Path table below), `config.py`'s `_REAL_BACKEND_OVERRIDES` auto-applies $w_{\text{cm}}=1.5$,
+$w_{\text{asv}}=2.0$, refit against measured real/synthetic score distributions via that script.
+$w_{\text{prosody}}$ and $w_{\text{channel}}$ are deliberately left unchanged even then — the
+fitting exercise found those two features confounded with recording-source differences unrelated
+to genuine-vs-spoofed in the available calibration data, not a signal worth encoding. Full
+methodology, the regularization-strength sensitivity found, and the honest partial result (2/4
+demo clips match their expected tier with real backends active) are in `archive/AUDIT_REPORT.md` §12.
 - Context risk weight ($w_{\text{context}}$ / `VR_FUSION_W_CONTEXT`): $0.50$
 
 The raw window risk score is scaled to the standard percentage range:
@@ -164,17 +175,20 @@ Real-world call audio contains transient glitches, packet drops, or brief coughi
 However, against high-confidence real-time voice cloning attacks, smoothing would introduce hazardous alert delay. To counter this, VaniRakshak implements a **Fast-Rise Override**:
 
 ```python
-# vanirakshak/risk/fusion.py
-if window.cm_score < -2.0:
-    # Decisive spoof evidence: bypass smoothing immediately
+# vanirakshak/risk/fusion.py — RiskFusionEngine.update()
+p = calibrate(window, context_risk, self.fusion_cfg, semantic_risk)
+if p > self.risk_cfg.fast_rise_threshold:
+    # Decisive spoof posterior: bypass EMA smoothing immediately
     risk = 100.0 * p
+    self._ema = risk
 else:
     # Standard temporal smoothing
+    risk = 100.0 * p
     if self._ema is None:
-        self._ema = 100.0 * p
+        self._ema = risk
     else:
-        self._ema = self.risk_cfg.ema_alpha * (100.0 * p) + (1.0 - self.risk_cfg.ema_alpha) * self._ema
-    risk = self._ema
+        self._ema = self.risk_cfg.ema_alpha * risk + (1.0 - self.risk_cfg.ema_alpha) * self._ema
+        risk = self._ema
 
 risk = float(max(0.0, min(100.0, risk)))
 ```
@@ -182,11 +196,29 @@ risk = float(max(0.0, min(100.0, risk)))
 Mathematically:
 
 $$\text{risk}_t = \begin{cases} 
-100 \cdot P(\text{spoof} \mid \mathbf{x}_t) & \text{if } \text{LLR}_{\text{cm}} < -2.0 \quad (\text{Fast-Rise Override}) \\
+100 \cdot P(\text{spoof} \mid \mathbf{x}_t) & \text{if } P(\text{spoof} \mid \mathbf{x}_t) > \tau_{\text{fast-rise}} \quad (\text{Fast-Rise Override}) \\
 \alpha \cdot (100 \cdot P(\text{spoof} \mid \mathbf{x}_t)) + (1 - \alpha) \cdot \text{EMA}_{t-1} & \text{otherwise} 
 \end{cases}$$
 
-where default smoothing factor $\alpha = 0.65$ (`VR_EMA_ALPHA`).
+where default smoothing factor $\alpha = 0.65$ (`VR_EMA_ALPHA`) and
+$\tau_{\text{fast-rise}} = 0.85$ (`VR_FAST_RISE_THRESHOLD`) — the trigger is
+the **fused posterior probability**, not a raw CM log-likelihood-ratio
+threshold on its own; an earlier version of this document (and this section,
+until corrected) described the trigger as `LLR_cm < -2.0`, which is not what
+the code checks. `docs/07-privacy-compliance-and-apis.md`'s environment
+table has always had this right.
+
+**A second, separate override exists that this section did not previously
+document:** a deterministic **impostor override**
+(`VR_IMPOSTOR_BLOCK_BELOW`, default `0.10`). When `window.asv_score` — the
+ASV consistency score — falls below this threshold, the tier is forced to
+`BLOCK` regardless of the fused risk score, and both `risk` and the EMA are
+floored at the `CHALLENGE`/`BLOCK` boundary so the reported score and tier
+never contradict each other. This only engages when ASV actually ran
+(`metrics.asv_evaluated`) — an unenrolled/unclaimed caller's neutral `0.5`
+score is never below the threshold. See `docs/PROTOCOL.md` §8 for the full
+client-facing implication: a client deriving its own tier from `risk_score`
+alone can disagree with the server in exactly this case.
 
 ---
 
@@ -206,6 +238,7 @@ The banking transaction interlock (`vanirakshak.session.CallSession`) operates a
 - Once an analysis window triggers the **BLOCK** tier ($\text{risk} \ge 70$), `self._blocked` is set to `True`.
 - It remains latched for the remainder of the session; subsequent lower scores cannot release the interlock.
 - A failed challenge (`grade_challenge` failure) immediately escalates the session to **BLOCK** and triggers the latch.
+- A passed challenge never releases the latch or re-arms a further challenge (one-shot gate: grading is digit-order + latency only, no voice biometrics).
 - Outbound alert payload is automatically generated with cryptographic receipt hash and dispatched via `AlertDispatcher` to `VR_ALERT_WEBHOOK_URL`.
 
 ---
@@ -216,8 +249,8 @@ To ensure technical integrity and honest engineering reporting, the following ta
 
 | Component | Current Implementation in Codebase | Production Upgrade Path (Drop-in Ready) |
 |---|---|---|
-| **Countermeasure (CM)** | Deterministic spectral Welch PSD feature extraction, pitch zero-crossing CV, and linear log-likelihood scoring (`vanirakshak.detectors.cm.CMModel`). | PyTorch AASIST / AASIST-L graph trained on ASVspoof 5. Drops directly into `CMModel.score(x, sr)` preserving the exact LLR return contract. |
-| **Speaker Verification (ASV)** | 192-dim deterministic random projection from standardized log-mel spectral energy (`vanirakshak.detectors.asv.ASVModel`). | SpeechBrain pretrained `ECAPA-TDNN` (192-dim) or Microsoft `WavLM-base-plus` feature extractor. Drops directly into `ASVModel.embed(x, sr)`. |
+| **Countermeasure (CM)** | Default: deterministic spectral Welch PSD feature extraction, pitch zero-crossing CV, and linear log-likelihood scoring (`vanirakshak.detectors.cm.CMModel`). | **Implemented.** `VR_CM_BACKEND=aasist` → `detectors.cm_aasist.CMModelAASIST`, real `microsoft/wavlm-base-plus` features feeding a trained AASIST-L graph head (`data/cm_aasist.pt`, 89k params) trained with full stochastic codec/telephony augmentation on ASVspoof 5 Track 1 Train partition (182,357 utterances). Measured ASVspoof 5 Dev partition performance: pooled **EER = 16.415 %**, **minDCF = 0.9912**, **actDCF = 3.2810**, calibrated $C_{\text{llr}} = 0.6536$. Measured ASVspoof 5 Eval partition performance across held-out attacks A17–A32 (`reports/cm_aasist_eval_partition.json`, 20k slice): raw **minDCF = 0.8048** (improves from pre-aug 0.8834), raw **EER = 13.627 %** (pre-aug 12.878%), calibrated **$\text{actDCF}_{\text{Bayes}} = 1.3795$**, **$C_{\text{llr}} = 0.7204$**. Per-attack eval EERs range from 2.93% (A29) to 26.22% (A28). Fully resolves YouTube compression acoustic domain shift: authentic speech (`demo_01_genuine.wav`) is classified as **ALLOW** in the production sliding-window path (Risk **31.6**, mean LLR **+2.55**, 3.4 points below the CHALLENGE threshold; center-cropped 10s yields Risk **24.0**, LLR **+3.85**, ASV 0.901). Impostor speech (`demo_04_impostor.wav`, an authentic human voice) is rejected as **BLOCK** (Risk 70.0) via the hard ASV biometric override (`asv_consistency ~ 0.011 < 0.10`). Falls back to `VR_CM_BACKEND=wavlm` or default DSP stub if checkpoint is absent. |
+| **Speaker Verification (ASV)** | Default: 192-dim deterministic random projection from standardized log-mel spectral energy (`vanirakshak.detectors.asv.ASVModel`). | **Implemented.** `VR_ASV_BACKEND=ecapa` → `detectors.asv_ecapa.ASVModelECAPA`, real SpeechBrain `ECAPA-TDNN` (192-dim) via `backend/app/models/ecapa_verifier.py`, same `_embed_raw`/`consistency_score` contract. Real anchor: `data/anchor_asv_embedding_ecapa.json` via `scripts/enroll_anchor.py --backend ecapa` — measured separation 0.845 mean anchor vs. 0.199 mean other-speaker, zero overlap (`archive/AUDIT_REPORT.md` §12). |
 | **Channel Detector** | Multi-band Welch power ratio partition (`vanirakshak.detectors.channel`). | Pretrained CNN/ResNet-18 channel codec classifier. |
 | **Prosody Extractor** | IIR Butterworth pitch-band filtering and zero-crossing interval variance (`vanirakshak.detectors.prosody`). | PyWorld / CREPE / TorchAudio pitch and shimmer/jitter estimation. |
 | **Buffering & Fusion** | Fully functional production-grade DPDP-compliant sliding ring buffer and Bayesian fusion engine. | Direct reuse; zero changes required. |

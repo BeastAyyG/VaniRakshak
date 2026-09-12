@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- hero card: lavender -> sky -> mint pastel wash, 24dp radius -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="135"
+        android:centerColor="@color/pastel_sky"
+        android:endColor="@color/pastel_mint"
+        android:startColor="@color/pastel_lavender" />
+    <corners android:radius="24dp" />
+</shape>

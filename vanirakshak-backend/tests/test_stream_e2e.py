@@ -33,7 +33,7 @@ REQUIRED_TOP_LEVEL = {
     "metrics",
     "interlock_active",
 }
-REQUIRED_METRICS = {"asv_consistency", "snr_db"}
+REQUIRED_METRICS = {"asv_consistency", "asv_synthetic", "snr_db"}
 
 
 def pcm_chunk(seconds: float = 1.5, freq: float = 220.0) -> bytes:
@@ -63,6 +63,11 @@ def test_websocket_stream_e2e() -> None:
     with client.websocket_connect("/ws/stream") as ws:
         # 1. Text handshake FIRST — the server closes with 1003 otherwise.
         ws.send_text(json.dumps(handshake))
+
+        # 1b. Handshake ack FIRST — carries the resolved session_id.
+        ack = ws.receive_json()
+        assert ack.get("type") == "session_ack", f"expected session_ack, got: {ack}"
+        assert ack.get("session_id") == "e2e-protocol-check", f"ack echoed wrong id: {ack}"
 
         # 2. Stream audio: 3 chunks (each 1.5s @ 16kHz = 4.5s > 4.04s window)
         chunk = pcm_chunk(1.5)

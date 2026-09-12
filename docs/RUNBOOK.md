@@ -2,7 +2,18 @@
 
 ## Starting the Stack
 
-### Backend (port 8000)
+### One command (recommended)
+
+```bash
+npm run dev:all
+```
+
+`scripts/dev.js` creates `vanirakshak-backend/.venv` on first run, boots the
+backend on :8000, waits for `/api/v1/health`, then starts the frontend on
+:3001 with `NEXT_PUBLIC_BACKEND_URL`/`NEXT_PUBLIC_BACKEND_WS` pointed at it.
+This is what `.claude/launch.json` uses.
+
+### Backend only (port 8000)
 
 ```bash
 cd vanirakshak-backend
@@ -10,11 +21,11 @@ pip install -r requirements.txt
 python run.py
 ```
 
-### Frontend Dashboard (port 3001)
+### Frontend only (port 3001)
 
 ```bash
 npm install --prefix frontend
-npm run dev
+npm run dev --prefix frontend
 ```
 
 ### Docker Compose (both services)
@@ -45,6 +56,93 @@ cd vanirakshak-backend
 python -m pytest tests/ -v
 ```
 
+### Full Integration Check (what the dashboard actually depends on)
+
+```bash
+python scripts/integration_check.py
+```
+
+Boots the app in-process (no running server needed) and exercises health,
+`/analyze/audio` on all four demo clips, `/verify-speaker`, the audit chain,
+and a real WebSocket session replaying the browser's exact framing —
+including the challenge object shape, `metrics.asv_evaluated`, the
+`semantic` block's key set, and the `VR_IMPOSTOR_BLOCK_BELOW` tier override.
+Pass `--live --base-url http://127.0.0.1:8000` to run it against an
+already-running server instead.
+
+### Real detector backends (optional, verified working)
+
+```bash
+cd vanirakshak-backend
+pip install -r requirements-asv.txt --extra-index-url https://download.pytorch.org/whl/cpu
+set VR_ASV_BACKEND=ecapa
+set VR_CM_BACKEND=aasist
+python ..\scripts\integration_check.py
+```
+
+This swaps the zero-dependency stubs for real SpeechBrain ECAPA-TDNN
+embeddings and the trained AASIST-L anti-spoofing countermeasure (`data/cm_aasist.pt`,
+trained on ASVspoof 5 with frozen WavLM-base-plus representations).
+Measured on the demo corpus and ASVspoof 5:
+- **ASV (ECAPA-TDNN)**: genuine `asv=0.854`, impostor `asv=0.044` — clean separation.
+- **CM (AASIST-L)**: ASVspoof 5 dev pooled **EER = 16.415 %**, **minDCF = 0.9912**,
+  calibrated $C_{\text{llr}} = 0.6536$. ASVspoof 5 eval partition pooled **minDCF = 0.8048**
+  (improving from pre-aug 0.8834), raw **EER = 13.627 %** (pre-aug 12.878%),
+  calibrated **$\text{actDCF}_{\text{Bayes}} = 1.3795$**, **$C_{\text{llr}} = 0.7204$**
+  across held-out attacks A17–A32 (`reports/cm_aasist_eval_partition.json`). On demo clips,
+  genuine scores autonomously as **ALLOW** in the production sliding-window path
+  (`demo_01_genuine.wav` Risk **31.6**, mean LLR **+2.55**, 3.4 points off the CHALLENGE boundary;
+  center-crop yields Risk 24.0, LLR +3.85). Impostor speech (`demo_04_impostor.wav`, an authentic human voice)
+  is **not** currently blocked: measured 2026-09-12 on two machines, it scores
+`asv_consistency` 0.044-0.135 and lands at Risk 67.7-67.8 **CHALLENGE**. The
+`asv ~ 0.011 -> Risk 70.0 BLOCK` figure previously recorded here is stale. The
+override does not fire because `VR_IMPOSTOR_BLOCK_BELOW` (0.10) is a single
+constant applied to two ASV backends whose score scales differ by an order of
+magnitude - see `docs/10-quality-and-hardening-plan.md`, "the impostor
+interlock threshold is scale-wrong", for the measurements and the fix.
+Two operational notes: (1) the tier-match gates in `integration_check.py` were
+calibrated for stub-era operating points and reflect increased sensitivity under
+real backends (`degraded_copy` → CHALLENGE, `partial_splice` → BLOCK); (2) if
+`data/cm_aasist.pt` is absent, setting `VR_CM_BACKEND=wavlm` uses the WavLM feature
+heuristic fallback.
+
+### Demo → working system (activation checklist)
+
+```powershell
+# 1. Real detectors (verified working — see above)
+pip install -r vanirakshak-backend/requirements-asv.txt
+$env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
+# 2. Trained countermeasure — Available via data/cm_aasist.pt (dev EER 16.415%, minDCF 0.9912;
+#    codec/telephony-augmented retrain — see docs/08 §12.1 for the tradeoff vs the 10.404% pre-aug run).
+#    Loaded automatically when VR_CM_BACKEND="aasist"; reports aasist_l_wavlm_dev_eer_0.164.
+# 3. Enroll real speakers (10–20 s genuine 16 kHz mono WAV each)
+#    Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/enroll `
+#      -Form @{ user_id="alice"; audio=[IO.File]::OpenRead("alice_20s.wav") }
+#    then pass "claimed_identity": "alice" in the WS handshake (PROTOCOL.md §1).
+# 4. Semantic layer (OFF by default): pip install groq; $env:GROQ_API_KEY="gsk-...";
+#    $env:VR_SEMANTIC_ENABLED="1". This uploads caller audio to Groq (US) and
+#    flips zero_retention to false on /v1/health and in dpdp_compliance.
+# 5. Android: needs Android Studio (SDK + JDK 17); point
+#    VaniBackendConfig at the LAN host, e.g. ws://192.168.1.10:8000/v1/stream.
+# 6. Auth: VR_API_KEYS="client1:<secret>:stream|analyze:alice" and
+#    VR_REQUIRE_AUTH=1 so the server refuses to start open. Unset keys = every
+#    route open, including POST /v1/enroll and GET /v1/audit; the server logs a
+#    warning at startup in that state. Scopes/format: PROTOCOL.md section 8.
+# 7. Harden further: gateway/VPN in front; VR_HOST / VR_PORT
+#    to bind, VR_AUDIT_PATH to durable storage (default data/audit_log.jsonl).
+```
+
+### Doc/Code Drift Check
+
+```bash
+python scripts/check_docs.py
+```
+
+Verifies every file path and `VR_*` environment variable a doc mentions
+actually exists, and that documented WebSocket verdict keys match what
+`test_stream_e2e.py` asserts. Run after touching `docs/PROTOCOL.md`,
+`docs/API_SPEC.md`, or `vanirakshak/config.py`.
+
 ### Synthetic Evaluation Harness
 
 ```bash
@@ -72,6 +170,82 @@ npm run build
 
 ## Monitoring
 
-- **Audit log**: SHA-256 hash-chained events in `AuditLog` (in-memory; export via `/api/v1/audit`)
+- **Audit log**: SHA-256 hash-chained events in `AuditLog` (in-memory ring + durable `VR_AUDIT_PATH` JSONL; export via `/api/v1/audit`)
 - **Event log**: Frontend displays last 20 events with severity badges
 - **Alert delivery**: Logged at WARNING level on failure; best-effort, never breaks the stream
+
+## Known Limitations
+
+Recorded here rather than silently carried, so nobody rediscovers these the
+hard way:
+
+- **Authentication is opt-in, and that is a deliberate default (decided).**
+  With `VR_API_KEYS` unset every route is open — including `POST /v1/enroll`
+  and `GET /v1/audit` — and the server logs a warning at startup saying so.
+  This keeps the demo, `npm run dev:all` and `scripts/integration_check.py`
+  working out of the box, matching how the detector backends already ship.
+  Any deployment must set `VR_API_KEYS` and `VR_REQUIRE_AUTH=1`, which makes
+  the server refuse to start without keys. Rate limits are per-key and
+  **in-process**: they protect one box from one noisy client and do not
+  coordinate across workers or survive a restart.
+
+- **Challenge is a one-shot gate, not a recovery path (decided).** A failed
+  challenge always escalates to `BLOCK` permanently; a *passed* challenge
+  never un-blocks a session or re-arms a future challenge — `_blocked` and
+  the one-challenge-per-session gate are both one-way by design
+  (`grade_challenge()`), because grading is digit-order + latency only with
+  no voice biometrics. Each challenge is single-use: re-grading returns
+  `no_active_challenge`.
+- **WS handshake `session_id` handling.** The server always opens with a
+  `session_ack` (`docs/PROTOCOL.md` §1) echoing the resolved `session_id`,
+  so an omitted id is recoverable for REST challenge-grading. Supplying
+  your own id still works (see `docs/INTEGRATION_GUIDE.md`).
+- **The `/analyze` per-window report fields are lightweight measurements.**
+  `inference_ms` is a real per-`push_chunk` wall-clock timing;
+  `speech_ratio`/`is_voiced` come from a simple short-time-energy VAD and
+  `zcr_variance` from per-frame zero-crossing variance
+  (`vanirakshak/detectors/voice.py`) — honest signal-energy heuristics, not
+  a trained VAD, so treat them as indicative, not ground truth.
+- **The impostor label and the impostor interlock use different
+  thresholds (decided).** `/analyze`'s `IMPOSTOR_SPEAKER` verdict label fires below
+  `mean_speaker_sim < 0.40` (report-level identity: "not the enrolled voice");
+  the actual `BLOCK` override (`VR_IMPOSTOR_BLOCK_BELOW`, default `0.10` in
+  `vanirakshak/config.py`, enforced in `risk/fusion.py`) fires only on decisive
+  mismatch. A clip in `[0.10, 0.40)` is therefore *labelled* `IMPOSTOR_SPEAKER`
+  while its *tier* stays `CHALLENGE` — label states identity, tier states
+  interlock action. Kept split deliberately; do not "fix" by aligning the
+  numbers without a product decision.
+- **The audit chain persists to JSONL.** Every event is appended to
+  `VR_AUDIT_PATH` (default `data/audit_log.jsonl`, gitignored) and the chain
+  is reloaded and re-verified on restart; empty `VR_AUDIT_PATH` opts back
+  out to the in-memory ring only. The process never truncates the file —
+  rotate it with normal log tooling.
+- **Client resampling is linear-interpolation only.** A hardware rate
+  mismatch is detected and corrected in-client, but the resampler is a
+  simple interpolator, not a proper anti-aliased filter — fine for keeping
+  detectors on-rate, not lab-grade.
+- **`WaveformEvidenceTimeline` falls back to a synthetic pattern only when
+  audio can't be decoded.** Bar heights come from per-bar peaks of the real
+  decoded audio (`decodeAudioData`); the sine fallback shows while decoding
+  or for unfetchable (no-CORS) sources. Colors and boundary markers were
+  always data-driven.
+- **Standalone prototypes are a different product from the acoustic
+  pipeline above, and none is wired into it.** `vanirakshak_sotto/` —
+  **VaniRakshak SACH** — is now verified working end-to-end (Groq Whisper +
+  Gemini threat detection + Crawl4AI web grounding + Gemini fact
+  verification, `GEMINI_API_KEY` set, `google-genai`/`crawl4ai` installed;
+  run with `cd vanirakshak_sotto && python server.py`, port 8082).
+  `vanirakshak_indic_conformer/` now boots too — verified via TestClient:
+  `/api/health` returns 200 as "VaniRakshak IndicConformer Edition v2.2"
+  (Groq Whisper LPU with an Indic adaptation), and its Gemini client
+  constructs, once a `.env` carrying `GEMINI_API_KEY` sits beside it (its
+  loader walks `.` then two parents; there is no repo-root `.env`, so the
+  local one is required). An earlier revision of this entry claimed its
+  `from google import genai` import was still broken — that was wrong:
+  both that form and `import google.genai as genai` resolve fine under
+  `google-genai` 2.x, so the only thing it was ever missing was the key.
+  `ayush_agnihotri/` holds no code at all — two markdown files describing
+  a different product (Tavily + Gemini claim verification), carrying a
+  banner to that effect; there is nothing there to audit or run. None of
+  these is wired into the live pipeline, backend, web frontend, or
+  phone-app call flow.
