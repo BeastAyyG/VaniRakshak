@@ -187,15 +187,32 @@ moved a model in this repo from failing to passing once.
 
 **Work.**
 
+0. **Check what already exists first.** `data/cm_aasist.pt` already carries a
+   fitted `calibration` block (`method: platt`, `scale_w: 0.369718`,
+   `bias_b: -3.616373`, `calibrated_cllr: 0.6536`). The work is fitting the
+   same thing for the checkpoints that lack it — `cm_aasist_attm.pt` and
+   `cm_aasist_attm_uniform.pt` — using the identical schema, not inventing a
+   new mechanism.
 1. Fit a two-parameter logistic (Platt) on **dev** scores only. Never fit on
    eval; that is leakage and invalidates every number it touches.
 2. Store the two parameters in the checkpoint alongside the existing metadata.
-3. Apply at inference in
-   `vanirakshak-backend/vanirakshak/detectors/cm_aasist.py`. Read lines 38–47
-   first: a calibration slot already exists there and is *deliberately* unused
-   because fusion does its own calibration. Decide explicitly whether to
-   calibrate CM-side, fusion-side, or both — applying it twice is a real risk
-   and would silently distort every tier decision.
+3. **Do not apply it in `score()`.** This is settled, not open. Read
+   `vanirakshak-backend/vanirakshak/detectors/cm_aasist.py:34-47`: the
+   decision was already made and the reason recorded — applying
+   `scale_w ≈ 0.37` inside `score()` compresses score variance and pushes
+   genuine demo clips into false CHALLENGE/BLOCK. `score()` also already
+   returns `raw_llr - eer_threshold + natural_offset`, which is itself a
+   shift-calibration, so a Platt fit applied there **stacks two calibrations**
+   rather than replacing one. The live fusion (`w_cm`, `intercept`, and the
+   weights in `scripts/fit_fusion_weights.py`) is tuned against the current
+   scale; changing it moves every tier decision while `integration_check.py`
+   still passes, because its gates have tolerance.
+
+   Apply calibration in the **eval/reporting path only**. All three G2 criteria
+   below are eval metrics, so this satisfies the goal in full and touches no
+   runtime behaviour. Re-scaling what the pipeline consumes is a separate
+   decision that requires refitting fusion weights and re-baselining the demo
+   expectations — not part of G2.
 4. Re-score the eval slice with a new script under `scripts/` and a new report
    JSON. Report raw and calibrated columns side by side.
 
@@ -207,6 +224,15 @@ moved a model in this repo from failing to passing once.
 - [ ] EER and minDCF **unchanged** to 3 decimal places. A monotonic transform
       cannot change a threshold-free metric. If they move, the implementation
       is wrong, not better.
+
+**Bug to fix while you are in here.** `data/cm_aasist_attm_uniform.pt` carries
+`eer_threshold` 10.698028928450064 and `dev_eer` 0.14286875159620163 — byte
+-identical to `cm_aasist_attm.pt`. The uniformizing step copied the checkpoint
+dict and zeroed `merge.weights` without recomputing dev metadata, so that
+checkpoint's zero-centering offset belongs to a different model. It did not
+affect the 6-way benchmark (that path scores head logits directly), but Gate 3
+was run against this checkpoint with the wrong threshold. Recompute both values
+on dev and rewrite them.
 
 **Cost:** hours, CPU, no retraining. Do this before G3 — it is the cheapest
 real improvement available and it reveals how much of the apparent failure was
