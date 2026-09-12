@@ -135,7 +135,27 @@ Find it before continuing. Likely suspects in order: cuDNN algorithm selection
 (`torch.use_deterministic_algorithms(True)` plus `CUBLAS_WORKSPACE_CONFIG`),
 any remaining bare `np.random` call, thread-count-dependent reduction order.
 
-Delete the two test checkpoints afterwards; do not commit them.
+**Negative control — required, not optional.** Two same-seed runs matching
+proves the run is *deterministic*; it does not prove `--seed` is *wired in*. A
+build that ignored the seed entirely while being deterministic for some other
+reason would pass the test above and fail silently in G3, where the two-seed
+requirement would collapse into running one configuration twice and reporting
+a spread of zero. So run a third time with a **different** seed:
+
+**Criterion:** the `--seed 8` run's dev EER **differs** from the `--seed 7`
+runs. Any difference will do; the point is that it is not zero. If it matches
+bit-for-bit, the seed is not reaching the RNGs and G1 has not passed.
+
+Delete all test checkpoints afterwards; do not commit them.
+
+**Result (2026-09-12).** Two runs at `--seed 7`, 4,000 utterances, 2 epochs:
+dev EER `0.3030003129` both times, dev minDCF `0.9999680858` both times, EER
+threshold `1.7031353420` both times, and max absolute parameter difference
+across the whole state dict `0.0`. Bit-identical — stronger than the criterion
+required, and it confirms the per-item crop and augmentation RNGs are fixed,
+since differing crops would have produced differing weights. The weak absolute
+numbers are expected at this cap and say nothing about model quality; this is a
+determinism probe. **Negative control still outstanding.**
 
 ---
 
