@@ -41,6 +41,7 @@ format, not this file.
     "cm_genuine_prob": 0.39,
     "asv_consistency": 0.68,
     "asv_evaluated": true,
+    "asv_synthetic": false,
     "channel_anomaly": 0.12,
     "prosody_unnatural": 0.3,
     "snr_db": 18.4,
@@ -78,7 +79,12 @@ format, not this file.
 
 `metrics.asv_evaluated` (bool) — whether ASV ran a real comparison this
 window; when `false`, `asv_consistency` is the fusion-neutral `0.5`
-placeholder, not a measured similarity. `challenge.expected_digits` is a
+placeholder, not a measured similarity. `metrics.asv_synthetic` (bool, G7) —
+whether the ASV backend behind `asv_consistency` is the synthetic
+random-projection stub rather than real biometrics; `true` under the default
+`VR_ASV_BACKEND=stub`, `false` only with the real ECAPA-TDNN backend. A client
+must not render `asv_consistency` as a voiceprint when this is `true`.
+`challenge.expected_digits` is a
 `List[str]` of single-digit strings; `expected_full` is the full spoken
 phrase (words and digits), not the digits alone.
 
@@ -127,6 +133,13 @@ speaker anchor.
 `asv_backend` duplicated for clarity) — never asserts "AASIST" or "ECAPA"
 unless the real backends (`VR_CM_BACKEND=wavlm`, `VR_ASV_BACKEND=ecapa`) are
 active, in which case it reports `wavlm_heuristic_v1` / `ecapa_tdnn_voxceleb`.
+
+`models.asv_synthetic` (bool, G7) is `true` when `asv_backend` is the synthetic
+random-projection stub and `false` only for the real ECAPA-TDNN backend — read
+from the running instance, so it stays truthful if `VR_ASV_BACKEND=ecapa` was
+requested but degraded to the stub. The dashboard uses it to relabel the
+"TARGET ANCHOR ASV" tile as synthetic rather than let a projection read as a
+voiceprint. See PROTOCOL.md §3.
 
 `anchor` describes the single enrolled target speaker loaded at server
 startup (`vanirakshak/anchor.py::load_anchor`) — `user_id` is `null` and
@@ -188,6 +201,7 @@ by the verdict schema above:
     "cm_score": 1.2,
     "asv_consistency": 0.73,
     "asv_evaluated": true,
+    "asv_synthetic": false,
     "channel_anomaly": 0.1,
     "prosody_unnatural": 0.2
   },
@@ -228,7 +242,9 @@ by the verdict schema above:
 ```
 
 `asv_evaluated` (top-level and in `breakdown`) mirrors the WS path's
-`metrics.asv_evaluated`. `target_speaker` is the trained `ml/` identity model
+`metrics.asv_evaluated`; `asv_synthetic` (likewise top-level and in
+`breakdown`) mirrors `metrics.asv_synthetic` and `health.models.asv_synthetic`
+— see the note on the verdict schema above. `target_speaker` is the trained `ml/` identity model
 — an **identity check** ("is this the enrolled voice?"), explicitly **not** a
 clone/synthetic detector; reported alongside the acoustic `verdict`, never
 folded into it, so a missing checkpoint degrades to `available: false`

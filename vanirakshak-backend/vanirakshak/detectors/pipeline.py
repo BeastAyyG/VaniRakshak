@@ -91,6 +91,18 @@ class DetectionPipeline:
         self.cm = cm or _default_cm()
         self.asv = asv or _default_asv()
 
+    @property
+    def asv_is_synthetic(self) -> bool:
+        """Whether the *active* ASV backend is the synthetic random-projection
+        stub rather than real speaker biometrics (G7).
+
+        Read from the instantiated backend, so it reflects what is actually
+        running — a requested ``VR_ASV_BACKEND=ecapa`` that failed to load and
+        degraded to the stub reports ``True`` here, which is exactly what the
+        dashboard and ``GET /v1/health`` must agree on.
+        """
+        return bool(getattr(self.asv, "is_synthetic", True))
+
     def enrol(self, user_id: str, x: np.ndarray, sr: int) -> np.ndarray:
         return self.asv.enrol(user_id, x, sr)
 

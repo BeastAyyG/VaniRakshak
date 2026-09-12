@@ -33,7 +33,7 @@ REQUIRED_TOP_LEVEL = {
     "metrics",
     "interlock_active",
 }
-REQUIRED_METRICS = {"asv_consistency", "snr_db"}
+REQUIRED_METRICS = {"asv_consistency", "asv_synthetic", "snr_db"}
 
 
 def pcm_chunk(seconds: float = 1.5, freq: float = 220.0) -> bytes:

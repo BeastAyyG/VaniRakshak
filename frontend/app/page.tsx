@@ -472,6 +472,9 @@ export default function Home() {
             const pSpoof: number = telemetry.p_spoof ?? risk / 100;
             const asv: number | null = telemetry.metrics?.asv_consistency ?? null;
             const asvEvaluated: boolean = Boolean(telemetry.metrics?.asv_evaluated);
+            // G7: is the ASV behind this number a real voiceprint or the
+            // synthetic random-projection stub? Drives the "(SYNTHETIC)" label.
+            const asvSynthetic: boolean = Boolean(telemetry.metrics?.asv_synthetic);
             const snr: number | null = telemetry.metrics?.snr_db ?? null;
             const interlockActive: boolean = Boolean(
               telemetry.interlock_active || tier === "BLOCK" || risk >= 70
@@ -542,6 +545,7 @@ export default function Home() {
                   : "AUTHENTIC_TARGET",
               mean_acoustic_anomaly: pSpoof,
               asv_evaluated: asvEvaluated,
+              asv_synthetic: asvSynthetic,
               mean_speaker_sim: asv,
               semantic: telemetry.semantic ?? prev?.semantic ?? null,
               dpdp_compliance: {

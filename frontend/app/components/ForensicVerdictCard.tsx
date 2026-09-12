@@ -24,6 +24,16 @@ export interface ForensicReportData {
    * "evaluated", matching the old always-render-a-number behavior).
    */
   asv_evaluated?: boolean;
+  /**
+   * Whether the ASV backend behind `mean_speaker_sim` is the synthetic
+   * random-projection stub rather than real speaker biometrics (the backend's
+   * `asv_synthetic` / `models.asv_synthetic`, G7). When true the tile below is
+   * relabelled "(SYNTHETIC)" with an amber "Demo projection — NOT a voiceprint"
+   * note, so a number that carries no speaker-identity information cannot be
+   * mistaken for a voiceprint. Optional so a report built before this field
+   * existed still renders (unlabelled, matching the old behavior).
+   */
+  asv_synthetic?: boolean;
   mean_speaker_sim?: number | null;
   mean_micro_tremor?: number | null;
   mean_spectral_flatness?: number | null;
@@ -90,6 +100,15 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
 
   const risk = report.overall_risk_score ?? 0;
 
+  // G7: the similarity number is only a real voiceprint comparison when the
+  // backend ran the ECAPA-TDNN model. With the default stub it is a random
+  // projection, so label it as such rather than letting it read as biometrics.
+  const asvSynthetic = report.asv_synthetic === true;
+  const asvShowsNumber =
+    report.asv_evaluated !== false &&
+    report.mean_speaker_sim !== null &&
+    report.mean_speaker_sim !== undefined;
+
   const verdictConfig = {
     AUTHENTIC_TARGET: {
       title: "Authentic target speaker verified.",
@@ -141,6 +160,15 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
     interlockStatus: "PENDING REVIEW",
     interlockLocked: false,
   };
+
+  // G7: the IMPOSTOR_SPEAKER blurb above cites "ECAPA-TDNN similarity", which is
+  // only true when the real backend is running. Under the default synthetic
+  // stub the label rests on a random projection — say so, don't cite a model
+  // that isn't there.
+  const verdictDescription =
+    report.verdict === "IMPOSTOR_SPEAKER" && asvSynthetic
+      ? "Claimed-identity similarity fell below the 0.55 label threshold — but this run's ASV is a synthetic random projection, not a voiceprint, so read the impostor label as a demo, not biometric evidence."
+      : verdictConfig.description;
 
   const strokeDashoffset = 440 - (440 * risk) / 100;
 
@@ -222,13 +250,15 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
             </div>
 
             <p className="mt-3.5 text-xs leading-relaxed text-[#a1a1a1] bg-[#121212] p-3.5 rounded-md border border-white/[0.06]">
-              {verdictConfig.description}
+              {verdictDescription}
             </p>
 
             {/* 4-Vector Evidence Metrics Bar */}
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
               <div className="rounded-md border border-white/[0.06] bg-[#141414] p-3">
-                <span className="text-[10px] uppercase text-[#888888] block">TARGET ANCHOR ASV</span>
+                <span className="text-[10px] uppercase text-[#888888] block">
+                  {asvSynthetic && asvShowsNumber ? "TARGET ANCHOR ASV (SYNTHETIC)" : "TARGET ANCHOR ASV"}
+                </span>
                 <span className="text-sm font-semibold text-white mt-1 block">
                   {report.asv_evaluated === false
                     ? "N/A"
@@ -237,11 +267,15 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
                     : "N/A"}
                 </span>
                 <span className="text-[10px] text-[#a1a1a1] block mt-0.5">
-                  {report.asv_evaluated === false
-                    ? "Not evaluated — no claimed identity"
-                    : report.mean_speaker_sim && report.mean_speaker_sim >= 0.55
-                    ? "Target match"
-                    : "Mismatch"}
+                  {report.asv_evaluated === false ? (
+                    "Not evaluated — no claimed identity"
+                  ) : asvSynthetic ? (
+                    <span className="text-amber-400">Demo projection — NOT a voiceprint</span>
+                  ) : report.mean_speaker_sim && report.mean_speaker_sim >= 0.55 ? (
+                    "Target match"
+                  ) : (
+                    "Mismatch"
+                  )}
                 </span>
               </div>
 

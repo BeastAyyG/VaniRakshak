@@ -193,6 +193,11 @@ class CallSession:
                 "cm_genuine_prob": wr.features.get("cm_genuine_prob", 0.5),
                 "asv_consistency": wr.asv_score,
                 "asv_evaluated": wr.asv_enrolled,
+                # Whether the ASV backend behind asv_consistency is the
+                # synthetic random-projection stub rather than real biometrics
+                # (G7). Always sent so the dashboard can label the number
+                # honestly — never let a projection read as a voiceprint.
+                "asv_synthetic": self.pipeline.asv_is_synthetic,
                 "channel_anomaly": wr.channel_anomaly,
                 "prosody_unnatural": wr.prosody_unnatural,
                 "snr_db": wr.snr_db,

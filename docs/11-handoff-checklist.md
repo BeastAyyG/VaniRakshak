@@ -21,7 +21,7 @@ never force-push.
 | G4 attack diversity | **do not run as written** | `docs/10`, "augmentation finding" |
 | G5 authentication | done | `vanirakshak-backend/vanirakshak/server/auth.py` |
 | G6 semantic vs zero-retention | **open — needs a product decision** | below |
-| G7 ASV default | **open** | below |
+| G7 ASV default | **done 2026-09-13 — labelled, not flipped** | `docs/10` G7 |
 
 ---
 
@@ -34,7 +34,7 @@ python scripts/integration_check.py
 python scripts/check_docs.py
 ```
 
-Current baseline: **60** backend tests, **95** e2e, **23/23** integration
+Current baseline: **64** backend tests, **95** e2e, **23/23** integration
 checks, **0** hard doc failures. If any number drops, you broke something.
 
 `scripts/check_docs.py` hard-fails on a doc that references a file path which
@@ -106,6 +106,14 @@ happens by accident of a default rather than by decision. Pick one:
 **Criterion:** `GET /v1/health`'s `models.asv_backend` and the dashboard agree
 with each other about what is actually running, and a reader cannot mistake a
 random projection for a voiceprint.
+
+**Resolved 2026-09-13 — the second option (label it).** The default was not
+flipped: `requirements-asv.txt` (speechbrain + a checkpoint download) stays
+optional. Instead `asv_synthetic` is now computed from the running backend and
+carried on `/v1/health` (`models.asv_synthetic`), every WS verdict
+(`metrics.asv_synthetic`) and `AnalyzeResponse`; the dashboard relabels the
+"TARGET ANCHOR ASV" tile "(SYNTHETIC)" with a "Demo projection — NOT a
+voiceprint" note. Full record and the code list in `docs/10` G7.
 
 ---
 

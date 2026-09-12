@@ -54,6 +54,12 @@ class ASVModelECAPA(ASVModel):
     _verifier: object = field(default=None, repr=False, compare=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
+    @property
+    def is_synthetic(self) -> bool:
+        """False: these embeddings come from a network trained for speaker
+        discrimination, not the stub's random projection (G7)."""
+        return False
+
     def _ensure_model(self) -> None:
         if self._verifier is not None:
             return

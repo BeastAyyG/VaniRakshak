@@ -90,6 +90,7 @@ Emitted once per analysis window (4.04 s sliding window, 1.0 s hop).
     "cm_genuine_prob": 0.39,
     "asv_consistency": 0.68,
     "asv_evaluated": true,
+    "asv_synthetic": false,
     "channel_anomaly": 0.12,
     "prosody_unnatural": 0.3,
     "snr_db": 18.4,
@@ -133,6 +134,19 @@ measured similarity — this happens when the claimed identity (after the
 handshake fallback above) isn't enrolled, or the anchor failed to load
 (`health.anchor.error`). A client must not render `asv_consistency` as a
 confidence score without checking this flag first.
+
+**`metrics.asv_synthetic`** (bool, G7): whether the ASV backend behind
+`asv_consistency` is the **synthetic random-projection stub** rather than real
+speaker biometrics. The stub (`detectors/asv.py::_stable_projection`) embeds a
+fixed random projection of hand-crafted spectral statistics, so its cosine
+"similarity" carries no speaker-identity information. This is `true` by
+default (`VR_ASV_BACKEND` defaults to `stub`) and `false` only when the real
+ECAPA-TDNN backend is loaded. It is read from the *instance actually running*,
+not the requested env var, so a `VR_ASV_BACKEND=ecapa` that failed to load and
+degraded to the stub still reports `true`. **A client must not present
+`asv_consistency` as a voiceprint when this is `true`** — the dashboard
+relabels the tile "(SYNTHETIC)" with a "Demo projection — NOT a voiceprint"
+note. `GET /v1/health`'s `models.asv_synthetic` carries the same value.
 
 **`challenge` field notes:**
 - `phrase` is comma-delimited word/digit tokens ending in a period, e.g.

@@ -215,6 +215,9 @@ class AnalyzeResponse(BaseModel):
     mean_acoustic_anomaly: Optional[float] = None
     max_acoustic_anomaly: Optional[float] = None
     asv_evaluated: Optional[bool] = None
+    # G7: whether this run's ASV backend is the synthetic stub. Lets the
+    # dashboard label mean_speaker_sim as a demo projection, not a voiceprint.
+    asv_synthetic: Optional[bool] = None
     mean_speaker_sim: Optional[float] = None
     mean_micro_tremor: Optional[float] = None
     mean_spectral_flatness: Optional[float] = None
@@ -272,6 +275,11 @@ def health() -> dict:
             "zero_retention": True,
             "cm_backend": PIPELINE.cm.name,
             "asv_backend": PIPELINE.asv.name,
+            # G7: true when asv_backend is the synthetic random-projection stub,
+            # i.e. every asv_consistency the dashboard renders is not a
+            # voiceprint. Read from the running instance, so it stays truthful
+            # even if VR_ASV_BACKEND=ecapa was requested but degraded to stub.
+            "asv_synthetic": PIPELINE.asv_is_synthetic,
         },
         "anchor": {
             "user_id": ANCHOR_STATE.get("user_id"),
@@ -565,6 +573,7 @@ async def analyze(
             "cm_score": last.metrics.get("cm_score"),
             "asv_consistency": last.metrics.get("asv_consistency"),
             "asv_evaluated": last.metrics.get("asv_evaluated", False),
+            "asv_synthetic": PIPELINE.asv_is_synthetic,
             "channel_anomaly": last.metrics.get("channel_anomaly"),
             "prosody_unnatural": last.metrics.get("prosody_unnatural"),
         },
@@ -579,6 +588,7 @@ async def analyze(
         mean_acoustic_anomaly=mean_acoustic_anomaly,
         max_acoustic_anomaly=max_acoustic_anomaly,
         asv_evaluated=bool(last.metrics.get("asv_evaluated", False)),
+        asv_synthetic=PIPELINE.asv_is_synthetic,
         mean_speaker_sim=mean_speaker_sim,
         mean_micro_tremor=mean_micro_tremor,
         mean_spectral_flatness=mean_spectral_flatness,

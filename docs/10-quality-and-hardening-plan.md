@@ -601,6 +601,33 @@ accident of defaults. Either flip the default and make
 `vanirakshak-backend/requirements-asv.txt` a hard dependency, or make the
 dashboard state unmissably that the similarity shown is synthetic.
 
+**Decided 2026-09-13 — label, don't flip the default.** The second option was
+taken. Flipping the default to `ecapa` was rejected *for now* because it makes
+`requirements-asv.txt` (speechbrain plus a VoxCeleb checkpoint download) a hard
+dependency of a demo whose other detector is also a stub — a real cost for a
+number the stub does not actually improve. The dashboard now states unmissably
+that the similarity is synthetic, and the backend announces it, so the two can
+never disagree.
+
+What shipped:
+- `detectors/asv.py::ASVModel.is_synthetic` → `True`; `asv_ecapa.py` overrides
+  it to `False`. Read from the *running instance*, not the requested env var,
+  so a degraded `ecapa`→stub fallback still reads synthetic.
+- `detectors/pipeline.py::DetectionPipeline.asv_is_synthetic` exposes it.
+- `session.py` sends `metrics.asv_synthetic` on every WS verdict;
+  `GET /v1/health` gains `models.asv_synthetic`; `AnalyzeResponse` gains
+  `asv_synthetic` (top-level and in `breakdown`).
+- `ForensicVerdictCard.tsx` relabels the tile "TARGET ANCHOR ASV (SYNTHETIC)"
+  with an amber "Demo projection — NOT a voiceprint" note, and the
+  `IMPOSTOR_SPEAKER` blurb no longer cites "ECAPA-TDNN similarity" when the stub
+  is what ran. `page.tsx` threads `asv_synthetic` through the WS path.
+- Regression guard: `tests/test_asv_backend_label.py`, plus `asv_synthetic`
+  added to `test_stream_e2e.py`'s `REQUIRED_METRICS`.
+
+**Criterion met:** `GET /v1/health`'s `models.asv_backend` /
+`models.asv_synthetic` and the dashboard agree about what is actually running,
+and a random projection cannot be mistaken for a voiceprint.
+
 ---
 
 ## Sequencing

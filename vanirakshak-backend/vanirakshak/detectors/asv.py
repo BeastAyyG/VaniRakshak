@@ -72,6 +72,24 @@ class ASVModel:
     # to measured target vs non-target scores so the number means something.
     calibration: Optional[Dict[str, float]] = None
 
+    @property
+    def is_synthetic(self) -> bool:
+        """Whether this backend's "embedding" is a random projection rather than
+        a learned voice biometric (G7).
+
+        The stub is synthetic *by construction* — ``_stable_projection`` is a
+        fixed random projection of hand-crafted spectral statistics seeded by a
+        hash of ``user_id``, so a cosine "similarity" against it carries no
+        speaker-identity information. :class:`ASVModelECAPA` overrides this to
+        ``False``. Exposed so the health, WS and report surfaces can label the
+        number honestly instead of presenting a projection as a voiceprint.
+
+        Derived from the *instance actually running* (not the requested env
+        var), so a degraded ``VR_ASV_BACKEND=ecapa`` that fell back to the stub
+        still reports ``True``.
+        """
+        return True
+
     def _embed_raw(self, x: np.ndarray, sr: int, user_id: str) -> np.ndarray:
         feats = _spectral_features(x, sr, n_bins=EMBED_DIM)
         proj = _stable_projection(user_id or "anon", EMBED_DIM, EMBED_DIM)
