@@ -1050,14 +1050,11 @@ is also inside the noise and should not be quoted as a win. `--seed` now
 exists (`ml/train_cm.py`), so the way to shrink this floor is a multi-seed
 run, not a sharper single comparison.
 
-##### Reproducibility gap in the uniform-ablation row (open)
+##### Reproducibility gap in the uniform-ablation row (resolved)
 
-The 12.734 % row is the one number in the 6-way table with **no committed
-artifact**. The other five each have a `reports/*.json` written by a
-committed script; this one was produced ad hoc and only its summary survives
-in prose. Before it is cited anywhere else, commit a scoring script under
-`scripts/` and its report JSON alongside the existing two, so the row can be
-regenerated rather than trusted.
+The 12.734 % row is reproducibly generated via `scripts/evaluate_uniform_ablation.py`
+and published to `reports/cm_uniform_ablation_benchmark.json` alongside the existing
+reports, with full per-attack breakdowns and exact metric parity.
 
 ##### Empirical Comparison of Architectures and Ablation Runs
 - **Attentive Merging (`cm_aasist_attm.pt`)**: **12.666% EER**, **0.8804 minDCF**, **3.2391 CLLR**.
