@@ -443,6 +443,18 @@ async def analyze(
     else:
         last = sess.history[-1]
 
+    # A BLOCK anywhere in the file is a BLOCK for the file. The live WebSocket
+    # path latches BLOCK one-way (session.py sets _blocked and never clears
+    # it), so a call that blocked in any window stays blocked. /analyze runs the
+    # same CallSession but used to report only the pooled window, which let a
+    # single borderline window override decisive ones: demo_04_impostor under
+    # the real ECAPA backend scored speaker similarity [0.044, 0.060, 0.055,
+    # 0.067, 0.092, 0.135] -- five windows under VR_IMPOSTOR_BLOCK_BELOW=0.10 --
+    # and was reported CHALLENGE because pooling='last' picked the 0.135 one.
+    # Pooling still chooses the representative window when nothing blocked.
+    if sess.blocked and last.tier != "BLOCK":
+        last = max((cr for cr in sess.history if cr.tier == "BLOCK"), key=lambda cr: cr.risk)
+
     windows: List[dict] = []
     hop_sec = sess.buffer.cfg.hop_seconds
     win_sec = sess.buffer.cfg.window_seconds
