@@ -1035,11 +1035,73 @@ fixed uniform mean and the head has **89,064 trainable parameters — exactly
 the pre-merge count**. Verified: the frozen merge is bit-equal to
 `torch.stack(hidden_states).mean(0)`.
 
-##### Empirical Verdict of the `--freeze-merge` Ablation
-- **Result**: Frozen Meanpool achieved **13.504% EER**, **0.9242 minDCF**, and **4.3025 CLLR** on the 20k eval slice (`data/eval_benchmark/eval_slice_20k.tsv`).
-- **Verdict**: Frozen Meanpool is **clearly worse** than Attentive Merging (**13.504% vs 12.666%**, a degradation of **+0.838 pp** in EER, and minDCF 0.9242 vs 0.8804).
-- **Conclusion**: The learned attention is **doing real work** (+0.838 pp gain over static averaging). The near-uniform weights (6.97%–10.28%) are genuinely what the loss landscape preferred under multi-task regularization, rather than inertia from initialization. Plain uniform averaging degrades below both Pre-Aug L12 (12.878%) and AttM (12.666%).
-- **CLLR Status**: Frozen Meanpool also severely fails the calibration bar (CLLR = 4.3025 vs bar < 1.6238 and AttM 3.2391), confirming that uncalibrated multi-layer pooling consistently expands logit variance regardless of whether weights are frozen or learned.
+##### The `--freeze-merge` ablation — measured, but it does not settle the question
+
+**Measured.** Frozen uniform meanpool: **13.504 % EER**, **0.9242 minDCF**,
+**4.3025 CLLR** on the same 20,000-utterance slice. That is **+0.838 pp worse
+on EER** than AttM (12.666 %), worse than pre-aug L12 (12.878 %), and the
+worst CLLR of all five models. Per-attack it tracks AttM closely everywhere
+(largest gap A28, 18.950 % vs 16.008 %) and inherits AttM's A19/A20/A27/A32
+regressions against pre-aug L12 essentially unchanged.
+
+**Why this does not license "the attention is doing real work."** The two
+runs differ in more than the one flag. `ml/train_cm.py` calls no
+`torch.manual_seed` — the only `seed=42` in the file is the
+`CodecTelephonyAugmenter`'s (`ml/train_cm.py:596`), which fixes the
+augmentation stream and nothing else. So the AttM run and the frozen run
+started from **different AASIST initialisations** and saw **different batch
+orders**. The 85k-parameter head also early-stopped at different epochs
+(AttM: best dev minDCF 0.9766 at dev EER 14.287 %; frozen: 0.9963 at
+15.770 %). A 0.838 pp pooled-EER difference between two independently
+initialised runs of the same architecture is not separable from run-to-run
+variance, and **this repo has never measured that variance** — no
+multi-seed run exists for any of the five models. The ±0.2 pp indifference
+band in the rule above was a guess stated in advance, not a figure derived
+from a variance estimate; stating a threshold early makes it honest, not
+correct.
+
+So the frozen run rules out one thing and leaves the main question open:
+it rules out the possibility that freezing *helps* or is free. It does not
+show the learned weights contribute, because a re-initialised re-run would
+be expected to move EER by roughly this much on its own.
+
+**The test that does settle it — inference only, no training, ~10 min.**
+Take the *already trained* `data/cm_aasist_attm.pt`, overwrite
+`merge.weights` with zeros so `softmax` is exactly uniform, and re-score the
+same slice. Identical trained body, identical batchnorm/graph-attention
+weights, identical eval data; the **only** difference is the 12 merge
+coefficients. Any EER change is then attributable to the learned weights and
+to nothing else:
+
+```powershell
+python - <<'EOF'
+import torch
+ck = torch.load('data/cm_aasist_attm.pt', map_location='cpu')
+sd = ck['model_state_dict'] if 'model_state_dict' in ck else ck['state_dict']
+k = [x for x in sd if x.endswith('merge.weights')][0]
+print('learned softmax:', torch.softmax(sd[k], dim=0))
+sd[k] = torch.zeros_like(sd[k])          # -> exactly uniform
+ck['uniformized_from'] = 'data/cm_aasist_attm.pt'
+torch.save(ck, 'data/cm_aasist_attm_uniform.pt')
+EOF
+# then score cm_aasist_attm_uniform.pt as a 6th column
+```
+
+Expected readings, decided before the run:
+- EER ≈ 12.666 % (within a few hundredths) → the learned weights are
+  cosmetic; the gain is averaging. Keep the fixed-mean model and say so.
+- EER clearly above 12.666 % → the learned weights carry real signal, and
+  this is the first evidence for it that is not confounded by training
+  variance.
+
+Until that run exists, the supportable claim is still the conservative one:
+**merging twelve layers beats the best single layer by 0.212 pp on EER while
+calibrating ~2x worse, and whether the *attention* contributes is unmeasured.**
+
+**Separately worth fixing regardless:** add `torch.manual_seed` /
+`torch.cuda.manual_seed_all` to `ml/train_cm.py` and seed the DataLoader
+generator. Every future A/B in this document is unreadable without it, and
+the absence is why this ablation could not answer its own question.
 
 #### 5-Way Evaluation Benchmark Results (`reports/cm_meanpool_ablation_benchmark.json`)
 
