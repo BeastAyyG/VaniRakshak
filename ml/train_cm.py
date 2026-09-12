@@ -611,6 +611,8 @@ def train_recipe_a(
     freeze_merge: bool = False,
     streaming_dev: bool = False,
     seed: int = 42,
+    unfreeze_top_n: int = 0,
+    encoder_lr: float = 1e-5,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
     # Seed RNGs for reproducibility
@@ -681,11 +683,54 @@ def train_recipe_a(
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     logger.info("Class weights: spoof=%.4f, bonafide=1.0000", spoof_weight)
 
-    # 4. Load Frozen WavLM Frontend
-    logger.info("Loading frozen WavLM frontend: microsoft/wavlm-base-plus...")
-    wavlm = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").half().to(dev).eval()
+    # 4. Load WavLM Frontend (frozen by default; top-N layers optionally tuned)
+    #
+    # dtype: fp16 when fully frozen -- that is the numerics every published
+    # benchmark was produced under, so it must not move. bf16 when fine-tuning,
+    # because fp16 encoder fine-tuning diverges. docs/10 G3 requires the same
+    # dtype in training, the eval harnesses and runtime.
+    frontend_dtype = torch.float32
+    if dev.type == "cuda":
+        frontend_dtype = torch.bfloat16 if unfreeze_top_n > 0 else torch.float16
+    logger.info(
+        "Loading WavLM frontend: microsoft/wavlm-base-plus (dtype=%s, unfreeze_top_n=%d)",
+        frontend_dtype, unfreeze_top_n,
+    )
+    wavlm = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(frontend_dtype).to(dev)
     for p in wavlm.parameters():
         p.requires_grad = False
+
+    n_encoder_layers = len(wavlm.encoder.layers)
+    if unfreeze_top_n < 0 or unfreeze_top_n > n_encoder_layers:
+        raise ValueError(
+            f"--unfreeze-top-n must be in [0, {n_encoder_layers}], got {unfreeze_top_n}"
+        )
+
+    encoder_param_names: List[str] = []
+    if unfreeze_top_n > 0:
+        first_trainable = n_encoder_layers - unfreeze_top_n
+        for name, param in wavlm.named_parameters():
+            if name.startswith("encoder.layers."):
+                idx = int(name.split(".")[2])
+                if idx >= first_trainable:
+                    param.requires_grad = True
+                    encoder_param_names.append(name)
+        # Dropout in the tuned layers is wanted; the frozen stack below still
+        # sees train-mode dropout too, which is a second variable moving
+        # alongside the unfreeze (docs/10 G3 "watch item"). Recorded, not hidden.
+        wavlm.train()
+        wavlm.gradient_checkpointing_enable()
+        n_enc_trainable = sum(
+            p.numel() for p in wavlm.parameters() if p.requires_grad
+        )
+        logger.info(
+            "Unfroze encoder layers %d-%d (%d tensors, %d parameters); "
+            "gradient checkpointing on, frontend in train() mode",
+            first_trainable, n_encoder_layers - 1,
+            len(encoder_param_names), n_enc_trainable,
+        )
+    else:
+        wavlm.eval()
 
     # 5. Initialize AASIST-L Head
     model = AASISTLHead(in_dim=768, merge_layers=merge_layers,
@@ -700,11 +745,22 @@ def train_recipe_a(
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("AASIST-L Head initialized with %d trainable parameters", n_params)
 
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    param_groups = [{"params": list(model.parameters()), "lr": lr}]
+    if unfreeze_top_n > 0:
+        enc_params = [p for p in wavlm.parameters() if p.requires_grad]
+        param_groups.append({"params": enc_params, "lr": encoder_lr})
+        logger.info(
+            "Discriminative LR: head=%.2e (%d tensors), encoder=%.2e (%d tensors)",
+            lr, len(param_groups[0]["params"]), encoder_lr, len(enc_params),
+        )
+    optimizer = AdamW(param_groups, lr=lr, weight_decay=weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
     use_amp = (dev.type == "cuda")
-    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+    # GradScaler is for fp16 only. bf16 has fp32 range and must not be scaled;
+    # scaling it silently degrades the gradients it was meant to protect.
+    amp_dtype = torch.bfloat16 if unfreeze_top_n > 0 else torch.float16
+    scaler = torch.amp.GradScaler("cuda", enabled=(use_amp and amp_dtype is torch.float16))
 
     best_dev_mindcf = float("inf")
     best_state_dict = None
@@ -732,21 +788,33 @@ def train_recipe_a(
             audio_batch = audio_batch.to(dev, dtype=torch.float16, non_blocking=True)
             labels = labels.to(dev, non_blocking=True)
 
-            # Frozen WavLM forward pass on GPU
-            with torch.no_grad():
-                w_out = wavlm(audio_batch, output_hidden_states=True)
-                feats = select_wavlm_features(w_out, layer_index, merge_layers)
-
             optimizer.zero_grad()
-            with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+            with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
+                if unfreeze_top_n > 0:
+                    # Graph must reach the encoder, so no no_grad() here.
+                    w_out = wavlm(audio_batch, output_hidden_states=True)
+                    feats = select_wavlm_features(w_out, layer_index, merge_layers)
+                else:
+                    with torch.no_grad():
+                        w_out = wavlm(audio_batch, output_hidden_states=True)
+                        feats = select_wavlm_features(w_out, layer_index, merge_layers)
                 _, logits = model(feats)
                 loss = criterion(logits, labels)
 
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            scaler.step(optimizer)
-            scaler.update()
+            clip_targets = list(model.parameters())
+            if unfreeze_top_n > 0:
+                clip_targets += [p for p in wavlm.parameters() if p.requires_grad]
+
+            if scaler.is_enabled():
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(clip_targets, max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                nn.utils.clip_grad_norm_(clip_targets, max_norm=1.0)
+                optimizer.step()
 
             total_loss += loss.item()
             n_batches += 1
@@ -859,7 +927,22 @@ def train_recipe_a(
                 "merge_layers": int(merge_layers) if merge_layers else None,
                 "freeze_merge": bool(freeze_merge),
                 "seed": int(seed),
+                "unfreeze_top_n": int(unfreeze_top_n),
+                "encoder_lr": float(encoder_lr) if unfreeze_top_n > 0 else None,
+                "frontend_dtype": str(frontend_dtype).replace("torch.", ""),
             }
+            if unfreeze_top_n > 0:
+                # Only the tuned layers, never the whole frontend: WavLM-base-plus
+                # is ~94.7M params (379 MB fp32 / 189 MB bf16) and these
+                # checkpoints have been force-added to a public repo before.
+                checkpoint_payload["frontend_state_dict"] = {
+                    k: v.detach().to("cpu")
+                    for k, v in wavlm.state_dict().items()
+                    if k in set(encoder_param_names)
+                }
+                checkpoint_payload["frontend_layer_indices"] = sorted(
+                    {int(k.split(".")[2]) for k in encoder_param_names}
+                )
             torch.save(checkpoint_payload, str(output_checkpoint))
             _validate_checkpoint(checkpoint_payload, output_checkpoint)
             logger.info(
@@ -962,6 +1045,17 @@ def main() -> None:
     parser.add_argument("--init-weights", type=Path, default=REPO_ROOT / "data" / "cm_aasist.pt")
     parser.add_argument("--max-train-utts", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42, help="Random seed for torch, cuda, and DataLoader generator (default: 42)")
+    parser.add_argument(
+        "--unfreeze-top-n", type=int, default=0,
+        help="Fine-tune the top N WavLM encoder layers (default 0 = fully frozen, "
+             "today's behaviour). Switches the frontend to bf16; fp16 encoder "
+             "fine-tuning diverges.",
+    )
+    parser.add_argument(
+        "--encoder-lr", type=float, default=1e-5,
+        help="Learning rate for unfrozen encoder layers (default 1e-5). "
+             "Ignored when --unfreeze-top-n is 0.",
+    )
     parser.add_argument("--workers", type=int, default=24)
     args = parser.parse_args()
 
@@ -986,6 +1080,8 @@ def main() -> None:
         freeze_merge=args.freeze_merge,
         streaming_dev=args.streaming_dev,
         seed=args.seed,
+        unfreeze_top_n=args.unfreeze_top_n,
+        encoder_lr=args.encoder_lr,
     )
 
 

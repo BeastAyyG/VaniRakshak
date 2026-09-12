@@ -90,6 +90,9 @@ class CMModelAASIST:
 
     name: str = "aasist_missing_weights"
     eer_threshold: float = 0.0
+    unfreeze_top_n: int = 0
+    _frontend_state_dict: Optional[dict] = None
+    _frontend_layer_indices: list = field(default_factory=list)
     dev_eer: float = float("nan")
     dev_min_dcf: float = float("nan")
     layer_index: int = -1
@@ -114,10 +117,28 @@ class CMModelAASIST:
             feature_extractor = AutoFeatureExtractor.from_pretrained(_FRONTEND)
             wavlm = WavLMModel.from_pretrained(_FRONTEND)
         wavlm.eval()
+        # A head trained on fine-tuned features scored against a stock frontend
+        # produces silently wrong numbers -- no exception, no missing key. So
+        # the fine-tuned case fails closed rather than falling back.
+        if self._frontend_state_dict:
+            res = wavlm.load_state_dict(self._frontend_state_dict, strict=False)
+            # strict=False ignores names that do not match, which would make
+            # this guard vacuous. Verify the weights actually landed.
+            unexpected = list(res.unexpected_keys)
+            applied = set(self._frontend_state_dict) - set(unexpected)
+            got = sorted({int(k.split(".")[2]) for k in applied if k.startswith("encoder.layers.")})
+            if unexpected or got != self._frontend_layer_indices:
+                raise RuntimeError(
+                    "fine-tuned encoder weights did not apply cleanly "
+                    f"(unexpected={unexpected[:5]}, applied layers={got}, "
+                    f"expected={self._frontend_layer_indices}); refusing to score "
+                    "against a stock frontend"
+                )
         if device == "cuda":
-            wavlm = wavlm.half().to(device)
-        else:
-            wavlm = wavlm.to(device)
+            # bf16 for fine-tuned checkpoints (trained that way); fp16 for the
+            # frozen ones, which is the numerics every published benchmark used.
+            wavlm = wavlm.to(torch.bfloat16 if self._frontend_state_dict else torch.float16)
+        wavlm = wavlm.to(device)
         if self._model is not None:
             self._model.to(device)
         self._frontend = (feature_extractor, wavlm, device)
@@ -166,6 +187,25 @@ class CMModelAASIST:
 
         # Platt calibration metadata stored in checkpoint (deliberately not applied
         # in runtime score(); see module docstring for rationale)
+        self.unfreeze_top_n = int(ckpt.get("unfreeze_top_n", 0) or 0)
+        if self.unfreeze_top_n > 0:
+            fsd = ckpt.get("frontend_state_dict")
+            if not fsd:
+                raise RuntimeError(
+                    f"checkpoint records unfreeze_top_n={self.unfreeze_top_n} but "
+                    "carries no 'frontend_state_dict'. The head was trained on "
+                    "fine-tuned WavLM features; scoring it against the stock "
+                    "frontend yields silently wrong results. Refusing to load."
+                )
+            self._frontend_state_dict = fsd
+            self._frontend_layer_indices = list(ckpt.get("frontend_layer_indices", []))
+            if not self._frontend_layer_indices:
+                self._frontend_layer_indices = sorted(
+                    {int(k.split(".")[2]) for k in fsd if k.startswith("encoder.layers.")}
+                )
+            # A frontend already built from stock weights is now stale.
+            self._frontend = None
+
         self.calibration = ckpt.get("calibration", {})
         self.calibrated_eer_threshold = float(ckpt.get("calibrated_eer_threshold", float("nan")))
 
@@ -210,7 +250,7 @@ class CMModelAASIST:
         )
         input_values = inputs.input_values.to(device)
         if device == "cuda":
-            input_values = input_values.half()
+            input_values = input_values.to(wavlm.dtype)
 
         with torch.inference_mode():
             outputs = wavlm(input_values, output_hidden_states=True)
