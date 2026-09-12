@@ -132,15 +132,17 @@ system's own health (as distinct from `VR_ALERT_WEBHOOK_URL`, which alerts on
 rate, WS reconnect rate, and per-window latency percentiles — the latency
 figures in `docs/04` are benchmark numbers, not production telemetry.
 
-### 10. No CI
+### 10. ~~No CI~~ — resolved
 
-`pytest`, `scripts/integration_check.py`, `scripts/check_docs.py`,
-`npm run lint`/`build`, and the Android `testDebugUnitTest` all pass, but
-nothing runs them automatically. Every verification in this repo's history
-has been run by hand, and `npm run lint` in particular sat in the
-CONTRIBUTING checklist unrun long enough to accumulate five errors including
-one real correctness bug. A GitHub Actions workflow running the full battery
-on every PR is a few hours of work and prevents exactly that.
+`.github/workflows/ci.yml` runs on every PR to `main`: backend unit tests,
+`tests/e2e/`, `scripts/integration_check.py`, `scripts/check_docs.py`, and
+frontend lint + build. All five passed on PR #1's head `0a34961`
+(2026-09-13).
+
+**Still not covered:** the Android `testDebugUnitTest` suite, which needs the
+Android SDK and JDK 17 and is run by hand only. And CI triggers on pull
+requests to `main`, not on direct pushes to feature branches, so work pushed
+without an open PR is unverified until one exists.
 
 ---
 
