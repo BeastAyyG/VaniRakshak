@@ -128,6 +128,7 @@ class FastAudioAugmentLoader:
         n_threads: int = 24,
         queue_size: int = 8,
         max_samples: Optional[int] = None,
+        generator: Optional[torch.Generator] = None,
     ) -> None:
         self.samples = dataset.samples
         if max_samples and max_samples < len(self.samples):
@@ -138,6 +139,7 @@ class FastAudioAugmentLoader:
         self.drop_last = drop_last
         self.n_threads = n_threads
         self.queue_size = queue_size
+        self.generator = generator
 
     def __len__(self) -> int:
         n = len(self.samples)
@@ -158,9 +160,14 @@ class FastAudioAugmentLoader:
 
     def __iter__(self):
         n = len(self.samples)
-        indices = np.arange(n)
         if self.shuffle:
-            np.random.shuffle(indices)
+            if self.generator is not None:
+                indices = torch.randperm(n, generator=self.generator).numpy()
+            else:
+                indices = np.arange(n)
+                np.random.shuffle(indices)
+        else:
+            indices = np.arange(n)
 
         if self.drop_last:
             n_batches = n // self.batch_size
@@ -580,10 +587,17 @@ def train_recipe_a(
     merge_layers: Optional[int] = None,
     freeze_merge: bool = False,
     streaming_dev: bool = False,
+    seed: int = 42,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
+    # Seed RNGs for reproducibility
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    loader_generator = torch.Generator().manual_seed(seed)
+
     dev = torch.device(device if (device.startswith("cuda") and torch.cuda.is_available()) else "cpu")
-    logger.info("Initializing Recipe A Retraining on device: %s (WavLM layer_index=%d)", dev, layer_index)
+    logger.info("Initializing Recipe A Retraining on device: %s (WavLM layer_index=%d, seed=%d)", dev, layer_index, seed)
 
     # 1. Setup Audio Training Set & DataLoader
     train_set = AudioDataset(train_manifest)
@@ -593,7 +607,7 @@ def train_recipe_a(
         p_bandpass=0.3,
         p_rir=0.2,
         p_gain=0.3,
-        seed=42,
+        seed=seed,
     )
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
@@ -604,6 +618,7 @@ def train_recipe_a(
         n_threads=n_workers,
         queue_size=8,
         max_samples=max_train_utts,
+        generator=loader_generator,
     )
 
     # 2. Setup Dev Set & DataLoader
@@ -819,6 +834,7 @@ def train_recipe_a(
                 "layer_index": int(layer_index),
                 "merge_layers": int(merge_layers) if merge_layers else None,
                 "freeze_merge": bool(freeze_merge),
+                "seed": int(seed),
             }
             torch.save(checkpoint_payload, str(output_checkpoint))
             _validate_checkpoint(checkpoint_payload, output_checkpoint)
@@ -921,6 +937,7 @@ def main() -> None:
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--init-weights", type=Path, default=REPO_ROOT / "data" / "cm_aasist.pt")
     parser.add_argument("--max-train-utts", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for torch, cuda, and DataLoader generator (default: 42)")
     parser.add_argument("--workers", type=int, default=24)
     args = parser.parse_args()
 
@@ -944,6 +961,7 @@ def main() -> None:
         merge_layers=args.merge_layers,
         freeze_merge=args.freeze_merge,
         streaming_dev=args.streaming_dev,
+        seed=args.seed,
     )
 
 

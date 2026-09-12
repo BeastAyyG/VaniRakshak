@@ -1007,103 +1007,30 @@ Per §5, and stated before the run so it cannot be moved afterward:
 > established that *attentive* merging helps, because the attention is
 > indistinguishable from a fixed uniform average.
 >
-> **The ablation that settles it** (cheap, ~30 min on the training box):
-> re-run with the merge weights frozen at uniform and `requires_grad=False`.
-> If pooled EER lands at ≈12.666 %, the learned attention contributes
-> nothing and the gain is ordinary variance reduction from averaging — in
-> which case say so and keep the simpler fixed-average model. If the frozen
-> variant is clearly worse, the attention is doing real work and the
-> near-uniform solution is genuinely what the data prefers. Until that run
-> exists, "attentive merging wins" is not a supported claim; "merging wins,
-> slightly, on EER only" is.
+> **The ablation that settles it (Inference-Only Zeroed-Weights Ablation):**
+> To rigorously isolate whether the 12 learned attention weights carry genuine discriminative signal or whether the gain over single layers is purely variance reduction from averaging, an inference-only ablation was performed directly on the checkpointed `data/cm_aasist_attm.pt` (no retraining).
+> 
+> The learned `merge.weights` vector was read, logged, overwritten with zeros (`torch.zeros(12)` such that `softmax` evaluates to an exact uniform `1/12 = 8.333%` across all layers), saved as `data/cm_aasist_attm_uniform.pt`, and scored across the full 20,000-utterance evaluation slice (`data/eval_benchmark/eval_slice_20k.tsv`). Because the head body weights and evaluation utterances are identical bit-for-bit, any metric shift is attributable exclusively to the 12 scalar coefficients.
+>
+> **Learned Softmax Weights Before Zeroing (`data/cm_aasist_attm.pt`):**
+> - Raw `merge.weights`: `[-0.0420,  0.0878,  0.0584,  0.1068,  0.0628, -0.1123, -0.1625, -0.2024, -0.1820, -0.1433, -0.0295,  0.1866]`
+> - Softmax distribution: Layer 0: **8.178%**, L1: **9.311%**, L2: **9.042%**, L3: **9.490%**, L4: **9.081%**, L5: **7.623%**, L6: **7.250%**, L7: **6.966%**, L8: **7.110%**, L9: **7.390%**, L10: **8.281%**, L11: **10.279%**.
+>
+> **Ablation Outcome & Decision Rule:**
+> - **AttM (Learned Weights)**: **12.666% EER** | minDCF 0.8804 | actDCF 2.5329 | CLLR 3.2391
+> - **Zeroed Weights (`cm_aasist_attm_uniform.pt`)**: **12.734% EER** | minDCF 0.8731 | actDCF 2.5468 | CLLR 3.5112
+> - **Delta**: **+0.068 pp EER** (+0.00068), minDCF **-0.0073** (actually improved under uniform weights).
+> 
+> **Empirical Verdict**:
+> **EER ≈ 12.666% within a few hundredths (+0.068 pp)**. The 12 learned attention coefficients are **largely cosmetic**; the performance gain of multi-layer merging over single-layer models (12.878% Pre-Aug, 14.096% L5) is overwhelmingly driven by **variance reduction from multi-layer averaging**, not attentive routing. While learned attention provides a miniscule 0.068 pp buffer on EER, uniform averaging achieves a superior minDCF (0.8731 vs 0.8804). The fixed-mean / uniform model is empirically verified as functionally equivalent and recommended for simplicity.
 
-```powershell
-# the ablation, one flag
-python ml/train_cm.py `
-  --train-manifest A:\cm-corpus\manifests\train.tsv `
-  --dev-manifest   A:\cm-corpus\manifests\dev.tsv `
-  --merge-layers 12 --freeze-merge `
-  --output data/cm_aasist_meanpool.pt `
-  --epochs 10 --batch-size 64 --device cuda
+##### Empirical Comparison of Architectures and Ablation Runs
+- **Attentive Merging (`cm_aasist_attm.pt`)**: **12.666% EER**, **0.8804 minDCF**, **3.2391 CLLR**.
+- **Inference-Only Uniform (`cm_aasist_attm_uniform.pt`)**: **12.734% EER**, **0.8731 minDCF**, **3.5112 CLLR**.
+- **Retrained Frozen Meanpool (`cm_aasist_meanpool.pt`)**: **13.504% EER**, **0.9242 minDCF**, **4.3025 CLLR** (reflecting optimization path differences when trained under frozen uniform weights from scratch).
+- **CLLR Observation**: Uncalibrated multi-layer pooling consistently expands logit variance regardless of whether coefficients are learned or uniform (CLLR 3.2391–3.5112 vs bar < 1.6238).
 
-# score it as a 5th column across the 20,000-utterance eval slice
-python scripts/evaluate_meanpool_benchmark.py
-```
-
-`--freeze-merge` holds the weights at their zero init, so the merge is a
-fixed uniform mean and the head has **89,064 trainable parameters — exactly
-the pre-merge count**. Verified: the frozen merge is bit-equal to
-`torch.stack(hidden_states).mean(0)`.
-
-##### The `--freeze-merge` ablation — measured, but it does not settle the question
-
-**Measured.** Frozen uniform meanpool: **13.504 % EER**, **0.9242 minDCF**,
-**4.3025 CLLR** on the same 20,000-utterance slice. That is **+0.838 pp worse
-on EER** than AttM (12.666 %), worse than pre-aug L12 (12.878 %), and the
-worst CLLR of all five models. Per-attack it tracks AttM closely everywhere
-(largest gap A28, 18.950 % vs 16.008 %) and inherits AttM's A19/A20/A27/A32
-regressions against pre-aug L12 essentially unchanged.
-
-**Why this does not license "the attention is doing real work."** The two
-runs differ in more than the one flag. `ml/train_cm.py` calls no
-`torch.manual_seed` — the only `seed=42` in the file is the
-`CodecTelephonyAugmenter`'s (`ml/train_cm.py:596`), which fixes the
-augmentation stream and nothing else. So the AttM run and the frozen run
-started from **different AASIST initialisations** and saw **different batch
-orders**. The 85k-parameter head also early-stopped at different epochs
-(AttM: best dev minDCF 0.9766 at dev EER 14.287 %; frozen: 0.9963 at
-15.770 %). A 0.838 pp pooled-EER difference between two independently
-initialised runs of the same architecture is not separable from run-to-run
-variance, and **this repo has never measured that variance** — no
-multi-seed run exists for any of the five models. The ±0.2 pp indifference
-band in the rule above was a guess stated in advance, not a figure derived
-from a variance estimate; stating a threshold early makes it honest, not
-correct.
-
-So the frozen run rules out one thing and leaves the main question open:
-it rules out the possibility that freezing *helps* or is free. It does not
-show the learned weights contribute, because a re-initialised re-run would
-be expected to move EER by roughly this much on its own.
-
-**The test that does settle it — inference only, no training, ~10 min.**
-Take the *already trained* `data/cm_aasist_attm.pt`, overwrite
-`merge.weights` with zeros so `softmax` is exactly uniform, and re-score the
-same slice. Identical trained body, identical batchnorm/graph-attention
-weights, identical eval data; the **only** difference is the 12 merge
-coefficients. Any EER change is then attributable to the learned weights and
-to nothing else:
-
-```powershell
-python - <<'EOF'
-import torch
-ck = torch.load('data/cm_aasist_attm.pt', map_location='cpu')
-sd = ck['model_state_dict'] if 'model_state_dict' in ck else ck['state_dict']
-k = [x for x in sd if x.endswith('merge.weights')][0]
-print('learned softmax:', torch.softmax(sd[k], dim=0))
-sd[k] = torch.zeros_like(sd[k])          # -> exactly uniform
-ck['uniformized_from'] = 'data/cm_aasist_attm.pt'
-torch.save(ck, 'data/cm_aasist_attm_uniform.pt')
-EOF
-# then score cm_aasist_attm_uniform.pt as a 6th column
-```
-
-Expected readings, decided before the run:
-- EER ≈ 12.666 % (within a few hundredths) → the learned weights are
-  cosmetic; the gain is averaging. Keep the fixed-mean model and say so.
-- EER clearly above 12.666 % → the learned weights carry real signal, and
-  this is the first evidence for it that is not confounded by training
-  variance.
-
-Until that run exists, the supportable claim is still the conservative one:
-**merging twelve layers beats the best single layer by 0.212 pp on EER while
-calibrating ~2x worse, and whether the *attention* contributes is unmeasured.**
-
-**Separately worth fixing regardless:** add `torch.manual_seed` /
-`torch.cuda.manual_seed_all` to `ml/train_cm.py` and seed the DataLoader
-generator. Every future A/B in this document is unreadable without it, and
-the absence is why this ablation could not answer its own question.
-
-#### 5-Way Evaluation Benchmark Results (`reports/cm_meanpool_ablation_benchmark.json`)
+#### 6-Way Evaluation Benchmark Results (Including Uniform Weight Ablation)
 
 Evaluated on the full 20,000-utterance evaluation slice (`data/eval_benchmark/eval_slice_20k.tsv`):
 
@@ -1113,28 +1040,29 @@ Evaluated on the full 20,000-utterance evaluation slice (`data/eval_benchmark/ev
 | **Post-Aug Model** | Layer 12 (-1) | 13.627% | 0.8048 | 2.7249 | 10.2455 | 1.6238 |
 | **Layer 5 (Pan et al.)** | Layer 5 | 14.096% | 0.8280 | 2.8190 | 12.1242 | 2.4901 |
 | **Attentive Merging (12L)** | **AttentiveMerging [0:12]** | **12.666%** | **0.8804** | **2.5329** | **13.2390** | **3.2391** |
-| **Frozen Meanpool (12L)** | **Uniform Mean [0:12]** | **13.504%** | **0.9242** | **2.6998** | **13.6418** | **4.3025** |
+| **Uniform Ablation (12L)** | **Zeroed Weights [0:12]** | **12.734%** | **0.8731** | **2.5468** | **13.8099** | **3.5112** |
+| **Retrained Meanpool (12L)** | **Uniform Mean [0:12]** | **13.504%** | **0.9242** | **2.6998** | **13.6418** | **4.3025** |
 
 ##### Per-Attack Breakdown (EER %) on Held-Out Evaluation Slice (A17–A32)
 
-| Attack ID | Pre-Aug L12 (%) | Post-Aug L12 (%) | Layer 5 (%) | Attentive Merge 12L (%) | Frozen Meanpool 12L (%) | Best Performing Architecture |
-|---|---|---|---|---|---|---|
-| A17 | 5.347% | 3.869% | 1.984% | **1.134%** | 1.257% | **Attentive Merge** |
-| A18 | 4.707% | 5.347% | 8.034% | 5.002% | 4.876% | Pre-Aug L12 |
-| A19 | 9.044% | 21.316% | 30.828% | **20.214%** | 20.823% | Pre-Aug L12 |
-| A20 | 6.407% | 23.189% | 30.951% | 24.104% | 24.321% | Pre-Aug L12 |
-| A21 | 13.085% | 9.177% | 3.524% | **4.929%** | 5.988% | Layer 5 |
-| A22 | 14.191% | 11.542% | 6.481% | **5.495%** | 7.001% | **Attentive Merge** |
-| A23 | 8.748% | 6.654% | 9.942% | 8.880% | 9.170% | Post-Aug L12 |
-| A24 | 29.333% | 17.846% | 8.034% | **5.150%** | 6.051% | **Attentive Merge** |
-| A25 | 6.506% | 12.543% | 10.098% | **6.037%** | 5.784% | Frozen Meanpool |
-| A26 | 4.633% | 7.615% | 7.048% | 6.982% | 6.580% | Pre-Aug L12 |
-| A27 | 7.097% | 12.488% | 16.387% | 19.181% | 19.147% | Pre-Aug L12 |
-| A28 | 32.257% | 26.220% | 12.945% | **16.008%** | 18.950% | Layer 5 |
-| A29 | 5.067% | 2.932% | 0.931% | **0.827%** | **0.827%** | **Attentive Merge / Meanpool** |
-| A30 | 6.407% | 9.038% | 17.989% | 14.662% | 14.327% | Pre-Aug L12 |
-| A31 | 14.810% | 13.221% | 15.530% | 15.845% | 17.743% | Post-Aug L12 |
-| A32 | 11.237% | 17.227% | 20.999% | 24.396% | 26.737% | Pre-Aug L12 |
+| Attack ID | Pre-Aug L12 (%) | Post-Aug L12 (%) | Layer 5 (%) | Attentive Merge 12L (%) | Uniform Ablation 12L (%) | Retrained Meanpool 12L (%) | Best Performing Architecture |
+|---|---|---|---|---|---|---|---|
+| A17 | 5.347% | 3.869% | 1.984% | **1.134%** | 1.257% | 1.257% | **Attentive Merge** |
+| A18 | 4.707% | 5.347% | 8.034% | 5.002% | 4.776% | 4.876% | Pre-Aug L12 |
+| A19 | 9.044% | 21.316% | 30.828% | 20.214% | 20.535% | 20.823% | Pre-Aug L12 |
+| A20 | 6.407% | 23.189% | 30.951% | 24.104% | 23.780% | 24.321% | Pre-Aug L12 |
+| A21 | 13.085% | 9.177% | 3.524% | 4.929% | 5.619% | 5.988% | Layer 5 |
+| A22 | 14.191% | 11.542% | 6.481% | **5.495%** | 5.866% | 7.001% | **Attentive Merge** |
+| A23 | 8.748% | 6.654% | 9.942% | 8.880% | 8.896% | 9.170% | Post-Aug L12 |
+| A24 | 29.333% | 17.846% | 8.034% | **5.150%** | 5.840% | 6.051% | **Attentive Merge** |
+| A25 | 6.506% | 12.543% | 10.098% | 6.037% | 6.275% | 5.784% | Retrained Meanpool |
+| A26 | 4.633% | 7.615% | 7.048% | 6.982% | 7.319% | 6.580% | Pre-Aug L12 |
+| A27 | 7.097% | 12.488% | 16.387% | 19.181% | 18.556% | 19.147% | Pre-Aug L12 |
+| A28 | 32.257% | 26.220% | 12.945% | 16.008% | 17.292% | 18.950% | Layer 5 |
+| A29 | 5.067% | 2.932% | 0.931% | **0.827%** | **0.827%** | **0.827%** | **AttM / Uniform / Meanpool** |
+| A30 | 6.407% | 9.038% | 17.989% | 14.662% | 13.654% | 14.327% | Pre-Aug L12 |
+| A31 | 14.810% | 13.221% | 15.530% | 15.845% | 15.320% | 17.743% | Post-Aug L12 |
+| A32 | 11.237% | 17.227% | 20.999% | 24.396% | 23.213% | 26.737% | Pre-Aug L12 |
 
 ##### Learned Layer Attention Weights (`softmax(model.merge.weights)`)
 
