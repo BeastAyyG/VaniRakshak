@@ -1,66 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0A0D14">
+    android:background="#FFFFFF">
 
-    <!-- Centered Brand Identity -->
+    <!-- Centered Brand Identity (iOS-Minimalist Apple Style) -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="32dp">
 
-        <!-- Official VaniRakshak Logo Asset -->
-        <ImageView
-            android:id="@+id/ivSplashLogo"
-            android:layout_width="160dp"
-            android:layout_height="160dp"
-            android:contentDescription="VaniRakshak logo"
-            android:src="@drawable/ic_logo_vanirakshak_splash" />
+        <!-- Modern iOS Squircle Elevated App Icon -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="128dp"
+            android:layout_height="128dp"
+            app:cardCornerRadius="30dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="#FFFFFF">
 
+            <ImageView
+                android:id="@+id/ivSplashLogo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="VaniRakshak logo"
+                android:src="@drawable/ic_logo_vanirakshak_splash" />
+        </androidx.cardview.widget.CardView>
+
+        <!-- Brand Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="26dp"
             android:fontFamily="sans-serif-medium"
-            android:letterSpacing="-0.02"
+            android:letterSpacing="-0.03"
             android:text="@string/app_name"
-            android:textColor="#FFFFFF"
-            android:textSize="26sp"
+            android:textColor="#0F172A"
+            android:textSize="32sp"
             android:textStyle="bold" />
 
+        <!-- Primary Mandate: India's Shield Against Voice Scams -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.08"
-            android:text="VOICE FORENSICS &amp; SCAM SHIELD"
-            android:textColor="#94A3B8"
-            android:textSize="10sp" />
+            android:layout_marginTop="8dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:letterSpacing="0.01"
+            android:text="India’s Shield Against Voice Scams"
+            android:textColor="#1E293B"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
-        <!-- Minimal subtle loading indicator -->
+        <!-- Indian Identity Pill Badge -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_badge_supported"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🇮🇳"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.04"
+                android:text="BUILT FOR BHARAT · AI VOICE DEFENSE"
+                android:textColor="@color/brand_primary"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Minimal Apple-Style Loading Spinner -->
         <ProgressBar
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginTop="28dp"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginTop="36dp"
             android:indeterminate="true"
-            android:indeterminateTint="#10B981" />
+            android:indeterminateTint="@color/brand_primary" />
     </LinearLayout>
 
-    <!-- DPDP / Security Footer Notice -->
-    <TextView
+    <!-- Sovereign Security & Privacy Notice Footer -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="28dp"
-        android:fontFamily="sans-serif"
-        android:letterSpacing="0.02"
-        android:text="DPDP Act §8(7) Compliant • Ephemeral Processing"
-        android:textColor="#64748B"
-        android:textSize="11sp" />
+        android:layout_marginBottom="32dp"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif"
+            android:letterSpacing="0.01"
+            android:text="Sovereign On-Device AI • DPDP Act §8(7) Compliant"
+            android:textColor="#64748B"
+            android:textSize="11.5sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:fontFamily="sans-serif"
+            android:text="Securing Indian Mobile Communications"
+            android:textColor="#94A3B8"
+            android:textSize="10sp" />
+    </LinearLayout>
 
 </FrameLayout>

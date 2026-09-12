@@ -16,13 +16,13 @@
         <item name="fontFamily">sans-serif</item>
     </style>
 
-    <!-- Splash Screen Theme -->
+    <!-- Splash Screen Theme (Apple iOS Pure White Minimalist) -->
     <style name="Theme.VaniRakshak.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowBackground">#0A0D14</item>
-        <item name="android:statusBarColor">#0A0D14</item>
-        <item name="android:navigationBarColor">#0A0D14</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <!-- Forensic Deep Telemetry Theme (Live Stream & Bayesian Analysis) -->

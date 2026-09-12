@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Modern tape/voicemail cassette icon -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M18.5,6H5.5C3.57,6 2,7.57 2,9.5v5C2,16.43 3.57,18 5.5,18h13c1.93,0 3.5,-1.57 3.5,-3.5v-5C22,7.57 20.43,6 18.5,6zM5.5,8h13c0.83,0 1.5,0.67 1.5,1.5V11h-2.58c-0.45,-1.18 -1.58,-2 -2.92,-2s-2.47,0.82 -2.92,2H8.42c-0.45,-1.18 -1.58,-2 -2.92,-2S3.03,9.82 2.58,11H4V9.5C4,8.67 4.67,8 5.5,8zM6.5,14C5.67,14 5,13.33 5,12.5S5.67,11 6.5,11s1.5,0.67 1.5,1.5S7.33,14 6.5,14zM17.5,14c-0.83,0 -1.5,-0.67 -1.5,-1.5s0.67,-1.5 1.5,-1.5 1.5,0.67 1.5,1.5 -0.67,1.5 -1.5,1.5z" />
+</vector>

@@ -57,5 +57,6 @@ data class VaniContact(
     var enrollmentSec: Int = 15,
     var sampleEmbeddingCount: Int = 3,
     var defaultScenario: CallScenario = CallScenario.AI_CLONE_ATTACK,
-    var lastAlertText: String? = null
+    var lastAlertText: String? = null,
+    var isFavorite: Boolean = false
 )

@@ -2,40 +2,40 @@
 <resources>
     <!-- VaniRakshak Production Design System -->
 
-    <!-- Consumer Light Theme Tokens (Matching Website Scrollytelling Aesthetic) -->
-    <color name="canvas_light">#F8FAFC</color>
-    <color name="canvas_cream">#F8F7F5</color>
+    <!-- Consumer Light Theme Tokens (Apple iOS Clean Minimalist Aesthetic) -->
+    <color name="canvas_light">#FFFFFF</color>
+    <color name="canvas_cream">#F2F2F7</color>
     <color name="card_light">#FFFFFF</color>
-    <color name="card_light_pressed">#F1F5F9</color>
-    <color name="border_light">#E2E8F0</color>
-    <color name="border_light_subtle">#F1F5F9</color>
-    <color name="text_primary">#0F172A</color>
-    <color name="text_secondary">#64748B</color>
-    <color name="text_tertiary">#94A3B8</color>
-    <color name="brand_primary">#2563EB</color>
-    <color name="brand_primary_pressed">#1D4ED8</color>
-    <color name="brand_light">#EFF6FF</color>
-    <color name="brand_glow">#262563EB</color>
-    <color name="ambient_green_glow">#2610B981</color>
-    <color name="ambient_mic_bg">#EDF5F0</color>
+    <color name="card_light_pressed">#F2F2F7</color>
+    <color name="border_light">#E5E5EA</color>
+    <color name="border_light_subtle">#F2F2F7</color>
+    <color name="text_primary">#000000</color>
+    <color name="text_secondary">#3C3C43</color>
+    <color name="text_tertiary">#8E8E93</color>
+    <color name="brand_primary">#007AFF</color>
+    <color name="brand_primary_pressed">#0056B3</color>
+    <color name="brand_light">#F0F6FF</color>
+    <color name="brand_glow">#1A007AFF</color>
+    <color name="ambient_green_glow">#1A34C759</color>
+    <color name="ambient_mic_bg">#F2F2F7</color>
 
     <!-- M3 / iOS Modern Consumer Tokens -->
-    <color name="surface_canvas">#F8FAFC</color>
+    <color name="surface_canvas">#FFFFFF</color>
     <color name="surface_card_pure">#FFFFFF</color>
     <color name="surface_card_elevated">#FFFFFF</color>
-    <color name="surface_tonal_container">#F1F5F9</color>
-    <color name="surface_tonal_pressed">#E2E8F0</color>
+    <color name="surface_tonal_container">#F2F2F7</color>
+    <color name="surface_tonal_pressed">#E5E5EA</color>
     <color name="surface_dock">#FFFFFF</color>
     <color name="nav_indicator_active">#EFF6FF</color>
-    <color name="nav_indicator_active_icon">#2563EB</color>
-    <color name="hairline_feather">#0A000000</color>
-    <color name="hairline_subtle">#14000000</color>
+    <color name="nav_indicator_active_icon">#007AFF</color>
+    <color name="hairline_feather">#0F000000</color>
+    <color name="hairline_subtle">#1A000000</color>
 
-    <color name="brand_cobalt">#2563EB</color>
-    <color name="brand_cobalt_pressed">#1D4ED8</color>
+    <color name="brand_cobalt">#007AFF</color>
+    <color name="brand_cobalt_pressed">#0056B3</color>
     <color name="brand_cobalt_tonal">#EFF6FF</color>
-    <color name="brand_cobalt_text">#1D4ED8</color>
-    <color name="brand_cobalt_glow">#262563EB</color>
+    <color name="brand_cobalt_text">#007AFF</color>
+    <color name="brand_cobalt_glow">#1A007AFF</color>
 
     <!-- Semantic Verdict Colors (Clean, Reserved Badges) -->
     <color name="verdict_supported">#059669</color>

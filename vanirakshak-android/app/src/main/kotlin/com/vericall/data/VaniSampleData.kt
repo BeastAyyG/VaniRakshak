@@ -14,7 +14,8 @@ object VaniSampleData {
             enrollmentSec = 18,
             sampleEmbeddingCount = 4,
             defaultScenario = CallScenario.AI_CLONE_ATTACK,
-            lastAlertText = "Flagged: Coercive urgent money transfer request"
+            lastAlertText = "Flagged: Coercive urgent money transfer request",
+            isFavorite = true
         ),
         VaniContact(
             id = "c2",
@@ -24,7 +25,8 @@ object VaniSampleData {
             isVoiceEnrolled = true,
             enrollmentSec = 15,
             sampleEmbeddingCount = 3,
-            defaultScenario = CallScenario.GENUINE_CALL
+            defaultScenario = CallScenario.GENUINE_CALL,
+            isFavorite = true
         ),
         VaniContact(
             id = "c3",

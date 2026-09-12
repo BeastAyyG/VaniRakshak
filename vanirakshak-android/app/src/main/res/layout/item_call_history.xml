@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp"
+    android:background="?attr/selectableItemBackground">
+
+    <!-- Contact Avatar Initial Circle -->
+    <TextView
+        android:id="@+id/tvCallAvatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:gravity="center"
+        android:text="R"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="@color/brand_primary"
+        android:background="@drawable/circle_avatar_clean" />
+
+    <!-- Name, Type, and Transcript Indicator -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="14dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvCallName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Rahul Sharma"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="2dp">
+
+            <ImageView
+                android:id="@+id/ivCallType"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_call_incoming" />
+
+            <TextView
+                android:id="@+id/tvCallTypeAndTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="Incoming • 10:42 AM"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/tvCallDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" • 04:32"
+                android:textSize="13sp"
+                android:textColor="@color/text_tertiary" />
+        </LinearLayout>
+
+        <!-- Subtle Transcript Available Indicator -->
+        <TextView
+            android:id="@+id/tvTranscriptAvailableBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="✦ Transcript available"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="@color/brand_primary"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Quick Call Button -->
+    <ImageView
+        android:id="@+id/btnQuickCall"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:padding="10dp"
+        android:src="@drawable/ic_call_outgoing"
+        android:background="@drawable/bg_call_control"
+        app:tint="@color/brand_primary"
+        android:contentDescription="Call" />
+
+</LinearLayout>

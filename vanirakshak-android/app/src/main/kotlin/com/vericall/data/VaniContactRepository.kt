@@ -16,6 +16,7 @@ object VaniContactRepository {
     private const val PREF_ENROLLMENTS = "vani_voice_enrollments"
     private const val KEY_ENROLLED_PREFIX = "enrolled_"
     private const val KEY_SEC_PREFIX = "sec_"
+    private const val KEY_FAV_PREFIX = "fav_"
 
     /**
      * Loads contacts from the device's real address book if READ_CONTACTS is granted.
@@ -91,6 +92,8 @@ object VaniContactRepository {
                     val isEnrolled = prefs.getBoolean(KEY_ENROLLED_PREFIX + contactId, false) ||
                             prefs.getBoolean(KEY_ENROLLED_PREFIX + normalizedNum, false)
                     val enrollmentSec = prefs.getInt(KEY_SEC_PREFIX + contactId, 15)
+                    val isFav = prefs.getBoolean(KEY_FAV_PREFIX + contactId, false) ||
+                            prefs.getBoolean(KEY_FAV_PREFIX + normalizedNum, false)
 
                     // Pick an educational default scenario for demonstration
                     val scenario = when {
@@ -108,7 +111,8 @@ object VaniContactRepository {
                             relation = relation,
                             isVoiceEnrolled = isEnrolled,
                             enrollmentSec = enrollmentSec,
-                            defaultScenario = scenario
+                            defaultScenario = scenario,
+                            isFavorite = isFav
                         )
                     )
                 }
@@ -149,4 +153,25 @@ object VaniContactRepository {
         contact.enrollmentSec = enrollmentSec
         contact.defaultScenario = CallScenario.GENUINE_CALL
     }
+
+    /**
+     * Toggles favorite status for a contact.
+     */
+    fun setFavorite(context: Context, contact: VaniContact, isFavorite: Boolean) {
+        val prefs = context.getSharedPreferences(PREF_ENROLLMENTS, Context.MODE_PRIVATE)
+        val normalized = contact.phone.replace(Regex("[^0-9+]"), "")
+        prefs.edit()
+            .putBoolean(KEY_FAV_PREFIX + contact.id, isFavorite)
+            .putBoolean(KEY_FAV_PREFIX + normalized, isFavorite)
+            .apply()
+        contact.isFavorite = isFavorite
+    }
+
+    /**
+     * Retrieves only favorite contacts.
+     */
+    fun getFavorites(context: Context): List<VaniContact> {
+        return getContacts(context).filter { it.isFavorite }
+    }
 }
+

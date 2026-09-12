@@ -1,11 +1,11 @@
 package com.vericall
 
 import android.Manifest
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -13,30 +13,37 @@ import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.LayoutInflater
+import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
-import android.widget.AbsListView
-import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
+import android.provider.ContactsContract
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.vericall.calling.VaniActiveCallActivity
+import com.vericall.calling.VaniCallDetailActivity
 import com.vericall.config.VaniConfig
 import com.vericall.contacts.VaniContactAdapter
+import com.vericall.contacts.VaniContactDetailActivity
 import com.vericall.contacts.VaniEnrollmentSheet
-import com.vericall.contacts.VaniForensicDetailActivity
+import com.vericall.data.VaniCallHistoryRepository
 import com.vericall.data.VaniContactRepository
 import com.vericall.data.VaniSampleData
 import com.vericall.databinding.ActivityVaniMainBinding
+import com.vericall.model.CallDirection
+import com.vericall.model.VaniCallRecord
 import com.vericall.model.VaniContact
+import com.vericall.ui.VaniCallHistoryAdapter
+import com.vericall.ui.VaniFavoritesAdapter
 import com.vericall.util.VaniCallRouter
 import com.vericall.util.VaniNotificationHelper
 import com.vericall.verification.ClaimResultActivity
@@ -47,22 +54,39 @@ import com.vericall.verification.VoiceVerificationActivity
 class VaniMainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityVaniMainBinding
+
+    private enum class Tab { FAVORITES, RECENTS, CONTACTS, KEYPAD, VOICEMAIL, SHIELD }
+    private var currentTab = Tab.RECENTS
+
+    // Adapters
+    private lateinit var favoritesAdapter: VaniFavoritesAdapter
+    private lateinit var recentsAdapter: VaniCallHistoryAdapter
     private lateinit var contactAdapter: VaniContactAdapter
+
     private var realContacts: List<VaniContact> = emptyList()
+    private var recentCalls: List<VaniCallRecord> = emptyList()
 
-    private enum class Tab { HOME, LIVE, HISTORY, CONTACTS }
-    private var currentTab = Tab.HOME
+    // Keypad State
+    private val keypadBuffer = StringBuilder()
+    private var matchedContact: VaniContact? = null
 
-    private var isContactsExpanded = false
-    private var contactsCollapsedOffset = 0f
-
+    // Brand Collapse & Top Bar Vanish
     private val brandHandler = Handler(Looper.getMainLooper())
     private var isBrandCollapsed = false
+    private var isTopBarHidden = false
+    private var topBarAnimator: ValueAnimator? = null
+    private lateinit var gestureDetector: GestureDetector
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityVaniMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Apple iOS clean minimalist aesthetic - dark icons on white canvas
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val systemBars = insets.getInsets(
@@ -72,39 +96,40 @@ class VaniMainActivity : AppCompatActivity() {
             insets
         }
 
-        // Intercept back button for Apple-style sheet collapse
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (currentTab == Tab.CONTACTS && isContactsExpanded) {
-                    collapseContactsSheet()
-                } else if (currentTab != Tab.HOME) {
-                    switchTab(Tab.HOME)
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                    isEnabled = true
-                }
-            }
-        })
-
-        // Initialize core notification channels
         VaniNotificationHelper.createChannels(this)
         requestPermissionsIfMissing()
 
-        // Interactive shield pill allows inspecting & modifying backend server URL
+        // Shield Status Pill in Header switches to Shield Tab; long-press opens IP config
         binding.pillHeaderShield.setOnClickListener {
-            VaniConfig.showServerConfigDialog(this)
+            switchTab(Tab.SHIELD)
         }
         binding.pillHeaderShield.setOnLongClickListener {
             VaniConfig.showServerConfigDialog(this)
             true
         }
 
+        setupGestureDetector()
         setupBottomNavigation()
-        setupHomeTab()
-        setupLiveTab()
+        setupFavoritesTab()
+        setupRecentsTab()
         setupContactsTab()
+        setupKeypadTab()
+        setupVoicemailTab()
+        setupShieldTab()
+        setupTopBarScrollBehavior()
         setupBrandCollapsingAnimation()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::gestureDetector.isInitialized) {
+            gestureDetector.onTouchEvent(ev)
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshAllData()
     }
 
     override fun onDestroy() {
@@ -113,24 +138,10 @@ class VaniMainActivity : AppCompatActivity() {
     }
 
     private fun setupBrandCollapsingAnimation() {
-        // Automatically slide brand name away after 1.6s so the top bar stays super clean
-        brandHandler.postDelayed({
-            if (!isFinishing && !isDestroyed && !isBrandCollapsed) {
-                collapseBrandText(animate = true)
-            }
-        }, 1600)
-
-        // Tapping the logo icon expands/collapses the name dynamically
         binding.ivAppLogo.setOnClickListener {
             brandHandler.removeCallbacksAndMessages(null)
             if (isBrandCollapsed) {
                 expandBrandText()
-                // Auto tuck away again after 2.8s
-                brandHandler.postDelayed({
-                    if (!isFinishing && !isDestroyed && !isBrandCollapsed) {
-                        collapseBrandText(animate = true)
-                    }
-                }, 2800)
             } else {
                 collapseBrandText(animate = true)
             }
@@ -143,15 +154,12 @@ class VaniMainActivity : AppCompatActivity() {
             binding.layoutBrandText.visibility = View.GONE
             return
         }
-
         binding.layoutBrandText.animate()
             .translationX(-binding.layoutBrandText.width.toFloat().coerceAtLeast(60f))
             .alpha(0f)
             .setDuration(380)
             .setInterpolator(AccelerateDecelerateInterpolator())
-            .withEndAction {
-                binding.layoutBrandText.visibility = View.GONE
-            }
+            .withEndAction { binding.layoutBrandText.visibility = View.GONE }
             .start()
     }
 
@@ -168,36 +176,33 @@ class VaniMainActivity : AppCompatActivity() {
             .start()
     }
 
-    override fun onResume() {
-        super.onResume()
-        refreshRecentChecks()
-        loadRealContactsAsync()
-    }
-
     // ------------------------------------------------------------- Navigation
     private fun setupBottomNavigation() {
-        binding.navBtnHome.setOnClickListener { switchTab(Tab.HOME) }
-        binding.navBtnLive.setOnClickListener { switchTab(Tab.LIVE) }
-        binding.navBtnHistory.setOnClickListener { switchTab(Tab.HISTORY) }
+        binding.navBtnFavorites.setOnClickListener { switchTab(Tab.FAVORITES) }
+        binding.navBtnRecents.setOnClickListener { switchTab(Tab.RECENTS) }
         binding.navBtnContacts.setOnClickListener { switchTab(Tab.CONTACTS) }
-        binding.btnSeeAllHistory.setOnClickListener { switchTab(Tab.HISTORY) }
-        switchTab(Tab.HOME)
+        binding.navBtnKeypad.setOnClickListener { switchTab(Tab.KEYPAD) }
+        binding.navBtnVoicemail.setOnClickListener { switchTab(Tab.VOICEMAIL) }
+
+        switchTab(Tab.RECENTS)
     }
 
     private fun switchTab(tab: Tab) {
         currentTab = tab
+        showTopBar(animate = false)
 
-        val tabs = listOf(
-            Triple(Tab.HOME, binding.layoutTabHome, binding.indicatorNavHome to (binding.ivNavHome to binding.tvNavHome)),
-            Triple(Tab.LIVE, binding.layoutTabLive, binding.indicatorNavLive to (binding.ivNavLive to binding.tvNavLive)),
-            Triple(Tab.HISTORY, binding.layoutTabHistory, binding.indicatorNavHistory to (binding.ivNavHistory to binding.tvNavHistory)),
-            Triple(Tab.CONTACTS, binding.layoutTabContacts, binding.indicatorNavContacts to (binding.ivNavContacts to binding.tvNavContacts))
+        val bottomTabs = listOf(
+            Triple(Tab.FAVORITES, binding.layoutTabFavorites, binding.indicatorNavFavorites to (binding.ivNavFavorites to binding.tvNavFavorites)),
+            Triple(Tab.RECENTS, binding.layoutTabRecents, binding.indicatorNavRecents to (binding.ivNavRecents to binding.tvNavRecents)),
+            Triple(Tab.CONTACTS, binding.layoutTabContacts, binding.indicatorNavContacts to (binding.ivNavContacts to binding.tvNavContacts)),
+            Triple(Tab.KEYPAD, binding.layoutTabKeypad, binding.indicatorNavKeypad to (binding.ivNavKeypad to binding.tvNavKeypad)),
+            Triple(Tab.VOICEMAIL, binding.layoutTabVoicemail, binding.indicatorNavVoicemail to (binding.ivNavVoicemail to binding.tvNavVoicemail))
         )
 
-        val brand = ContextCompat.getColor(this, R.color.brand_cobalt)
+        val brand = ContextCompat.getColor(this, R.color.brand_primary)
         val muted = ContextCompat.getColor(this, R.color.text_tertiary)
 
-        tabs.forEach { (t, layout, navViews) ->
+        bottomTabs.forEach { (t, layout, navViews) ->
             val (indicator, pair) = navViews
             val (iv, tv) = pair
             val isSelected = (t == tab)
@@ -206,12 +211,9 @@ class VaniMainActivity : AppCompatActivity() {
                 if (layout.visibility != View.VISIBLE) {
                     layout.alpha = 0f
                     layout.visibility = View.VISIBLE
-                    layout.animate().alpha(1f).setDuration(220).start()
+                    layout.animate().alpha(1f).setDuration(180).start()
                 }
                 indicator.setBackgroundResource(R.drawable.bg_nav_indicator_active)
-                indicator.animate().scaleX(1.05f).scaleY(1.05f).setDuration(150).withEndAction {
-                    indicator.animate().scaleX(1f).scaleY(1f).setDuration(100).start()
-                }.start()
                 iv.setColorFilter(brand)
                 tv.setTextColor(brand)
                 tv.typeface = Typeface.DEFAULT_BOLD
@@ -224,39 +226,261 @@ class VaniMainActivity : AppCompatActivity() {
             }
         }
 
-        if (tab == Tab.HISTORY) {
-            refreshFullHistory()
-        } else if (tab == Tab.CONTACTS) {
-            binding.contactsDashboardHeader.post {
-                contactsCollapsedOffset = binding.contactsDashboardHeader.height.toFloat()
-                if (!isContactsExpanded && contactsCollapsedOffset > 0) {
-                    binding.contactsBottomSheet.translationY = contactsCollapsedOffset
+        // Shield is opened via header badge
+        if (tab == Tab.SHIELD) {
+            binding.layoutTabShield.visibility = View.VISIBLE
+            binding.layoutTabShield.alpha = 0f
+            binding.layoutTabShield.animate().alpha(1f).setDuration(180).start()
+        } else {
+            binding.layoutTabShield.visibility = View.GONE
+        }
+    }
+
+    // ------------------------------------------------------------- 1. Favorites Tab
+    private fun setupFavoritesTab() {
+        favoritesAdapter = VaniFavoritesAdapter(
+            favorites = emptyList(),
+            onContactClicked = { contact -> openContactDetail(contact.id) },
+            onCallClicked = { contact ->
+                VaniActiveCallActivity.startOutgoingCall(this, contact.phone, contact.name)
+            }
+        )
+        binding.recyclerFavorites.layoutManager = LinearLayoutManager(this)
+        binding.recyclerFavorites.adapter = favoritesAdapter
+    }
+
+    // ------------------------------------------------------------- 2. Recents Tab
+    private fun setupRecentsTab() {
+        recentsAdapter = VaniCallHistoryAdapter(
+            context = this,
+            calls = emptyList(),
+            onCallClicked = { record ->
+                val intent = Intent(this, VaniCallDetailActivity::class.java).apply {
+                    putExtra(VaniCallDetailActivity.EXTRA_RECORD_ID, record.id)
                 }
+                startActivity(intent)
+            },
+            onQuickCallClicked = { record ->
+                VaniActiveCallActivity.startOutgoingCall(this, record.number, record.callerName)
+            }
+        )
+        binding.recyclerRecents.layoutManager = LinearLayoutManager(this)
+        binding.recyclerRecents.adapter = recentsAdapter
+
+        binding.btnFilterAll.setOnClickListener {
+            recentsAdapter.updateData(recentCalls)
+            updateRecentsEmptyState(recentCalls)
+        }
+
+        binding.btnFilterMissed.setOnClickListener {
+            val missed = recentCalls.filter { it.direction == CallDirection.MISSED }
+            recentsAdapter.updateData(missed)
+            updateRecentsEmptyState(missed)
+        }
+    }
+
+    private fun updateRecentsEmptyState(items: List<VaniCallRecord>) {
+        binding.layoutRecentsEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    // ------------------------------------------------------------- 3. Contacts Tab
+    private fun setupContactsTab() {
+        contactAdapter = VaniContactAdapter(
+            context = this,
+            contacts = emptyList(),
+            onContactClicked = { contact -> openContactDetail(contact.id) },
+            onEnrollClicked = { contact ->
+                VaniEnrollmentSheet.show(this, contact) { refreshAllData() }
+            }
+        )
+        binding.listRealContacts.adapter = contactAdapter
+
+        binding.inputContactSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val query = s?.toString()?.trim() ?: ""
+                contactAdapter.filter(query)
+                if (query.isNotEmpty()) {
+                    binding.tvSearchResultCount.visibility = View.VISIBLE
+                    binding.tvSearchResultCount.text = "${contactAdapter.count}"
+                } else {
+                    binding.tvSearchResultCount.visibility = View.GONE
+                }
+            }
+        })
+    }
+
+    // ------------------------------------------------------------- 4. Keypad Tab
+    private fun setupKeypadTab() {
+        val keys = listOf(
+            binding.key1 to '1', binding.key2 to '2', binding.key3 to '3',
+            binding.key4 to '4', binding.key5 to '5', binding.key6 to '6',
+            binding.key7 to '7', binding.key8 to '8', binding.key9 to '9',
+            binding.keyStar to '*', binding.key0 to '0', binding.keyHash to '#'
+        )
+
+        for ((view, char) in keys) {
+            view.setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                appendKeypadDigit(char)
+            }
+        }
+
+        // Long press 1 for Voicemail
+        binding.key1.setOnLongClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            Toast.makeText(this, "Opening Voicemail...", Toast.LENGTH_SHORT).show()
+            switchTab(Tab.VOICEMAIL)
+            true
+        }
+
+        // Long press 0 for +
+        binding.key0.setOnLongClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            appendKeypadDigit('+')
+            true
+        }
+
+        // Voicemail quick access button
+        binding.btnKeypadVoicemail.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            switchTab(Tab.VOICEMAIL)
+        }
+
+        // Add to contacts button
+        binding.tvKeypadAddContact.setOnClickListener {
+            val number = keypadBuffer.toString().trim()
+            if (number.isNotEmpty()) {
+                val intent = Intent(Intent.ACTION_INSERT, ContactsContract.Contacts.CONTENT_URI).apply {
+                    putExtra(ContactsContract.Intents.Insert.PHONE, number)
+                }
+                startActivity(intent)
+            }
+        }
+
+        // Backspace
+        binding.btnKeypadBackspace.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (keypadBuffer.isNotEmpty()) {
+                keypadBuffer.deleteCharAt(keypadBuffer.length - 1)
+                updateKeypadDisplay()
+            }
+        }
+
+        binding.btnKeypadBackspace.setOnLongClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            keypadBuffer.clear()
+            updateKeypadDisplay()
+            true
+        }
+
+        // Tap on suggested contact match
+        binding.cardKeypadContactMatch.setOnClickListener {
+            matchedContact?.let { contact ->
+                VaniActiveCallActivity.startOutgoingCall(this, contact.phone, contact.name)
+            }
+        }
+
+        // Call Button
+        binding.btnKeypadCall.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            val number = keypadBuffer.toString().trim()
+            if (number.isNotBlank()) {
+                val targetName = matchedContact?.name ?: VaniCallRouter.resolve(this, number).name
+                VaniActiveCallActivity.startOutgoingCall(this, number, targetName)
+            } else {
+                Toast.makeText(this, "Enter a phone number to dial", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun setupHomeTab() {
-        binding.layoutTabHome.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            if (scrollY > 15 && !isBrandCollapsed) {
-                collapseBrandText(animate = true)
+    private fun appendKeypadDigit(char: Char) {
+        keypadBuffer.append(char)
+        updateKeypadDisplay()
+    }
+
+    private fun updateKeypadDisplay() {
+        val text = keypadBuffer.toString()
+        binding.tvKeypadDisplayNumber.text = text
+        binding.btnKeypadBackspace.visibility = if (text.isNotEmpty()) View.VISIBLE else View.INVISIBLE
+        binding.tvKeypadAddContact.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
+
+        // T9 / Number auto-lookup
+        if (text.length >= 2) {
+            val normalizedQuery = text.replace("+", "")
+            val match = realContacts.find {
+                it.phone.filter { c -> c.isDigit() }.contains(normalizedQuery) ||
+                it.name.contains(normalizedQuery, ignoreCase = true)
+            }
+            if (match != null) {
+                matchedContact = match
+                binding.tvKeypadMatchName.text = match.name
+                binding.tvKeypadMatchPhone.text = match.phone
+                val initial = match.name.firstOrNull { it.isLetter() }?.uppercaseChar() ?: 'V'
+                binding.tvKeypadMatchAvatar.text = initial.toString()
+                binding.cardKeypadContactMatch.visibility = View.VISIBLE
+            } else {
+                matchedContact = null
+                binding.cardKeypadContactMatch.visibility = View.GONE
+            }
+        } else {
+            matchedContact = null
+            binding.cardKeypadContactMatch.visibility = View.GONE
+        }
+    }
+
+    // ------------------------------------------------------------- 5. Voicemail Tab
+    private fun setupVoicemailTab() {
+        binding.btnVoicemailGreeting.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            Toast.makeText(this, "✦ Voicemail Greeting: Ready to record custom AI voice greeting.", Toast.LENGTH_LONG).show()
+        }
+
+        binding.btnCallBackVoicemail1.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            VaniActiveCallActivity.startOutgoingCall(this, "+91 98765 43210", "Rahul Sharma")
+        }
+
+        binding.btnCallBackVoicemail2.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            VaniActiveCallActivity.startOutgoingCall(this, "+91 98765 43210", "+91 98765 43210")
+        }
+
+        var isPlaying1 = false
+        binding.btnPlayVoicemail1.setOnClickListener {
+            isPlaying1 = !isPlaying1
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (isPlaying1) {
+                binding.btnPlayVoicemail1.setImageResource(android.R.drawable.ic_media_pause)
+                Toast.makeText(this, "Playing voicemail (0:28)...", Toast.LENGTH_SHORT).show()
+            } else {
+                binding.btnPlayVoicemail1.setImageResource(R.drawable.ic_play_arrow)
             }
         }
+
+        var isPlaying2 = false
+        binding.btnPlayVoicemail2.setOnClickListener {
+            isPlaying2 = !isPlaying2
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (isPlaying2) {
+                binding.btnPlayVoicemail2.setImageResource(android.R.drawable.ic_media_pause)
+                Toast.makeText(this, "Playing voicemail (0:14)...", Toast.LENGTH_SHORT).show()
+            } else {
+                binding.btnPlayVoicemail2.setImageResource(R.drawable.ic_play_arrow)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- 6. Shield / Settings Tab
+    private fun setupShieldTab() {
+        startHeroPulseGlow()
 
         binding.btnHeroVerify.setOnClickListener {
             startActivity(Intent(this, VoiceVerificationActivity::class.java))
         }
 
-        // Micro touch interactions
-        applyMicroTouchFeedback(binding.btnHeroVerify)
-        applyMicroTouchFeedback(binding.btnSubmitClaim)
-
-        startHeroPulseGlow()
-
-        binding.btnSubmitClaim.setOnClickListener {
-            submitTextQuery()
-        }
-
+        binding.btnSubmitClaim.setOnClickListener { submitTextQuery() }
         binding.inputHomeClaim.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 submitTextQuery()
@@ -274,11 +498,27 @@ class VaniMainActivity : AppCompatActivity() {
             submitTextQuery()
         }
 
-        binding.chipLiveGuard.setOnClickListener {
-            switchTab(Tab.LIVE)
+        binding.btnLiveSimulateCall.setOnClickListener {
+            VaniCallRouter.onRinging(this, "+91 98765 43210")
         }
 
-        refreshRecentChecks()
+        binding.btnLiveCloneAttack.setOnClickListener {
+            VaniActiveCallActivity.startOutgoingCall(this, "+91 98765 43210", "Aarav Sharma (Clone Sim)")
+        }
+
+        binding.btnLiveGenuineCall.setOnClickListener {
+            VaniActiveCallActivity.startOutgoingCall(this, "+91 91234 56780", "Priya Nair (Authentic)")
+        }
+
+        binding.btnLiveFileInspect.setOnClickListener {
+            startActivity(Intent(this, com.vericall.verification.FileForensicActivity::class.java))
+        }
+
+        applyMicroTouchFeedback(binding.btnHeroVerify)
+        applyMicroTouchFeedback(binding.btnLiveSimulateCall)
+        applyMicroTouchFeedback(binding.btnLiveCloneAttack)
+        applyMicroTouchFeedback(binding.btnLiveGenuineCall)
+        applyMicroTouchFeedback(binding.btnLiveFileInspect)
     }
 
     private fun submitTextQuery() {
@@ -318,102 +558,39 @@ class VaniMainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshRecentChecks() {
-        binding.containerHomeRecentChecks.removeAllViews()
-        val history = VaniVerificationClient.getRecentHistory(this).take(3)
-        for (item in history) {
-            val v = createHistoryRow(item)
-            binding.containerHomeRecentChecks.addView(v)
-        }
+    private fun refreshAllData() {
+        Thread {
+            val contacts = VaniContactRepository.getContacts(this)
+            val favorites = VaniContactRepository.getFavorites(this)
+            val calls = VaniCallHistoryRepository.getRecents(this)
+
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                realContacts = contacts
+                recentCalls = calls
+
+                // Update Favorites
+                favoritesAdapter.updateData(favorites)
+                binding.layoutFavoritesEmpty.visibility = if (favorites.isEmpty()) View.VISIBLE else View.GONE
+
+                // Update Recents
+                val isMissedSelected = binding.btnFilterMissed.isChecked
+                val filteredCalls = if (isMissedSelected) calls.filter { it.direction == CallDirection.MISSED } else calls
+                recentsAdapter.updateData(filteredCalls)
+                updateRecentsEmptyState(filteredCalls)
+
+                // Update Contacts
+                contactAdapter.updateData(contacts)
+                binding.tvContactsSubtitle.text = "${contacts.size} contacts protected by VaniRakshak"
+            }
+        }.start()
     }
 
-    private fun refreshFullHistory() {
-        binding.containerFullHistory.removeAllViews()
-        val history = VaniVerificationClient.getRecentHistory(this)
-        for (item in history) {
-            val v = createHistoryRow(item)
-            binding.containerFullHistory.addView(v)
+    private fun openContactDetail(contactId: String) {
+        val intent = Intent(this, VaniContactDetailActivity::class.java).apply {
+            putExtra(VaniContactDetailActivity.EXTRA_CONTACT_ID, contactId)
         }
-    }
-
-    private fun createHistoryRow(item: VaniVerificationClient.HistoryItem): View {
-        val view = LayoutInflater.from(this).inflate(R.layout.item_recent_check, null, false)
-        val tvBadge = view.findViewById<TextView>(R.id.tvRecentVerdictBadge)
-        val tvTime = view.findViewById<TextView>(R.id.tvRecentTime)
-        val tvQuery = view.findViewById<TextView>(R.id.tvRecentQuery)
-        val tvDetails = view.findViewById<TextView>(R.id.tvRecentDetails)
-
-        tvTime.text = item.timeLabel
-        tvQuery.text = item.query
-        tvDetails.text = item.details
-
-        when (item.verdict.uppercase()) {
-            "SUPPORTED", "TRUE" -> {
-                tvBadge.text = "✓ SUPPORTED"
-                tvBadge.setBackgroundResource(R.drawable.bg_badge_supported)
-                tvBadge.setTextColor(ContextCompat.getColor(this, R.color.verdict_supported))
-            }
-            "CONTRADICTED", "FALSE" -> {
-                tvBadge.text = "✕ CONTRADICTED"
-                tvBadge.setBackgroundResource(R.drawable.bg_badge_contradicted)
-                tvBadge.setTextColor(ContextCompat.getColor(this, R.color.verdict_contradicted))
-            }
-            "SCAM", "FRAUDULENT_CLAIM" -> {
-                tvBadge.text = "⚠ HIGH RISK"
-                tvBadge.setBackgroundResource(R.drawable.bg_badge_scam)
-                tvBadge.setTextColor(ContextCompat.getColor(this, R.color.verdict_scam))
-            }
-            else -> {
-                tvBadge.text = "⚠ UNVERIFIABLE"
-                tvBadge.setBackgroundResource(R.drawable.bg_badge_unverifiable)
-                tvBadge.setTextColor(ContextCompat.getColor(this, R.color.verdict_unverifiable))
-            }
-        }
-
-        view.setOnClickListener {
-            if (item.verdict == "SCAM") {
-                val intent = Intent(this, ScamResultActivity::class.java).apply {
-                    putExtra(ScamResultActivity.EXTRA_STATEMENT, "\"${item.query}\"")
-                    putExtra(ScamResultActivity.EXTRA_THREAT_SCORE, item.score)
-                    putExtra(ScamResultActivity.EXTRA_SCAM_TYPE, item.details)
-                }
-                startActivity(intent)
-            } else {
-                val intent = Intent(this, ClaimResultActivity::class.java).apply {
-                    putExtra(ClaimResultActivity.EXTRA_CLAIM, item.query)
-                    putExtra(ClaimResultActivity.EXTRA_VERDICT, item.verdict)
-                    putExtra(ClaimResultActivity.EXTRA_CONFIDENCE, item.score)
-                    putExtra(ClaimResultActivity.EXTRA_EXPLANATION, item.details)
-                    putExtra(ClaimResultActivity.EXTRA_ACTION, "Always check official portals before acting.")
-                }
-                startActivity(intent)
-            }
-        }
-        return view
-    }
-
-    // ------------------------------------------------------------- Live Guard Tab
-    private fun setupLiveTab() {
-        binding.btnLiveSimulateCall.setOnClickListener {
-            VaniCallRouter.onRinging(this, "+91 98765 43210")
-        }
-
-        binding.btnLiveCloneAttack.setOnClickListener {
-            openContactDetail("c1")
-        }
-
-        binding.btnLiveGenuineCall.setOnClickListener {
-            openContactDetail("c2")
-        }
-
-        binding.btnLiveFileInspect.setOnClickListener {
-            startActivity(Intent(this, com.vericall.verification.FileForensicActivity::class.java))
-        }
-
-        applyMicroTouchFeedback(binding.btnLiveSimulateCall)
-        applyMicroTouchFeedback(binding.btnLiveCloneAttack)
-        applyMicroTouchFeedback(binding.btnLiveGenuineCall)
-        applyMicroTouchFeedback(binding.btnLiveFileInspect)
+        startActivity(intent)
     }
 
     private fun startHeroPulseGlow() {
@@ -454,274 +631,6 @@ class VaniMainActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------- Contacts Tab (Production Masterpiece)
-    private fun setupContactsTab() {
-        contactAdapter = VaniContactAdapter(
-            context = this,
-            contacts = emptyList(),
-            onContactClicked = { contact ->
-                openContactDetail(contact.id)
-            },
-            onEnrollClicked = { contact ->
-                VaniEnrollmentSheet.show(this, contact) {
-                    loadRealContactsAsync()
-                }
-            }
-        )
-        binding.listRealContacts.adapter = contactAdapter
-
-        // Search with live result count badge
-        binding.inputContactSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) {
-                val query = s?.toString()?.trim() ?: ""
-                contactAdapter.filter(query)
-                if (query.isNotEmpty()) {
-                    binding.tvSearchResultCount.visibility = View.VISIBLE
-                    binding.tvSearchResultCount.text = "${contactAdapter.count}"
-                } else {
-                    binding.tvSearchResultCount.visibility = View.GONE
-                }
-            }
-        })
-
-        // Callback to update section count when filter changes
-        contactAdapter.onFilterChanged = { count ->
-            binding.tvContactSectionCount.text = "$count contacts"
-        }
-
-        // Quick action cards
-        binding.cardContactCloneDemo.setOnClickListener {
-            openContactDetail("c1")
-        }
-        binding.cardContactGenuineDemo.setOnClickListener {
-            openContactDetail("c2")
-        }
-
-        // FAB: Simulate incoming call
-        binding.fabSimulateCall.setOnClickListener {
-            VaniCallRouter.onRinging(this, "+91 98765 43210")
-        }
-
-        setupContactsSheetAnimation()
-        loadRealContactsAsync()
-    }
-
-    private fun setupContactsSheetAnimation() {
-        // Measure header height once layout completes to determine collapsed offset
-        binding.contactsDashboardHeader.post {
-            contactsCollapsedOffset = binding.contactsDashboardHeader.height.toFloat()
-            if (!isContactsExpanded && contactsCollapsedOffset > 0) {
-                binding.contactsBottomSheet.translationY = contactsCollapsedOffset
-            }
-        }
-
-        // Tap on sheet header (drag handle bar)
-        binding.contactsSheetHeader.setOnClickListener {
-            if (!isContactsExpanded) expandContactsSheet() else collapseContactsSheet()
-        }
-
-        // Drag handle touch listener
-        var headerTouchStartY = 0f
-        binding.contactsSheetHeader.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    headerTouchStartY = event.rawY
-                    false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val deltaY = event.rawY - headerTouchStartY
-                    if (deltaY < -20f && !isContactsExpanded) {
-                        expandContactsSheet()
-                        true
-                    } else if (deltaY > 20f && isContactsExpanded) {
-                        collapseContactsSheet()
-                        true
-                    } else false
-                }
-                else -> false
-            }
-        }
-
-        // Inline collapse button
-        binding.btnCollapseContacts.setOnClickListener {
-            collapseContactsSheet()
-        }
-
-        // Search bar click & focus triggers expansion
-        binding.inputContactSearch.setOnClickListener {
-            if (!isContactsExpanded) expandContactsSheet()
-        }
-        binding.inputContactSearch.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && !isContactsExpanded) {
-                expandContactsSheet()
-            }
-        }
-
-        // Scrolling & swiping contact list triggers smooth full-screen expansion
-        var listTouchStartY = 0f
-        binding.listRealContacts.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    listTouchStartY = event.rawY
-                    false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val deltaY = event.rawY - listTouchStartY
-                    if (!isContactsExpanded && deltaY < -25f) {
-                        expandContactsSheet()
-                        val cancelEvent = MotionEvent.obtain(event)
-                        cancelEvent.action = MotionEvent.ACTION_CANCEL
-                        binding.listRealContacts.onTouchEvent(cancelEvent)
-                        cancelEvent.recycle()
-                        true
-                    } else if (isContactsExpanded && deltaY > 35f &&
-                        binding.listRealContacts.firstVisiblePosition == 0 &&
-                        (binding.listRealContacts.getChildAt(0)?.top ?: 0) >= 0
-                    ) {
-                        collapseContactsSheet()
-                        val cancelEvent = MotionEvent.obtain(event)
-                        cancelEvent.action = MotionEvent.ACTION_CANCEL
-                        binding.listRealContacts.onTouchEvent(cancelEvent)
-                        cancelEvent.recycle()
-                        true
-                    } else false
-                }
-                else -> false
-            }
-        }
-
-        binding.listRealContacts.setOnScrollListener(object : AbsListView.OnScrollListener {
-            override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {
-                if (scrollState == AbsListView.OnScrollListener.SCROLL_STATE_TOUCH_SCROLL) {
-                    if (!isContactsExpanded) {
-                        expandContactsSheet()
-                    }
-                }
-            }
-
-            override fun onScroll(
-                view: AbsListView?,
-                firstVisibleItem: Int,
-                visibleItemCount: Int,
-                totalItemCount: Int
-            ) {
-                if (!isContactsExpanded && firstVisibleItem > 0) {
-                    expandContactsSheet()
-                }
-            }
-        })
-    }
-
-    private fun expandContactsSheet() {
-        if (isContactsExpanded) return
-        isContactsExpanded = true
-
-        if (contactsCollapsedOffset <= 0f) {
-            contactsCollapsedOffset = binding.contactsDashboardHeader.height.toFloat().coerceAtLeast(resources.displayMetrics.density * 220f)
-        }
-
-        binding.contactsBottomSheet.animate()
-            .translationY(0f)
-            .setDuration(320)
-            .setInterpolator(DecelerateInterpolator(1.8f))
-            .start()
-
-        binding.contactsDashboardHeader.animate()
-            .alpha(0f)
-            .translationY(-contactsCollapsedOffset * 0.15f)
-            .setDuration(300)
-            .start()
-
-        binding.btnCollapseContacts.visibility = View.VISIBLE
-        binding.btnCollapseContacts.alpha = 0f
-        binding.btnCollapseContacts.animate()
-            .alpha(1f)
-            .setDuration(250)
-            .start()
-    }
-
-    private fun collapseContactsSheet() {
-        if (!isContactsExpanded) return
-        isContactsExpanded = false
-
-        if (contactsCollapsedOffset <= 0f) {
-            contactsCollapsedOffset = binding.contactsDashboardHeader.height.toFloat().coerceAtLeast(resources.displayMetrics.density * 220f)
-        }
-
-        // Clear focus and dismiss keyboard if active
-        binding.inputContactSearch.clearFocus()
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(binding.inputContactSearch.windowToken, 0)
-
-        binding.contactsBottomSheet.animate()
-            .translationY(contactsCollapsedOffset)
-            .setDuration(300)
-            .setInterpolator(DecelerateInterpolator(1.6f))
-            .start()
-
-        binding.contactsDashboardHeader.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(300)
-            .start()
-
-        binding.btnCollapseContacts.animate()
-            .alpha(0f)
-            .setDuration(200)
-            .withEndAction {
-                binding.btnCollapseContacts.visibility = View.GONE
-            }
-            .start()
-    }
-
-    private fun loadRealContactsAsync() {
-        Thread {
-            val contacts = VaniContactRepository.getContacts(this)
-            runOnUiThread {
-                realContacts = contacts
-                contactAdapter.updateData(contacts)
-
-                // Update subtitle
-                binding.tvContactCount.text = "${contacts.size} contacts protected by VaniRakshak"
-
-                // Update dashboard stat tiles
-                val total = contacts.size
-                val enrolled = contactAdapter.getEnrolledCount()
-                val threats = contactAdapter.getThreatCount()
-                val safetyPct = if (total > 0) ((total - threats) * 100 / total) else 100
-
-                binding.tvStatProtected.text = "$total"
-                binding.tvStatEnrolled.text = "$enrolled"
-                binding.tvStatThreats.text = "$threats"
-                binding.tvStatSafety.text = "${safetyPct}%"
-
-                // Update section header
-                binding.tvContactSectionCount.text = "$total contacts"
-            }
-        }.start()
-    }
-
-    private fun openContactDetail(contactId: String) {
-        val contact = realContacts.find { it.id == contactId }
-            ?: VaniSampleData.getContactById(contactId)
-            ?: realContacts.firstOrNull()
-            ?: VaniSampleData.contacts[0]
-
-        VaniNotificationHelper.showCallRiskNotification(this, contact, contact.defaultScenario)
-
-        startActivity(
-            Intent(this, VaniForensicDetailActivity::class.java).apply {
-                putExtra(VaniForensicDetailActivity.EXTRA_CONTACT_ID, contact.id)
-                putExtra("vani.contact.name", contact.name)
-                putExtra("vani.contact.phone", contact.phone)
-                putExtra("vani.contact.relation", contact.relation)
-                putExtra("vani.contact.enrolled", contact.isVoiceEnrolled)
-            }
-        )
-    }
-
     private fun requestPermissionsIfMissing() {
         val permissions = mutableListOf(
             Manifest.permission.READ_PHONE_STATE,
@@ -744,6 +653,135 @@ class VaniMainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        loadRealContactsAsync()
+        refreshAllData()
+    }
+
+    // ------------------------------------------------------------- Top Bar Gesture & Scroll Collapse
+    private fun setupGestureDetector() {
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                if (e1 != null) {
+                    val deltaY = e1.y - e2.y
+                    if (deltaY > 50 && Math.abs(velocityY) > 120) {
+                        hideTopBar(animate = true)
+                        return true
+                    } else if (deltaY < -50 && Math.abs(velocityY) > 120) {
+                        showTopBar(animate = true)
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+    }
+
+    private fun setupTopBarScrollBehavior() {
+        val rvScrollListener = object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                if (dy > 12) {
+                    hideTopBar(animate = true)
+                } else if (dy < -12) {
+                    showTopBar(animate = true)
+                }
+            }
+        }
+        binding.recyclerFavorites.addOnScrollListener(rvScrollListener)
+        binding.recyclerRecents.addOnScrollListener(rvScrollListener)
+
+        binding.listRealContacts.setOnScrollListener(object : android.widget.AbsListView.OnScrollListener {
+            private var lastFirstVisibleItem = 0
+            private var lastTop = 0
+            override fun onScrollStateChanged(view: android.widget.AbsListView?, scrollState: Int) {}
+            override fun onScroll(view: android.widget.AbsListView?, firstVisibleItem: Int, visibleItemCount: Int, totalItemCount: Int) {
+                val firstChild = view?.getChildAt(0) ?: return
+                val top = firstChild.top
+                if (firstVisibleItem > lastFirstVisibleItem || (firstVisibleItem == lastFirstVisibleItem && top < lastTop - 14)) {
+                    hideTopBar(animate = true)
+                } else if (firstVisibleItem < lastFirstVisibleItem || (firstVisibleItem == lastFirstVisibleItem && top > lastTop + 14)) {
+                    showTopBar(animate = true)
+                }
+                lastFirstVisibleItem = firstVisibleItem
+                lastTop = top
+            }
+        })
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            binding.layoutTabShield.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+                if (scrollY > oldScrollY + 14) {
+                    hideTopBar(animate = true)
+                } else if (scrollY < oldScrollY - 14) {
+                    showTopBar(animate = true)
+                }
+            }
+            binding.scrollVoicemail.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+                if (scrollY > oldScrollY + 14) {
+                    hideTopBar(animate = true)
+                } else if (scrollY < oldScrollY - 14) {
+                    showTopBar(animate = true)
+                }
+            }
+        }
+    }
+
+    private fun hideTopBar(animate: Boolean = true) {
+        if (isTopBarHidden) return
+        isTopBarHidden = true
+        topBarAnimator?.cancel()
+        val header = binding.layoutTopHeader
+        val currentHeight = header.height.takeIf { it > 0 } ?: dpToPx(56)
+        if (!animate) {
+            header.layoutParams.height = 0
+            header.alpha = 0f
+            header.visibility = View.GONE
+            header.requestLayout()
+            return
+        }
+        topBarAnimator = ValueAnimator.ofInt(currentHeight, 0).apply {
+            duration = 220
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { va ->
+                val h = va.animatedValue as Int
+                header.layoutParams.height = h
+                header.alpha = h.toFloat() / currentHeight.toFloat()
+                header.requestLayout()
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    header.visibility = View.GONE
+                }
+            })
+            start()
+        }
+    }
+
+    private fun showTopBar(animate: Boolean = true) {
+        if (!isTopBarHidden) return
+        isTopBarHidden = false
+        topBarAnimator?.cancel()
+        val header = binding.layoutTopHeader
+        val targetHeight = dpToPx(56)
+        header.visibility = View.VISIBLE
+        if (!animate) {
+            header.layoutParams.height = targetHeight
+            header.alpha = 1f
+            header.requestLayout()
+            return
+        }
+        val currentHeight = header.height.coerceAtLeast(0)
+        topBarAnimator = ValueAnimator.ofInt(currentHeight, targetHeight).apply {
+            duration = 220
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { va ->
+                val h = va.animatedValue as Int
+                header.layoutParams.height = h
+                header.alpha = h.toFloat() / targetHeight.toFloat()
+                header.requestLayout()
+            }
+            start()
+        }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
     }
 }

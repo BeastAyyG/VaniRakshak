@@ -1,0 +1,472 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootActiveCall"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/canvas_light">
+
+    <!-- Main Active Call Viewport -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/layoutMainCallView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Top App Bar -->
+        <LinearLayout
+            android:id="@+id/topBarActiveCall"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/btnMinimizeCall"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_chevron_down"
+                android:background="@drawable/bg_call_control"
+                app:tint="@color/text_primary"
+                android:contentDescription="Minimize Call" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Security / Telemetry Badge -->
+            <LinearLayout
+                android:id="@+id/pillCallSecurity"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:background="@drawable/bg_badge_supported">
+
+                <View
+                    android:id="@+id/dotCallSecurity"
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/bg_dot"
+                    android:backgroundTint="@color/verdict_supported" />
+
+                <TextView
+                    android:id="@+id/tvCallSecurityText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="✦ Vani Guard Active"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/verdict_supported" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <ImageView
+                android:id="@+id/btnMoreCallOptions"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_more"
+                android:background="@drawable/bg_call_control"
+                app:tint="@color/text_primary"
+                android:contentDescription="Call Options" />
+        </LinearLayout>
+
+        <!-- Caller Identity Block -->
+        <LinearLayout
+            android:id="@+id/layoutCallerIdentity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/topBarActiveCall">
+
+            <TextView
+                android:id="@+id/tvActiveCallerName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Caller Name"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/tvActiveCallerNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="+91 98765 43210"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/tvActiveCallDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="00:00"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/brand_primary" />
+
+            <TextView
+                android:id="@+id/tvActiveCallStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Listening &amp; Transcribing..."
+                android:textSize="12sp"
+                android:textColor="@color/text_tertiary" />
+        </LinearLayout>
+
+        <!-- Central Sesame-Inspired Voice Visualizer -->
+        <FrameLayout
+            android:id="@+id/containerVisualizer"
+            android:layout_width="280dp"
+            android:layout_height="280dp"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/layoutCallerIdentity"
+            app:layout_constraintBottom_toTopOf="@id/cardTranscriptPeek"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <com.vericall.ui.VoiceVisualizerView
+                android:id="@+id/voiceVisualizer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Center Avatar Letter Overlay -->
+            <TextView
+                android:id="@+id/tvCenterAvatarLetter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="V"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:textColor="@color/white" />
+        </FrameLayout>
+
+        <!-- Live Transcript Peek Card (Collapsed view before expanding sheet) -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardTranscriptPeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginBottom="18dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="@color/card_light"
+            app:layout_constraintBottom_toTopOf="@id/layoutCallControls">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="✦ LIVE TRANSCRIPT"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/brand_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tap to expand ↑"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_tertiary" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvPeekTranscript"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Awaiting caller voice..."
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Modern Circular Call Controls -->
+        <LinearLayout
+            android:id="@+id/layoutCallControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="36dp"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <!-- Mute Button -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/btnCallMute"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:padding="15dp"
+                    android:src="@drawable/ic_mic"
+                    android:background="@drawable/bg_call_control"
+                    app:tint="@color/text_primary"
+                    android:contentDescription="Mute" />
+
+                <TextView
+                    android:id="@+id/tvCallMuteLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Mute"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <!-- Keypad Button -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/btnCallKeypad"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:padding="15dp"
+                    android:src="@drawable/ic_nav_keypad"
+                    android:background="@drawable/bg_call_control"
+                    app:tint="@color/text_primary"
+                    android:contentDescription="Keypad" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Keypad"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <!-- Speakerphone Button -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/btnCallSpeaker"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:padding="15dp"
+                    android:src="@drawable/ic_speaker"
+                    android:background="@drawable/bg_call_control"
+                    app:tint="@color/text_primary"
+                    android:contentDescription="Speaker" />
+
+                <TextView
+                    android:id="@+id/tvCallSpeakerLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Speaker"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <!-- End Call Button -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/btnCallEnd"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:padding="14dp"
+                    android:src="@drawable/ic_call_end"
+                    android:background="@drawable/bg_call_end"
+                    app:tint="@color/white"
+                    android:contentDescription="End Call" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="End"
+                    android:textSize="12sp"
+                    android:textColor="@color/verdict_contradicted" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Expandable Transcript Bottom Sheet -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/bottomSheetTranscript"
+        android:layout_width="match_parent"
+        android:layout_height="520dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="16dp"
+        app:cardBackgroundColor="@color/card_light"
+        app:behavior_hideable="false"
+        app:behavior_peekHeight="0dp"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <!-- Drag Handle Bar -->
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_sheet_handle" />
+
+            <!-- Sheet Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="20dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="20dp"
+                android:paddingBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Conversation Transcript"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/tvTranscriptCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="0 messages recorded"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_tertiary" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/btnCloseTranscriptSheet"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_close"
+                    android:background="@drawable/bg_call_control"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="Close" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/border_light" />
+
+            <!-- Live Conversation RecyclerView -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerFullTranscript"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="16dp"
+                    android:clipToPadding="false"
+                    tools:listitem="@layout/item_transcript_utterance" />
+
+                <!-- Empty State -->
+                <TextView
+                    android:id="@+id/tvEmptyTranscriptMessage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="Listening to call audio...\nTranscribed speech will appear here in real-time."
+                    android:textSize="14sp"
+                    android:textColor="@color/text_tertiary"
+                    android:gravity="center"
+                    android:lineSpacingExtra="4dp" />
+
+                <!-- Jump to Latest Floating Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnJumpToLatest"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="12dp"
+                    android:text="Jump to latest ↓"
+                    android:textSize="12sp"
+                    android:textAllCaps="false"
+                    android:textColor="@color/brand_primary"
+                    app:backgroundTint="@color/card_light"
+                    app:strokeColor="@color/brand_light"
+                    app:strokeWidth="1dp"
+                    app:cornerRadius="18dp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

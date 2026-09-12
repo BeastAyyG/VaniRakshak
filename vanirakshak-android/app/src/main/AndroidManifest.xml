@@ -50,11 +50,46 @@
             </intent-filter>
         </activity>
 
-        <!-- MAIN APP: VaniRakshak Production Main Activity -->
+        <!-- MAIN APP: VaniRakshak Production Phone & AI Sentinel Main Activity -->
         <activity
             android:name=".VaniMainActivity"
             android:exported="true"
-            android:label="@string/app_name" />
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Active Hero Calling Screen (Voice Visualizer + Live Transcription) -->
+        <activity
+            android:name=".calling.VaniActiveCallActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.VaniRakshak" />
+
+        <!-- Post-Call Intelligence Summary Screen -->
+        <activity
+            android:name=".calling.VaniCallSummaryActivity"
+            android:exported="true"
+            android:theme="@style/Theme.VaniRakshak" />
+
+        <!-- Call Record Detail Screen -->
+        <activity
+            android:name=".calling.VaniCallDetailActivity"
+            android:exported="true"
+            android:theme="@style/Theme.VaniRakshak" />
+
+        <!-- Contact Detail Screen -->
+        <activity
+            android:name=".contacts.VaniContactDetailActivity"
+            android:exported="true"
+            android:theme="@style/Theme.VaniRakshak" />
 
         <!-- Voice Verification Activity -->
         <activity

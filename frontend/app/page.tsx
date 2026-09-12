@@ -15,6 +15,11 @@ import DemoQuickSelector, { BENCHMARKS, BenchmarkItem } from "./components/DemoQ
 import AudioUploadZone from "./components/AudioUploadZone";
 import WaveformEvidenceTimeline from "./components/WaveformEvidenceTimeline";
 import ForensicVerdictCard, { ForensicReportData } from "./components/ForensicVerdictCard";
+import VoiceHome from "./components/voice/VoiceHome";
+import VoiceListeningView from "./components/voice/VoiceListeningView";
+import VoiceResult from "./components/voice/VoiceResult";
+import MicrophonePermission from "./components/voice/MicrophonePermission";
+import VoiceHistorySheet, { VoiceHistoryEntry } from "./components/voice/VoiceHistorySheet";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000/ws/stream";
@@ -129,6 +134,32 @@ export default function Home() {
   const [challengeResponseText, setChallengeResponseText] = useState<string>("");
   // Latest server tier from the live stream (ALLOW / CHALLENGE / BLOCK).
   const [currentTier, setCurrentTier] = useState<string>("ALLOW");
+
+  // Signature Voice Scanner UX states
+  const [activeTab, setActiveTab] = useState<"voice" | "console">("voice");
+  const [voiceState, setVoiceState] = useState<"idle" | "listening" | "processing" | "result" | "permission_denied">("idle");
+  const [permissionError, setPermissionError] = useState<string>("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessionStartTime, setSessionStartTime] = useState<number>(0);
+  const [latestSnrDb, setLatestSnrDb] = useState<number | null>(null);
+  const [voiceHistory, setVoiceHistory] = useState<VoiceHistoryEntry[]>([
+    {
+      id: "hist-1",
+      timestamp: "Today · 12:42 PM",
+      verdict: "AUTHENTIC_TARGET",
+      tier: "ALLOW",
+      riskScore: 12,
+      durationSec: 4.2,
+    },
+    {
+      id: "hist-2",
+      timestamp: "Today · 11:15 AM",
+      verdict: "SUSPICIOUS_SPLICED_AUDIO",
+      tier: "CHALLENGE",
+      riskScore: 48,
+      durationSec: 3.5,
+    },
+  ]);
 
   const addEvent = useCallback((message: string, severity: EventLog["severity"] = "info", hash?: string) => {
     setEvents((current) => [
@@ -407,6 +438,8 @@ export default function Home() {
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           addEvent(`Microphone error: ${errMsg}`, "critical");
+          setPermissionError(errMsg || "Microphone access is required to analyze voice authenticity.");
+          setVoiceState("permission_denied");
           setMicLive(false);
           manualCloseRef.current = true;
           ws.close();
@@ -423,6 +456,7 @@ export default function Home() {
             const pSpoof: number = telemetry.p_spoof ?? risk / 100;
             const asv: number | null = telemetry.metrics?.asv_consistency ?? null;
             const snr: number | null = telemetry.metrics?.snr_db ?? null;
+            if (snr !== null) setLatestSnrDb(snr);
             const interlockActive: boolean = Boolean(
               telemetry.interlock_active || tier === "BLOCK" || risk >= 70
             );
@@ -564,14 +598,6 @@ export default function Home() {
     socketRef.current = null;
     setMicLive(false);
     setAudioLevel(0);
-    // Reset CHALLENGE interlock state on stream stop.
-    activeChallengeRef.current = null;
-    challengePendingRef.current = false;
-    challengeSourceRef.current = "local";
-    setActiveChallenge(null);
-    setChallengeStatus("none");
-    setChallengeResponseText("");
-    setCurrentTier("ALLOW");
   };
 
   // Effective interlock tier.
@@ -602,11 +628,11 @@ export default function Home() {
   // would always fail with "no_active_challenge". Drill phrases, and any
   // response while the backend is offline, use the local mirror so the
   // interlock logic stays demonstrable.
-  const submitChallengeResponse = async () => {
+  const submitChallengeResponse = async (overrideText?: string) => {
     const ch = activeChallengeRef.current;
     if (!ch) return;
     const latencyMs = Date.now() - challengeIssuedAtRef.current;
-    const text = challengeResponseText;
+    const text = overrideText !== undefined ? overrideText : challengeResponseText;
 
     let passed = false;
     let reason = "ok";
@@ -673,17 +699,67 @@ export default function Home() {
     );
   };
 
+  // Signature Voice Scanner interaction handlers
+  const handleStartVoiceAnalysis = async () => {
+    setVoiceState("listening");
+    setSessionStartTime(Date.now());
+    await startMicrophoneStream();
+  };
+
+  const handleStopVoiceAnalysis = () => {
+    setVoiceState("processing");
+    const duration = sessionStartTime ? Math.max(1, Math.round((Date.now() - sessionStartTime) / 100) / 10) : 3.0;
+
+    // Graceful stop of microphone capture
+    stopMicrophoneStream();
+
+    // Elegant transition into forensic result state
+    setTimeout(() => {
+      setVoiceState("result");
+      const finalRisk = report?.overall_risk_score ?? (currentTier === "BLOCK" ? 85 : currentTier === "CHALLENGE" ? 52 : 12);
+      const finalTier = (effectiveTier as "ALLOW" | "CHALLENGE" | "BLOCK") || (finalRisk >= 70 ? "BLOCK" : finalRisk >= 35 ? "CHALLENGE" : "ALLOW");
+      const finalVerdict = report?.verdict || (finalTier === "BLOCK" ? "SYNTHETIC_VOICE_CLONE" : finalTier === "CHALLENGE" ? "SUSPICIOUS_SPLICED_AUDIO" : "AUTHENTIC_TARGET");
+
+      const newEntry: VoiceHistoryEntry = {
+        id: `sess-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        verdict: finalVerdict,
+        tier: finalTier,
+        riskScore: finalRisk,
+        durationSec: duration,
+      };
+      setVoiceHistory((prev) => [newEntry, ...prev.slice(0, 19)]);
+    }, 650);
+  };
+
+  const handleResetVoice = () => {
+    stopMicrophoneStream();
+    setVoiceState("idle");
+    setAudioLevel(0);
+    setCurrentTier("ALLOW");
+    setChallengeStatus("none");
+    setActiveChallenge(null);
+  };
+
+  const handleVoiceChallengeSubmit = async (text: string) => {
+    setChallengeResponseText(text);
+    await submitChallengeResponse(text);
+  };
+
   return (
     <main className="min-h-screen bg-black text-[#ededed] selection:bg-white selection:text-black">
-      {/* Vercel/Geist Stark Top Navigation Bar */}
+      {/* Sleek Top Navigation Bar with Mode Switcher */}
       <header className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.08] bg-black/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 py-3">
           {/* Logo & Brand Identity */}
           <div
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            onClick={() => {
+              setActiveTab("voice");
+              handleResetVoice();
+            }}
             className="flex items-center gap-3 cursor-pointer select-none group"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-md overflow-hidden bg-black">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden bg-black/40 border border-white/[0.1]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/brand/vani-rakshak-icon.jpg"
@@ -695,68 +771,154 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col">
-              <span className="font-semibold text-sm tracking-[-0.3px] text-white">
+              <span className="font-semibold text-sm tracking-[-0.3px] text-white group-hover:text-cyan-400 transition-colors">
                 VaniRakshak
               </span>
-              <span className="font-mono text-[9px] uppercase tracking-wider text-[#888888]">
-                Forensic Voice Intelligence
+              <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400">
+                Voice Security AI
               </span>
             </div>
           </div>
 
-          {/* Navigation Items */}
-          <nav className="flex items-center gap-6 sm:gap-8 text-xs font-medium">
+          {/* Mode Switcher: Signature Voice Scanner vs Deep Forensic Console */}
+          <div className="flex items-center p-1 rounded-full border border-white/[0.08] bg-[#11161d]/80 backdrop-blur-md">
             <button
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="text-[#888888] hover:text-white transition-colors cursor-pointer"
+              type="button"
+              onClick={() => setActiveTab("voice")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer ${
+                activeTab === "voice"
+                  ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)] font-semibold"
+                  : "text-slate-400 hover:text-white"
+              }`}
             >
-              Overview
+              <Mic className="w-3.5 h-3.5" />
+              <span>Voice Scanner</span>
             </button>
-
             <button
+              type="button"
               onClick={() => {
-                document.getElementById("console-dashboard")?.scrollIntoView({ behavior: "smooth" });
+                setActiveTab("console");
+                setTimeout(() => {
+                  document.getElementById("console-dashboard")?.scrollIntoView({ behavior: "smooth" });
+                }, 50);
               }}
-              className="text-[#888888] hover:text-white transition-colors cursor-pointer"
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer ${
+                activeTab === "console"
+                  ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)] font-semibold"
+                  : "text-slate-400 hover:text-white"
+              }`}
             >
-              Console
+              <Cpu className="w-3.5 h-3.5" />
+              <span>Forensic Console</span>
+            </button>
+          </div>
+
+          {/* Right Navigation & Status Items */}
+          <nav className="flex items-center gap-2.5 sm:gap-5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Recent
             </button>
 
-            <button
-              onClick={() => {
-                document.getElementById("benchmark-suite")?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="text-[#888888] hover:text-white transition-colors cursor-pointer"
-            >
-              Benchmarks
-            </button>
-
-            <button
-              onClick={handleDownloadCertificate}
-              disabled={!report}
-              className="text-[#888888] hover:text-white transition-colors cursor-pointer disabled:opacity-40"
-            >
-              Certificate
-            </button>
+            {activeTab === "console" && (
+              <button
+                onClick={handleDownloadCertificate}
+                disabled={!report}
+                className="hidden md:flex text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-40"
+              >
+                Certificate
+              </button>
+            )}
 
             {/* Backend Engine Status Pill */}
-            <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-white/[0.08]">
-              <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#121212] px-3 py-1 font-mono text-[10.5px] text-[#a1a1a1]">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${backendOnline ? "bg-emerald-400" : "bg-rose-500"}`}
-                />
-                <span>{backendOnline ? "Engine online" : "Engine offline"}</span>
-              </div>
+            <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#121212] px-3 py-1 font-mono text-[10.5px] text-[#a1a1a1]">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${backendOnline ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" : "bg-rose-500"}`}
+              />
+              <span className="hidden sm:inline">{backendOnline ? "Engine online" : "Engine offline"}</span>
             </div>
           </nav>
         </div>
       </header>
 
-      {/* 3D Scrollytelling Visualizer Canvas (PRESERVED INTACT) */}
-      <ScrollyVideoCanvas />
+      {/* Signature Hero Voice Scanner Experience */}
+      {activeTab === "voice" && (
+        <div className="relative min-h-[calc(100vh-60px)] pt-20 pb-8 flex flex-col items-center justify-center overflow-hidden bg-atmospheric-dark transition-colors duration-700">
+          {/* Subtle Ambient Radial Glow Backdrops */}
+          <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-gradient-radial from-cyan-500/10 via-blue-900/5 to-transparent blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full bg-gradient-radial from-blue-950/20 via-slate-950/10 to-transparent blur-3xl" />
 
-      {/* Main Forensic Intelligence Console */}
-      <div id="console-dashboard" className="relative z-10 scroll-mt-16 pt-10 pb-20">
+          {voiceState === "idle" && (
+            <VoiceHome
+              backendOnline={backendOnline}
+              claimedIdentity={claimedIdentity}
+              onStartListening={handleStartVoiceAnalysis}
+              onOpenHistory={() => setHistoryOpen(true)}
+              onOpenConsole={() => {
+                setActiveTab("console");
+                setTimeout(() => {
+                  document.getElementById("console-dashboard")?.scrollIntoView({ behavior: "smooth" });
+                }, 50);
+              }}
+            />
+          )}
+
+          {(voiceState === "listening" || voiceState === "processing") && (
+            <VoiceListeningView
+              audioLevel={audioLevel}
+              isListening={voiceState === "listening"}
+              state={voiceState}
+              speakerSimilarity={report?.mean_speaker_sim}
+              snrDb={latestSnrDb}
+              spoofScore={report?.mean_acoustic_anomaly}
+              hasReport={Boolean(report)}
+              onStop={handleStopVoiceAnalysis}
+              onClose={handleResetVoice}
+            />
+          )}
+
+          {voiceState === "result" && (
+            <VoiceResult
+              tier={effectiveTier}
+              riskScore={report?.overall_risk_score ?? (effectiveTier === "BLOCK" ? 85 : effectiveTier === "CHALLENGE" ? 52 : 12)}
+              verdict={report?.verdict}
+              speakerSimilarity={report?.mean_speaker_sim}
+              snrDb={latestSnrDb}
+              challengePhrase={activeChallenge?.phrase}
+              expectedDigits={activeChallenge?.expected_digits}
+              challengeStatus={challengeStatus}
+              onSubmitChallenge={handleVoiceChallengeSubmit}
+              onReset={handleResetVoice}
+              onViewDeepDetails={() => {
+                setActiveTab("console");
+                setTimeout(() => {
+                  document.getElementById("console-dashboard")?.scrollIntoView({ behavior: "smooth" });
+                }, 50);
+              }}
+            />
+          )}
+
+          {voiceState === "permission_denied" && (
+            <MicrophonePermission
+              onRetry={handleStartVoiceAnalysis}
+              onCancel={handleResetVoice}
+              errorMessage={permissionError}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Forensic Intelligence Console Mode */}
+      {activeTab === "console" && (
+        <>
+          {/* 3D Scrollytelling Visualizer Canvas (PRESERVED INTACT) */}
+          <ScrollyVideoCanvas />
+
+          {/* Main Forensic Intelligence Console */}
+          <div id="console-dashboard" className="relative z-10 scroll-mt-16 pt-10 pb-20">
         <div className="mx-auto max-w-7xl px-6 space-y-7">
           {/* Section Header */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
@@ -1033,7 +1195,7 @@ export default function Home() {
                     />
                     <button
                       type="button"
-                      onClick={submitChallengeResponse}
+                      onClick={() => submitChallengeResponse()}
                       className="mt-3 w-full rounded-full bg-amber-500 text-black py-2.5 px-4 font-medium text-xs tracking-wide hover:bg-amber-400 cursor-pointer active:scale-95"
                     >
                       Submit caller response
@@ -1106,6 +1268,16 @@ export default function Home() {
           </section>
         </div>
       </div>
+      </>
+      )}
+
+      {/* Signature Voice History Modal Sheet */}
+      <VoiceHistorySheet
+        isOpen={historyOpen}
+        history={voiceHistory}
+        onClose={() => setHistoryOpen(false)}
+        onClear={() => setVoiceHistory([])}
+      />
     </main>
   );
 }
