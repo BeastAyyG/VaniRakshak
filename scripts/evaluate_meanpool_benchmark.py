@@ -10,7 +10,9 @@ import soundfile as sf
 import torch
 from transformers import WavLMModel
 
-REPO_ROOT = Path("c:/VaniRakshak")
+# Repo root is this file's parent directory, so the script runs from any
+# checkout on any machine rather than only from one hardcoded path.
+REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
