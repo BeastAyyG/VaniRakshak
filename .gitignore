@@ -126,3 +126,6 @@ GEMINI.md
 opencode.json
 .mcp.json
 .ignore
+
+# Syncthing exchange folder between dev and training boxes
+handoff/
