@@ -552,7 +552,7 @@ def evaluate_demo_clips(
             std = float(np.std(audio))
             if std > 1e-6:
                 audio = (audio - float(np.mean(audio))) / std
-            inp = torch.from_numpy(audio).unsqueeze(0).half().to(dev)
+            inp = torch.from_numpy(audio).unsqueeze(0).to(dev, dtype=self.w.dtype)
 
             with torch.no_grad():
                 w_out = self.w(inp, output_hidden_states=True)
@@ -706,15 +706,46 @@ def train_recipe_a(
             f"--unfreeze-top-n must be in [0, {n_encoder_layers}], got {unfreeze_top_n}"
         )
 
+    # Unfreeze the top N layers *whose outputs are actually consumed*, not the
+    # top N overall. select_wavlm_features takes hidden_states[0:merge_layers],
+    # i.e. the embedding output plus layers 0..merge_layers-2 -- so with
+    # --merge-layers 12 layer 11's output is never read, and unfreezing it
+    # trains nothing (measured: 57 of 76 tensors received gradients, exactly
+    # three layers' worth). Anchor the window to the last layer the head sees.
+    if merge_layers:
+        last_used_layer = merge_layers - 2
+    else:
+        last_used_layer = (
+            n_encoder_layers - 1 if layer_index in (-1, n_encoder_layers)
+            else layer_index - 1
+        )
+    last_used_layer = max(0, min(last_used_layer, n_encoder_layers - 1))
+
     encoder_param_names: List[str] = []
     if unfreeze_top_n > 0:
-        first_trainable = n_encoder_layers - unfreeze_top_n
+        first_trainable = last_used_layer + 1 - unfreeze_top_n
+        if first_trainable < 0:
+            raise ValueError(
+                f"--unfreeze-top-n {unfreeze_top_n} exceeds the {last_used_layer + 1} "
+                f"encoder layers this configuration actually reads "
+                f"(merge_layers={merge_layers}, layer_index={layer_index})"
+            )
         for name, param in wavlm.named_parameters():
             if name.startswith("encoder.layers."):
                 idx = int(name.split(".")[2])
-                if idx >= first_trainable:
+                if first_trainable <= idx <= last_used_layer:
                     param.requires_grad = True
                     encoder_param_names.append(name)
+        # LayerDrop MUST be off before train() mode. WavLM-base-plus ships
+        # layerdrop=0.1, which in training mode randomly skips encoder layers
+        # and returns a hidden_states tuple of *varying length* (measured: 10
+        # to 13 over 12 batches). That either raises IndexError in
+        # select_wavlm_features or -- far worse, when merge_layers is small
+        # enough not to overrun -- silently merges a different random set of
+        # layers on every batch. Every standard fine-tuning recipe disables it.
+        wavlm.config.layerdrop = 0.0
+        if hasattr(wavlm, "encoder") and hasattr(wavlm.encoder, "config"):
+            wavlm.encoder.config.layerdrop = 0.0
         # Dropout in the tuned layers is wanted; the frozen stack below still
         # sees train-mode dropout too, which is a second variable moving
         # alongside the unfreeze (docs/10 G3 "watch item"). Recorded, not hidden.
@@ -726,7 +757,7 @@ def train_recipe_a(
         logger.info(
             "Unfroze encoder layers %d-%d (%d tensors, %d parameters); "
             "gradient checkpointing on, frontend in train() mode",
-            first_trainable, n_encoder_layers - 1,
+            first_trainable, last_used_layer,
             len(encoder_param_names), n_enc_trainable,
         )
     else:
@@ -781,11 +812,17 @@ def train_recipe_a(
     for epoch in range(1, epochs + 1):
         t0 = time.perf_counter()
         model.train()
+        # Restored each epoch: the dev pass below puts the frontend back into
+        # eval(), which would otherwise silently persist into the next epoch.
+        if unfreeze_top_n > 0:
+            wavlm.train()
         total_loss = 0.0
         n_batches = 0
 
         for audio_batch, labels in train_loader:
-            audio_batch = audio_batch.to(dev, dtype=torch.float16, non_blocking=True)
+            # Must match the frontend's dtype -- hardcoding float16 fed fp16
+            # audio into a bf16 encoder once --unfreeze-top-n was added.
+            audio_batch = audio_batch.to(dev, dtype=frontend_dtype, non_blocking=True)
             labels = labels.to(dev, non_blocking=True)
 
             optimizer.zero_grad()
@@ -842,6 +879,10 @@ def train_recipe_a(
         logger.info("Evaluating epoch %d on dev set (%d records)...", epoch, len(dev_set))
         t_val0 = time.perf_counter()
         model.eval()
+        # The frontend is in train() mode while fine-tuning, so dropout would
+        # otherwise be live during validation -- corrupting the very dev metric
+        # that drives early stopping and checkpoint selection.
+        wavlm.eval()
         bon_scores = []
         spf_scores = []
 
@@ -849,13 +890,11 @@ def train_recipe_a(
             if is_audio_dev:
                 for audio_batch, labels, _ in dev_loader:
                     audio_batch = audio_batch.to(
-                        dev,
-                        dtype=torch.float16 if dev.type == "cuda" else torch.float32,
-                        non_blocking=True,
+                        dev, dtype=frontend_dtype, non_blocking=True,
                     )
                     w_out = wavlm(audio_batch, output_hidden_states=True)
                     feats = select_wavlm_features(w_out, layer_index, merge_layers)
-                    with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                    with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
                         _, logits = model(feats)
                     llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                     labels_np = labels.numpy()
@@ -865,7 +904,7 @@ def train_recipe_a(
             else:
                 for feats, labels, _ in dev_loader:
                     feats = feats.to(dev, non_blocking=True)
-                    with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                    with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
                         _, logits = model(feats)
                     llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                     labels_np = labels.numpy()
