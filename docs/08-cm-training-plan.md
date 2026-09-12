@@ -1024,10 +1024,45 @@ Per §5, and stated before the run so it cannot be moved afterward:
 > **Empirical Verdict**:
 > **EER ≈ 12.666% within a few hundredths (+0.068 pp)**. The 12 learned attention coefficients are **largely cosmetic**; the performance gain of multi-layer merging over single-layer models (12.878% Pre-Aug, 14.096% L5) is overwhelmingly driven by **variance reduction from multi-layer averaging**, not attentive routing. While learned attention provides a miniscule 0.068 pp buffer on EER, uniform averaging achieves a superior minDCF (0.8731 vs 0.8804). The fixed-mean / uniform model is empirically verified as functionally equivalent and recommended for simplicity.
 
+##### What the two uniform columns measure together — run-to-run variance, at last
+
+The table below carries two rows that are **the same function at inference**:
+`cm_aasist_attm_uniform.pt` (12.734 %) and `cm_aasist_meanpool.pt` (13.504 %)
+both compute a plain uniform mean over the same twelve WavLM layers. Nothing
+distinguishes them at eval time except *which training run produced the
+AASIST body*. The gap between them is therefore a direct measurement of
+exactly the quantity §12.7 previously said was unmeasured:
+
+> **Run-to-run training variance in this setup: ≈0.770 pp pooled EER**
+> (12.734 % vs 13.504 %, two runs of an identical inference-time function).
+
+That number settles the earlier dispute quantitatively rather than by
+argument. The `--freeze-merge` run had been read as evidence that the
+learned attention "does real work," on a **0.838 pp** gap against AttM —
+but 0.770 pp of that magnitude is reproducible from training noise alone,
+with the merge held constant. The earlier verdict was measuring its own
+seed, and the retraction in commit `73a1317` was correct.
+
+It also sets the floor for every future A/B in this document: **a difference
+under ~0.8 pp pooled EER between two separately trained checkpoints means
+nothing here.** By that floor, AttM's headline 0.212 pp win over pre-aug L12
+is also inside the noise and should not be quoted as a win. `--seed` now
+exists (`ml/train_cm.py`), so the way to shrink this floor is a multi-seed
+run, not a sharper single comparison.
+
+##### Reproducibility gap in the uniform-ablation row (open)
+
+The 12.734 % row is the one number in the 6-way table with **no committed
+artifact**. The other five each have a `reports/*.json` written by a
+committed script; this one was produced ad hoc and only its summary survives
+in prose. Before it is cited anywhere else, commit a scoring script under
+`scripts/` and its report JSON alongside the existing two, so the row can be
+regenerated rather than trusted.
+
 ##### Empirical Comparison of Architectures and Ablation Runs
 - **Attentive Merging (`cm_aasist_attm.pt`)**: **12.666% EER**, **0.8804 minDCF**, **3.2391 CLLR**.
 - **Inference-Only Uniform (`cm_aasist_attm_uniform.pt`)**: **12.734% EER**, **0.8731 minDCF**, **3.5112 CLLR**.
-- **Retrained Frozen Meanpool (`cm_aasist_meanpool.pt`)**: **13.504% EER**, **0.9242 minDCF**, **4.3025 CLLR** (reflecting optimization path differences when trained under frozen uniform weights from scratch).
+- **Retrained Frozen Meanpool (`cm_aasist_meanpool.pt`)**: **13.504% EER**, **0.9242 minDCF**, **4.3025 CLLR**. Same inference-time function as the row above it; the 0.770 pp separation is training-run variance, not architecture — see the note above.
 - **CLLR Observation**: Uncalibrated multi-layer pooling consistently expands logit variance regardless of whether coefficients are learned or uniform (CLLR 3.2391–3.5112 vs bar < 1.6238).
 
 #### 6-Way Evaluation Benchmark Results (Including Uniform Weight Ablation)

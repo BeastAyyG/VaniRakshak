@@ -129,6 +129,7 @@ class FastAudioAugmentLoader:
         queue_size: int = 8,
         max_samples: Optional[int] = None,
         generator: Optional[torch.Generator] = None,
+        seed: int = 42,
     ) -> None:
         self.samples = dataset.samples
         if max_samples and max_samples < len(self.samples):
@@ -140,6 +141,12 @@ class FastAudioAugmentLoader:
         self.n_threads = n_threads
         self.queue_size = queue_size
         self.generator = generator
+        # Per-item RNG streams keep the crop offset and augmentation choice
+        # reproducible: the 24 producer threads would otherwise race on a
+        # single shared generator, so which utterance gets which augmentation
+        # would vary run to run even with a fixed seed.
+        self.seed = seed
+        self._epoch = 0
 
     def __len__(self) -> int:
         n = len(self.samples)
@@ -147,18 +154,30 @@ class FastAudioAugmentLoader:
             return n // self.batch_size
         return (n + self.batch_size - 1) // self.batch_size
 
-    def _load_and_augment(self, item: Tuple[str, int, str]) -> Tuple[np.ndarray, int]:
+    def _load_and_augment(
+        self, task: Tuple[Tuple[str, int, str], int, int]
+    ) -> Tuple[np.ndarray, int]:
+        item, index, epoch = task
         path, label, _ = item
+        # Seeded on (seed, epoch, sample index) -- independent of thread
+        # scheduling, and still different every epoch. The epoch travels in
+        # the task rather than being read off self, which the producer thread
+        # would race against the next __iter__ call.
+        rng = np.random.default_rng([self.seed, epoch, int(index)])
         try:
             audio, sr = sf.read(path, dtype="float32")
-            w = prepare_audio_window(audio, sr=sr, target_duration=4.0, random_crop=True)
-            w_aug = self.augmenter(w)
+            w = prepare_audio_window(
+                audio, sr=sr, target_duration=4.0, random_crop=True, rng=rng
+            )
+            w_aug = self.augmenter(w, rng=rng)
             return w_aug, label
         except Exception as e:
             logger.warning("Error loading %s: %s; using zero window", path, e)
             return np.zeros(64000, dtype=np.float32), label
 
     def __iter__(self):
+        epoch = self._epoch
+        self._epoch += 1
         n = len(self.samples)
         if self.shuffle:
             if self.generator is not None:
@@ -181,7 +200,7 @@ class FastAudioAugmentLoader:
             with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_threads) as executor:
                 for start in range(0, len(indices), self.batch_size):
                     batch_idx = indices[start : start + self.batch_size]
-                    batch_items = [self.samples[i] for i in batch_idx]
+                    batch_items = [(self.samples[i], int(i), epoch) for i in batch_idx]
 
                     processed = list(executor.map(self._load_and_augment, batch_items))
                     audios = np.stack([p[0] for p in processed])
@@ -257,6 +276,7 @@ class FastPrefetchLoader:
         batch_size: int = 256,
         shuffle: bool = False,
         drop_last: bool = False,
+        seed: int = 42,
         n_threads: int = 16,
         queue_size: int = 8,
     ) -> None:
@@ -265,6 +285,7 @@ class FastPrefetchLoader:
         self.shuffle = shuffle
         self.drop_last = drop_last
         self.n_threads = n_threads
+        self.seed = seed
         self.queue_size = queue_size
 
     def __len__(self) -> int:
@@ -277,7 +298,9 @@ class FastPrefetchLoader:
         n = len(self.samples)
         indices = np.arange(n)
         if self.shuffle:
-            np.random.shuffle(indices)
+            # Dev ordering does not change any metric, but an unseeded global
+            # shuffle here is the same defect as the one fixed above.
+            np.random.default_rng(self.seed).shuffle(indices)
 
         if self.drop_last:
             n_batches = n // self.batch_size
@@ -619,6 +642,7 @@ def train_recipe_a(
         queue_size=8,
         max_samples=max_train_utts,
         generator=loader_generator,
+        seed=seed,
     )
 
     # 2. Setup Dev Set & DataLoader
