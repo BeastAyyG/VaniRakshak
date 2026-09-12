@@ -16,9 +16,15 @@ import com.vericall.data.VaniCallHistoryRepository
 import com.vericall.databinding.ActivityVaniCallSummaryBinding
 import com.vericall.model.VaniCallRecord
 import com.vericall.ui.VaniTranscriptAdapter
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
+import android.widget.SeekBar
+import android.widget.Toast
 
 class VaniCallSummaryActivity : AppCompatActivity() {
 
@@ -96,6 +102,61 @@ class VaniCallSummaryActivity : AppCompatActivity() {
         binding.tvSummaryVerdictTitle.setTextColor(ContextCompat.getColor(this, verdictColor))
         binding.tvSummaryRiskScore.text = "Risk: ${record.riskScore}%"
         binding.tvSummaryRiskScore.setTextColor(ContextCompat.getColor(this, verdictColor))
+
+        // Preserved Evidence Banner
+        if (record.isProtected || record.riskScore >= 50) {
+            binding.cardPreservedEvidence.visibility = View.VISIBLE
+        } else {
+            binding.cardPreservedEvidence.visibility = View.GONE
+        }
+
+        // Audio Player Setup
+        val audioFile = record.audioFilePath?.let { File(it) }
+        if (audioFile != null && audioFile.exists() && audioFile.length() > 500) {
+            binding.layoutSummaryAudioPlayer.visibility = View.VISIBLE
+            setupAudioPlayer(audioFile)
+        } else {
+            binding.layoutSummaryAudioPlayer.visibility = View.GONE
+        }
+
+        // Red Flags & Scam Signals
+        binding.containerRedFlags.removeAllViews()
+        if (record.redFlags.isNotEmpty()) {
+            binding.sectionRedFlags.visibility = View.VISIBLE
+            for (rf in record.redFlags) {
+                val tv = TextView(this).apply {
+                    text = "•  $rf"
+                    textSize = 13f
+                    setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.verdict_scam))
+                    setPadding(0, 4, 0, 4)
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }
+                binding.containerRedFlags.addView(tv)
+            }
+        } else if (record.riskScore >= 60) {
+            binding.sectionRedFlags.visibility = View.VISIBLE
+            val tv = TextView(this).apply {
+                text = "•  Anomalous vocoder synthesis and high-frequency phase discontinuities detected."
+                textSize = 13f
+                setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.verdict_scam))
+                setPadding(0, 4, 0, 4)
+            }
+            binding.containerRedFlags.addView(tv)
+        } else {
+            binding.sectionRedFlags.visibility = View.GONE
+        }
+
+        // Fact Checking & Web Evidence
+        binding.containerFactChecks.removeAllViews()
+        if (record.factChecks.isNotEmpty()) {
+            binding.sectionFactChecks.visibility = View.VISIBLE
+            for (fc in record.factChecks) {
+                val fcCard = createFactCheckCard(fc)
+                binding.containerFactChecks.addView(fcCard)
+            }
+        } else {
+            binding.sectionFactChecks.visibility = View.GONE
+        }
 
         // AI Summary
         if (record.aiSummary.isNotBlank()) {
@@ -185,5 +246,165 @@ class VaniCallSummaryActivity : AppCompatActivity() {
             }
             startActivity(Intent.createChooser(intent, "Share Call Summary"))
         }
+    }
+
+    private var mediaPlayer: MediaPlayer? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var progressRunnable: Runnable? = null
+
+    private fun setupAudioPlayer(file: File) {
+        binding.btnSummaryPlayPause.setOnClickListener {
+            if (mediaPlayer == null) {
+                try {
+                    mediaPlayer = MediaPlayer().apply {
+                        setDataSource(file.absolutePath)
+                        prepare()
+                        start()
+                        setOnCompletionListener {
+                            binding.btnSummaryPlayPause.setImageResource(R.drawable.ic_play_arrow)
+                            binding.seekSummaryAudio.progress = 0
+                            binding.tvSummaryAudioDuration.text = "00:00 / 00:00"
+                        }
+                    }
+                    binding.btnSummaryPlayPause.setImageResource(R.drawable.ic_pause)
+                    startPlayerTracker()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Could not play audio", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                if (mediaPlayer!!.isPlaying) {
+                    mediaPlayer!!.pause()
+                    binding.btnSummaryPlayPause.setImageResource(R.drawable.ic_play_arrow)
+                } else {
+                    mediaPlayer!!.start()
+                    binding.btnSummaryPlayPause.setImageResource(R.drawable.ic_pause)
+                    startPlayerTracker()
+                }
+            }
+        }
+
+        binding.seekSummaryAudio.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser && mediaPlayer != null) {
+                    val pos = (mediaPlayer!!.duration * (progress / 100f)).toInt()
+                    mediaPlayer!!.seekTo(pos)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+    }
+
+    private fun startPlayerTracker() {
+        handler.removeCallbacksAndMessages(null)
+        progressRunnable = object : Runnable {
+            override fun run() {
+                val mp = mediaPlayer
+                if (mp != null && mp.isPlaying) {
+                    val cur = mp.currentPosition
+                    val tot = mp.duration
+                    val pct = if (tot > 0) ((cur.toFloat() / tot) * 100).toInt() else 0
+                    binding.seekSummaryAudio.progress = pct
+
+                    val cMin = (cur / 1000) / 60
+                    val cSec = (cur / 1000) % 60
+                    val tMin = (tot / 1000) / 60
+                    val tSec = (tot / 1000) % 60
+                    binding.tvSummaryAudioDuration.text = String.format("%02d:%02d / %02d:%02d", cMin, cSec, tMin, tSec)
+
+                    handler.postDelayed(this, 300)
+                }
+            }
+        }
+        handler.post(progressRunnable!!)
+    }
+
+    private fun createFactCheckCard(fc: com.vericall.model.FactCheckItem): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_card_inner)
+            setPadding(12, 12, 12, 12)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 8 }
+            layoutParams = lp
+        }
+
+        // Header Row: Claim + Verdict
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+
+        val verdictPill = TextView(this).apply {
+            text = fc.verdict
+            textSize = 10f
+            textStyleBold()
+            setPadding(8, 4, 8, 4)
+            when (fc.verdict) {
+                "SUPPORTED" -> {
+                    setBackgroundResource(R.drawable.bg_badge_supported)
+                    setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.verdict_supported))
+                }
+                "FRAUDULENT_CLAIM", "CONTRADICTED" -> {
+                    setBackgroundResource(R.drawable.bg_badge_scam)
+                    setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.verdict_scam))
+                }
+                else -> {
+                    setBackgroundResource(R.drawable.bg_pill_neobrutal_paper)
+                    setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.neo_ink))
+                }
+            }
+        }
+        headerRow.addView(verdictPill)
+
+        val claimTv = TextView(this).apply {
+            text = "\"${fc.claim}\""
+            textSize = 13f
+            textStyleBold()
+            setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.neo_ink))
+            setPadding(10, 0, 0, 0)
+        }
+        headerRow.addView(claimTv)
+        card.addView(headerRow)
+
+        // Evidence text
+        if (fc.evidence.isNotBlank()) {
+            val evidenceTv = TextView(this).apply {
+                text = "Evidence: ${fc.evidence}"
+                textSize = 12f
+                setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.text_secondary))
+                setPadding(0, 6, 0, 0)
+            }
+            card.addView(evidenceTv)
+        }
+
+        // Source Citation
+        if (fc.source.isNotBlank()) {
+            val sourceTv = TextView(this).apply {
+                text = "Source: ${fc.source}"
+                textSize = 11f
+                setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.brand_primary))
+                setPadding(0, 4, 0, 0)
+            }
+            card.addView(sourceTv)
+        }
+
+        return card
+    }
+
+    private fun TextView.textStyleBold() {
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (_: Exception) {}
+        mediaPlayer = null
+        super.onDestroy()
     }
 }

@@ -6,6 +6,7 @@
     <color name="paper">#FFF8EF</color>
     <color name="paper2">#FFFDF7</color>
     <color name="ink">#221E1A</color>
+    <color name="neo_ink">#221E1A</color>
     <color name="ink_muted">#66221E1A</color>
     <color name="ink_subtle">#33221E1A</color>
     <color name="butter">#FFE18A</color>

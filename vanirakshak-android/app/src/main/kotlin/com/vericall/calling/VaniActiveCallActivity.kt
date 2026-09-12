@@ -100,6 +100,7 @@ class VaniActiveCallActivity : AppCompatActivity() {
         callerName = intent.getStringExtra(EXTRA_CALL_NAME) ?: "Caller"
         isOutgoing = intent.getBooleanExtra(EXTRA_IS_OUTGOING, true)
         callId = "call_${UUID.randomUUID().toString().take(8)}"
+        VaniRiskBus.activeCallId = callId
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
@@ -365,6 +366,19 @@ class VaniActiveCallActivity : AppCompatActivity() {
             scamType = scamType
         )
 
+        // Stop services and audio capture first to finalize WAV file
+        VaniCallRouter.onEnded(this)
+
+        val recordedFile = java.io.File(java.io.File(filesDir, "recordings"), "${callId}.wav")
+        val audioPath = VaniRiskBus.lastRecordedAudioPath ?: if (recordedFile.exists() && recordedFile.length() > 500) recordedFile.absolutePath else null
+        val riskLevel = when {
+            riskScore >= 80 -> "Critical"
+            riskScore >= 60 -> "High"
+            riskScore >= 40 -> "Moderate"
+            riskScore >= 20 -> "Low"
+            else -> "Very Low"
+        }
+
         // Save completed call record to repository
         val record = VaniCallRecord(
             id = callId,
@@ -379,13 +393,17 @@ class VaniActiveCallActivity : AppCompatActivity() {
             keyPoints = keyPoints,
             actionItems = actionItems,
             riskScore = riskScore,
+            riskLevel = riskLevel,
             scamType = scamType,
-            isVoiceVerified = snapshot?.level == RiskLevel.SAFE
+            isVoiceVerified = snapshot?.level == RiskLevel.SAFE,
+            audioFilePath = audioPath,
+            isProtected = riskScore >= 50,
+            redFlags = snapshot?.redFlags ?: emptyList()
         )
         VaniCallHistoryRepository.saveCallRecord(this, record)
 
-        // Stop services and audio capture
-        VaniCallRouter.onEnded(this)
+        // Asynchronously finalize with Crawl4AI web search & fact checking
+        com.vericall.data.VaniCallFinalizer.finalizeCallAsync(applicationContext, record)
 
         // Launch Post-Call Summary screen
         val summaryIntent = Intent(this, VaniCallSummaryActivity::class.java).apply {

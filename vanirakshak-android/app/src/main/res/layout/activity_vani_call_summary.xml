@@ -157,6 +157,139 @@
                     android:textColor="@color/verdict_supported" />
             </LinearLayout>
 
+            <!-- Preserved Evidence Card (Risk >= 50%) -->
+            <LinearLayout
+                android:id="@+id/cardPreservedEvidence"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_pill_neobrutal_butter"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:layout_marginTop="10dp"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔒"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvPreservedEvidenceText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/neo_ink"
+                    android:text="High-Risk Forensic Evidence Preserved: Audio WAV and Transcript TXT retained on disk" />
+            </LinearLayout>
+
+            <!-- Audio Recording Player Bar -->
+            <LinearLayout
+                android:id="@+id/layoutSummaryAudioPlayer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_card_clean"
+                android:padding="12dp">
+
+                <ImageButton
+                    android:id="@+id/btnSummaryPlayPause"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_keypad_key_circle"
+                    android:src="@drawable/ic_play_arrow"
+                    android:contentDescription="Play Recording" />
+
+                <SeekBar
+                    android:id="@+id/seekSummaryAudio"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="10dp"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressTint="@color/neo_ink"
+                    android:thumbTint="@color/neo_ink" />
+
+                <TextView
+                    android:id="@+id/tvSummaryAudioDuration"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_secondary"
+                    android:text="00:00 / 00:00" />
+            </LinearLayout>
+
+            <!-- Red Flags & Scam Signals Section -->
+            <LinearLayout
+                android:id="@+id/sectionRedFlags"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_card_clean"
+                android:padding="16dp"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🚨 DETECTED SCAM SIGNALS &amp; RED FLAGS"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:textColor="@color/verdict_scam" />
+
+                <LinearLayout
+                    android:id="@+id/containerRedFlags"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <!-- Fact Checking & Web Grounding Section -->
+            <LinearLayout
+                android:id="@+id/sectionFactChecks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_card_clean"
+                android:padding="16dp"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✦ FACT CHECK &amp; LIVE WEB EVIDENCE (CRAWL4AI)"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:textColor="@color/brand_primary" />
+
+                <LinearLayout
+                    android:id="@+id/containerFactChecks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="10dp" />
+            </LinearLayout>
+
             <!-- AI Summary Section -->
             <LinearLayout
                 android:id="@+id/sectionAiSummary"

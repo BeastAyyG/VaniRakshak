@@ -77,12 +77,40 @@ def get_indic_conformer_model():
     get_local_whisper_model()
     return True
 
+import wave
+
+def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000, channels: int = 1, sampwidth: int = 2) -> bytes:
+    """Ensures audio_bytes is in a recognized audio container format.
+    If raw PCM is provided, wraps it with a standard RIFF/WAV header."""
+    if not audio_bytes:
+        return b""
+    if (audio_bytes.startswith(b"RIFF") or 
+        audio_bytes.startswith(b"ID3") or 
+        audio_bytes.startswith(b"\xff\xfb") or 
+        audio_bytes.startswith(b"OggS") or 
+        audio_bytes.startswith(b"fLaC")):
+        return audio_bytes
+    
+    # Wrap raw PCM into valid WAV bytes
+    buf = io.BytesIO()
+    try:
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(channels)
+            wf.setsampwidth(sampwidth)
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio_bytes)
+        return buf.getvalue()
+    except Exception as e:
+        logger.warning(f"Failed to wrap raw PCM to WAV: {e}")
+        return audio_bytes
+
 def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
     """
     Transcribes audio bytes using Groq Whisper Large v3 Turbo or Local Faster-Whisper.
     Decodes Hindi, Hinglish, English (Indian Accent), and regional Indian speech.
     """
     t0 = time.time()
+    audio_bytes = ensure_wav_bytes(audio_bytes)
     client = get_groq_client()
     transcript = ""
     detected_lang = "hi"
@@ -95,7 +123,7 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
     if client != "mock" and client is not None:
         try:
             resp = client.audio.transcriptions.create(
-                file=("audio.mp3", audio_bytes),
+                file=("audio.wav", audio_bytes),
                 model=_model_name,
                 response_format="verbose_json"
             )
@@ -127,7 +155,6 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
             import tempfile
             temp_path = None
             try:
-                # Detect format from magic bytes
                 ext = ".wav" if audio_bytes[:4] == b"RIFF" else ".mp3"
                 with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
                     tf.write(audio_bytes)
@@ -159,13 +186,12 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
                     except Exception:
                         pass
 
-    # Attempt 3: Resilient heuristic if audio is too short or silent
+    # When no words are detected or audio is silent, honest empty result
     if not transcript:
-        transcript = "Aapka bank account aur SIM card TRAI rules ke tehat block kar diya jayega. Turant OTP verify karein."
-        detected_lang = "hi"
-        duration = 5.2
+        transcript = ""
+        duration = round(time.time() - t0, 2)
         inference_sec = round(time.time() - t0, 3)
-        used_engine = "Acoustic Threat Heuristic"
+        used_engine = "Voice Activity / Silence Detection"
 
     lang_map = {
         "hi": "Hindi (हिंदी) / Hinglish",

@@ -20,7 +20,28 @@ data class TranscriptUtterance(
 )
 
 /**
- * Represents a complete call history entry with associated forensic & AI metadata.
+ * Single fact-check claim and web evidence finding.
+ */
+data class FactCheckItem(
+    val claim: String,
+    val verdict: String,       // "SUPPORTED", "CONTRADICTED", "FRAUDULENT_CLAIM", "UNVERIFIABLE"
+    val evidence: String,
+    val source: String,
+    val reasoning: String = "",
+    val confidence: Int = 85
+)
+
+/**
+ * Grounded web source information scraped by Crawl4AI.
+ */
+data class WebSourceItem(
+    val url: String,
+    val title: String,
+    val snippet: String = ""
+)
+
+/**
+ * Represents a complete call history entry with associated forensic, recording & AI metadata.
  */
 data class VaniCallRecord(
     val id: String,
@@ -35,6 +56,14 @@ data class VaniCallRecord(
     val keyPoints: List<String> = emptyList(),
     val actionItems: List<String> = emptyList(),
     val riskScore: Int = 0,
+    val riskLevel: String = "Very Low",
     val scamType: String = "",
-    val isVoiceVerified: Boolean = false
+    val isVoiceVerified: Boolean = false,
+    val audioFilePath: String? = null,
+    val transcriptFilePath: String? = null,
+    val isProtected: Boolean = false,
+    val confidence: Int = 0,
+    val factChecks: List<FactCheckItem> = emptyList(),
+    val redFlags: List<String> = emptyList(),
+    val sources: List<WebSourceItem> = emptyList()
 )

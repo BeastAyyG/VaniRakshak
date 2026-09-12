@@ -705,10 +705,6 @@ async def verify_claim(req: FactCheckRequest):
         ]
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=8084, reload=False)
-
 
 # ==============================================================================
 # LIVE STREAM VOICE CALL RECORDING ENGINE (Main App Integration)
@@ -916,3 +912,129 @@ async def ingest_call_chunk(
     except Exception as e:
         logger.error(f"Error processing call chunk for {call_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/call/finalize")
+async def finalize_call(
+    call_id: str = Form(...),
+    caller: str = Form("Unknown"),
+    transcript: Optional[str] = Form(None),
+    verify_fact: bool = Form(True),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    Complete Post-Call Forensic Pipeline:
+    Processes full call audio WAV or finalized transcript, runs IndicConformer ASR,
+    scam matrix analysis, Crawl4AI live web verification, and returns the comprehensive safety report.
+    """
+    t_start = time.time()
+    try:
+        final_text = (transcript or "").strip()
+
+        # If audio file is uploaded and transcript is empty or short, transcribe audio
+        if file is not None and len(final_text) < 10:
+            audio_bytes = await file.read()
+            if audio_bytes and len(audio_bytes) > 500:
+                res = transcribe_with_indic_conformer(audio_bytes)
+                final_text = (res.get("transcript") or "").strip()
+
+        client = get_gemini_client()
+
+        # Threat & scam evaluation
+        if final_text:
+            threat_data = evaluate_threat_and_scam(final_text, client)
+        else:
+            threat_data = {
+                "is_scam": False,
+                "threat_level": "SAFE",
+                "risk_score": 0,
+                "scam_type": "None (No Speech Detected)",
+                "urgency_detected": False,
+                "red_flags": [],
+                "action_advice": "No intelligible speech detected during this call."
+            }
+
+        risk_score = threat_data.get("risk_score", 0)
+        is_scam = threat_data.get("is_scam", False)
+        scam_type = threat_data.get("scam_type", "")
+        red_flags = threat_data.get("red_flags", [])
+
+        # Fact checking with Crawl4AI
+        fact_checks = []
+        sources = []
+        if verify_fact and final_text and len(final_text) > 15:
+            sources = await discover_and_crawl_sources(
+                query_text=final_text,
+                user_urls=None,
+                is_scam=is_scam,
+                scam_type=scam_type
+            )
+            if sources:
+                fact_decision = evaluate_fact_with_gemini(final_text, sources, client)
+                fact_checks.append({
+                    "claim": final_text[:140],
+                    "verdict": fact_decision.get("verdict", "UNVERIFIABLE"),
+                    "confidence": fact_decision.get("confidence", 80),
+                    "evidence": fact_decision.get("summary", ""),
+                    "reasoning": fact_decision.get("reasoning", ""),
+                    "source": sources[0]["url"] if sources else "Web Evidence"
+                })
+            elif is_scam:
+                fact_checks.append({
+                    "claim": final_text[:140],
+                    "verdict": "FRAUDULENT_CLAIM",
+                    "confidence": 92,
+                    "evidence": f"Known financial phishing pattern detected ({scam_type}).",
+                    "reasoning": threat_data.get("action_advice", "Do not share sensitive OTPs or transfer money."),
+                    "source": "VaniRakshak Cyber Threat Intelligence"
+                })
+
+        risk_level = when_risk_level = when_level(risk_score)
+        is_protected = risk_score >= 50
+
+        return {
+            "status": "success",
+            "call_id": call_id,
+            "caller": caller,
+            "transcript": final_text,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "is_protected": is_protected,
+            "scam_type": scam_type,
+            "threat": threat_data,
+            "red_flags": red_flags,
+            "fact_checks": fact_checks,
+            "sources": [
+                {
+                    "url": s["url"],
+                    "title": s["title"],
+                    "status": s["status"],
+                    "scraped_chars": s["scraped_chars"],
+                    "snippet": s["snippet"]
+                }
+                for s in sources
+            ],
+            "action_advice": threat_data.get("action_advice", "Safe to proceed."),
+            "pipeline_time_sec": round(time.time() - t_start, 2)
+        }
+    except Exception as exc:
+        logger.error(f"Error in /api/call/finalize: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+def when_level(score: int) -> str:
+    if score >= 80:
+        return "Critical"
+    elif score >= 60:
+        return "High"
+    elif score >= 40:
+        return "Moderate"
+    elif score >= 20:
+        return "Low"
+    else:
+        return "Very Low"
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("server:app", host="127.0.0.1", port=8084, reload=False)

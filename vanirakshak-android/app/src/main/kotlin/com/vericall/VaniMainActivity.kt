@@ -44,6 +44,7 @@ import com.vericall.model.VaniCallRecord
 import com.vericall.model.VaniContact
 import com.vericall.ui.VaniCallHistoryAdapter
 import com.vericall.ui.VaniFavoritesAdapter
+import com.vericall.ui.VaniProtectedCallAdapter
 import com.vericall.util.VaniCallRouter
 import com.vericall.util.VaniNotificationHelper
 import com.vericall.verification.ClaimResultActivity
@@ -54,6 +55,7 @@ import com.vericall.verification.VoiceVerificationActivity
 class VaniMainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityVaniMainBinding
+    private var protectedCallAdapter: VaniProtectedCallAdapter? = null
 
     private enum class Tab { FAVORITES, RECENTS, CONTACTS, KEYPAD, VOICEMAIL, SHIELD }
     private var currentTab = Tab.RECENTS
@@ -130,9 +132,18 @@ class VaniMainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshAllData()
+        if (currentTab == Tab.VOICEMAIL) {
+            loadProtectedCalls()
+        }
+    }
+
+    override fun onPause() {
+        protectedCallAdapter?.stopPlayback()
+        super.onPause()
     }
 
     override fun onDestroy() {
+        protectedCallAdapter?.stopPlayback()
         super.onDestroy()
         brandHandler.removeCallbacksAndMessages(null)
     }
@@ -223,7 +234,14 @@ class VaniMainActivity : AppCompatActivity() {
                 iv.setColorFilter(muted)
                 tv.setTextColor(muted)
                 tv.typeface = Typeface.DEFAULT
+                if (t == Tab.VOICEMAIL) {
+                    protectedCallAdapter?.stopPlayback()
+                }
             }
+        }
+
+        if (tab == Tab.VOICEMAIL) {
+            loadProtectedCalls()
         }
 
         // Shield is opened via header badge
@@ -430,45 +448,30 @@ class VaniMainActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------- 5. Voicemail Tab
+    // ------------------------------------------------------------- 5. Protected Calls / Voicemail Tab
     private fun setupVoicemailTab() {
-        binding.btnVoicemailGreeting.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            Toast.makeText(this, "✦ Voicemail Greeting: Ready to record custom AI voice greeting.", Toast.LENGTH_LONG).show()
-        }
+        protectedCallAdapter = VaniProtectedCallAdapter()
+        binding.recyclerProtectedCalls.layoutManager = LinearLayoutManager(this)
+        binding.recyclerProtectedCalls.adapter = protectedCallAdapter
+        loadProtectedCalls()
+    }
 
-        binding.btnCallBackVoicemail1.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-            VaniActiveCallActivity.startOutgoingCall(this, "+91 98765 43210", "Rahul Sharma")
-        }
+    private fun loadProtectedCalls() {
+        val allCalls = VaniCallHistoryRepository.getRecents(this)
+        if (allCalls.isEmpty()) {
+            binding.recyclerProtectedCalls.visibility = View.GONE
+            binding.layoutEmptyProtectedCalls.visibility = View.VISIBLE
+            binding.badgeSavedCount.text = "0 Saved"
+            binding.badgeHighRiskCount.text = "🔒 0 Protected"
+        } else {
+            binding.recyclerProtectedCalls.visibility = View.VISIBLE
+            binding.layoutEmptyProtectedCalls.visibility = View.GONE
+            protectedCallAdapter?.updateRecords(allCalls)
 
-        binding.btnCallBackVoicemail2.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-            VaniActiveCallActivity.startOutgoingCall(this, "+91 98765 43210", "+91 98765 43210")
-        }
-
-        var isPlaying1 = false
-        binding.btnPlayVoicemail1.setOnClickListener {
-            isPlaying1 = !isPlaying1
-            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            if (isPlaying1) {
-                binding.btnPlayVoicemail1.setImageResource(android.R.drawable.ic_media_pause)
-                Toast.makeText(this, "Playing voicemail (0:28)...", Toast.LENGTH_SHORT).show()
-            } else {
-                binding.btnPlayVoicemail1.setImageResource(R.drawable.ic_play_arrow)
-            }
-        }
-
-        var isPlaying2 = false
-        binding.btnPlayVoicemail2.setOnClickListener {
-            isPlaying2 = !isPlaying2
-            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            if (isPlaying2) {
-                binding.btnPlayVoicemail2.setImageResource(android.R.drawable.ic_media_pause)
-                Toast.makeText(this, "Playing voicemail (0:14)...", Toast.LENGTH_SHORT).show()
-            } else {
-                binding.btnPlayVoicemail2.setImageResource(R.drawable.ic_play_arrow)
-            }
+            val savedCount = allCalls.size
+            val highRiskCount = allCalls.count { it.riskScore >= 50 || it.isProtected }
+            binding.badgeSavedCount.text = "$savedCount Saved"
+            binding.badgeHighRiskCount.text = "🔒 $highRiskCount Protected"
         }
     }
 
@@ -713,13 +716,15 @@ class VaniMainActivity : AppCompatActivity() {
                     showTopBar(animate = true)
                 }
             }
-            binding.scrollVoicemail.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-                if (scrollY > oldScrollY + 14) {
-                    hideTopBar(animate = true)
-                } else if (scrollY < oldScrollY - 14) {
-                    showTopBar(animate = true)
+            binding.recyclerProtectedCalls.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                    if (dy > 14) {
+                        hideTopBar(animate = true)
+                    } else if (dy < -14) {
+                        showTopBar(animate = true)
+                    }
                 }
-            }
+            })
         }
     }
 

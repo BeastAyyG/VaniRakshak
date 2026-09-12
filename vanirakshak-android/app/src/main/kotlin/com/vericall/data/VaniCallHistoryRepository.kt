@@ -11,6 +11,7 @@ import com.vericall.model.CallDirection
 import com.vericall.model.TranscriptUtterance
 import com.vericall.model.VaniCallRecord
 import com.vericall.util.VaniCallRouter
+import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -96,22 +97,121 @@ object VaniCallHistoryRepository {
     /**
      * Persists a completed call session (with transcript, summary, and forensic scores).
      */
+    /**
+     * Persists a completed call session (with transcript, summary, and forensic scores).
+     * Enforces:
+     *   1. High-Risk Call Protection: If risk >= 50%, auto-saves call_<id>_transcript.txt and marks isProtected=true.
+     *   2. Last 10 Call Policy: Retains the 10 most recent normal calls (<50% risk); prunes older normal audio files.
+     *   3. Protected calls (>=50% risk) are NEVER deleted.
+     */
     fun saveCallRecord(context: Context, record: VaniCallRecord) {
-        val existing = loadPersistedRecords(context).toMutableList()
-        val index = existing.indexOfFirst { it.id == record.id }
-        if (index != -1) {
-            existing[index] = record
-        } else {
-            existing.add(0, record)
+        var finalRecord = record
+
+        // High-risk auto preservation
+        if (finalRecord.riskScore >= 50 || finalRecord.isProtected) {
+            val protectedDir = File(context.filesDir, "protected").apply { mkdirs() }
+            val txtFile = File(protectedDir, "${finalRecord.id}_transcript.txt")
+            try {
+                val evidenceContent = buildString {
+                    appendLine("================================================================================")
+                    appendLine("VANIRAKSHAK FORENSIC VOICE EVIDENCE ARCHIVE")
+                    appendLine("================================================================================")
+                    appendLine("Call ID:        ${finalRecord.id}")
+                    appendLine("Caller:         ${finalRecord.callerName} (${finalRecord.number})")
+                    appendLine("Timestamp:      ${java.util.Date(finalRecord.timestamp)}")
+                    appendLine("Duration:       ${finalRecord.durationSec} seconds")
+                    appendLine("Risk Score:     ${finalRecord.riskScore}% (${finalRecord.riskLevel})")
+                    appendLine("Scam Category:  ${finalRecord.scamType.ifBlank { "Acoustic / Financial Anomaly" }}")
+                    appendLine("Protection:     AUTOMATICALLY PRESERVED EVIDENCE (Risk >= 50%)")
+                    appendLine("Audio File:     ${finalRecord.audioFilePath ?: "Preserved in session"}")
+                    appendLine("--------------------------------------------------------------------------------")
+                    appendLine("DETECTED RED FLAGS & SCAM SIGNALS:")
+                    if (finalRecord.redFlags.isNotEmpty()) {
+                        finalRecord.redFlags.forEach { appendLine("  • $it") }
+                    } else {
+                        appendLine("  • Severe acoustic vocoder distortion / impersonation risk")
+                    }
+                    appendLine("--------------------------------------------------------------------------------")
+                    appendLine("CONVERSATION TRANSCRIPT:")
+                    if (finalRecord.transcript.isNotEmpty()) {
+                        finalRecord.transcript.forEach { appendLine("[${it.speaker}]: ${it.text}") }
+                    } else {
+                        appendLine("  [No spoken transcript captured]")
+                    }
+                    appendLine("--------------------------------------------------------------------------------")
+                    appendLine("FACT-CHECK & WEB EVIDENCE:")
+                    if (finalRecord.factChecks.isNotEmpty()) {
+                        finalRecord.factChecks.forEach { fc ->
+                            appendLine("  Claim:    ${fc.claim}")
+                            appendLine("  Verdict:  ${fc.verdict}")
+                            appendLine("  Evidence: ${fc.evidence}")
+                            appendLine("  Source:   ${fc.source}")
+                            appendLine()
+                        }
+                    } else {
+                        appendLine("  No specific external factual claim extracted.")
+                    }
+                    appendLine("--------------------------------------------------------------------------------")
+                    appendLine("AI SUMMARY & ACTION DIRECTIVE:")
+                    appendLine(finalRecord.aiSummary.ifBlank { "Caution recommended. Do not share OTPs or transfer funds." })
+                    appendLine("================================================================================")
+                }
+                txtFile.writeText(evidenceContent)
+                finalRecord = finalRecord.copy(
+                    isProtected = true,
+                    transcriptFilePath = txtFile.absolutePath
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving protected transcript file: ${e.message}", e)
+            }
         }
-        savePersistedRecords(context, existing)
+
+        val existing = loadPersistedRecords(context).toMutableList()
+        val index = existing.indexOfFirst { it.id == finalRecord.id }
+        if (index != -1) {
+            existing[index] = finalRecord
+        } else {
+            existing.add(0, finalRecord)
+        }
+
+        // Apply retention policy:
+        // Protected calls: ALWAYS kept.
+        // Normal calls (risk < 50 && !isProtected): Keep 10 most recent.
+        val protectedCalls = existing.filter { it.isProtected || it.riskScore >= 50 }
+        val normalCalls = existing.filter { !it.isProtected && it.riskScore < 50 }.sortedByDescending { it.timestamp }
+
+        val keptNormal = if (normalCalls.size > 10) {
+            val toPrune = normalCalls.drop(10)
+            for (oldCall in toPrune) {
+                oldCall.audioFilePath?.let { path ->
+                    try {
+                        val f = File(path)
+                        if (f.exists()) f.delete()
+                    } catch (_: Exception) {}
+                }
+            }
+            normalCalls.take(10)
+        } else {
+            normalCalls
+        }
+
+        val prunedList = (protectedCalls + keptNormal).sortedByDescending { it.timestamp }
+        savePersistedRecords(context, prunedList)
     }
 
     /**
      * Deletes a recorded call session from local persistence.
+     * Protected calls can only be deleted if explicitly requested.
      */
     fun deleteCallRecord(context: Context, id: String) {
         val existing = loadPersistedRecords(context).toMutableList()
+        val target = existing.find { it.id == id }
+        target?.audioFilePath?.let { path ->
+            try { File(path).delete() } catch (_: Exception) {}
+        }
+        target?.transcriptFilePath?.let { path ->
+            try { File(path).delete() } catch (_: Exception) {}
+        }
         existing.removeAll { it.id == id }
         savePersistedRecords(context, existing)
     }
@@ -225,8 +325,55 @@ object VaniCallHistoryRepository {
                     for (a in 0 until actArr.length()) actionItemsList.add(actArr.getString(a))
                 }
 
+                val redFlagsList = mutableListOf<String>()
+                val rfArr = obj.optJSONArray("redFlags")
+                if (rfArr != null) {
+                    for (r in 0 until rfArr.length()) redFlagsList.add(rfArr.getString(r))
+                }
+
+                val factChecksList = mutableListOf<com.vericall.model.FactCheckItem>()
+                val fcArr = obj.optJSONArray("factChecks")
+                if (fcArr != null) {
+                    for (f in 0 until fcArr.length()) {
+                        val fObj = fcArr.getJSONObject(f)
+                        factChecksList.add(
+                            com.vericall.model.FactCheckItem(
+                                claim = fObj.optString("claim", ""),
+                                verdict = fObj.optString("verdict", "UNVERIFIABLE"),
+                                evidence = fObj.optString("evidence", ""),
+                                source = fObj.optString("source", ""),
+                                reasoning = fObj.optString("reasoning", ""),
+                                confidence = fObj.optInt("confidence", 80)
+                            )
+                        )
+                    }
+                }
+
+                val sourcesList = mutableListOf<com.vericall.model.WebSourceItem>()
+                val srcArr = obj.optJSONArray("sources")
+                if (srcArr != null) {
+                    for (s in 0 until srcArr.length()) {
+                        val sObj = srcArr.getJSONObject(s)
+                        sourcesList.add(
+                            com.vericall.model.WebSourceItem(
+                                url = sObj.optString("url", ""),
+                                title = sObj.optString("title", ""),
+                                snippet = sObj.optString("snippet", "")
+                            )
+                        )
+                    }
+                }
+
                 val dirStr = obj.optString("direction", CallDirection.INCOMING.name)
                 val dir = try { CallDirection.valueOf(dirStr) } catch (_: Exception) { CallDirection.INCOMING }
+                val score = obj.optInt("riskScore", 0)
+                val defaultLevel = when {
+                    score >= 80 -> "Critical"
+                    score >= 60 -> "High"
+                    score >= 40 -> "Moderate"
+                    score >= 20 -> "Low"
+                    else -> "Very Low"
+                }
 
                 result.add(
                     VaniCallRecord(
@@ -241,9 +388,17 @@ object VaniCallHistoryRepository {
                         aiSummary = obj.optString("aiSummary", ""),
                         keyPoints = keyPointsList,
                         actionItems = actionItemsList,
-                        riskScore = obj.optInt("riskScore", 0),
+                        riskScore = score,
+                        riskLevel = obj.optString("riskLevel", defaultLevel),
                         scamType = obj.optString("scamType", ""),
-                        isVoiceVerified = obj.optBoolean("isVoiceVerified", false)
+                        isVoiceVerified = obj.optBoolean("isVoiceVerified", false),
+                        audioFilePath = obj.optString("audioFilePath").takeIf { it.isNotBlank() },
+                        transcriptFilePath = obj.optString("transcriptFilePath").takeIf { it.isNotBlank() },
+                        isProtected = obj.optBoolean("isProtected", score >= 50),
+                        confidence = obj.optInt("confidence", 0),
+                        factChecks = factChecksList,
+                        redFlags = redFlagsList,
+                        sources = sourcesList
                     )
                 )
             }
@@ -268,8 +423,13 @@ object VaniCallHistoryRepository {
                 put("hasTranscript", record.hasTranscript)
                 put("aiSummary", record.aiSummary)
                 put("riskScore", record.riskScore)
+                put("riskLevel", record.riskLevel)
                 put("scamType", record.scamType)
                 put("isVoiceVerified", record.isVoiceVerified)
+                put("audioFilePath", record.audioFilePath ?: "")
+                put("transcriptFilePath", record.transcriptFilePath ?: "")
+                put("isProtected", record.isProtected)
+                put("confidence", record.confidence)
 
                 val utterArr = JSONArray()
                 for (u in record.transcript) {
@@ -290,6 +450,35 @@ object VaniCallHistoryRepository {
                 val actArr = JSONArray()
                 record.actionItems.forEach { actArr.put(it) }
                 put("actionItems", actArr)
+
+                val rfArr = JSONArray()
+                record.redFlags.forEach { rfArr.put(it) }
+                put("redFlags", rfArr)
+
+                val fcArr = JSONArray()
+                for (fc in record.factChecks) {
+                    val fObj = JSONObject().apply {
+                        put("claim", fc.claim)
+                        put("verdict", fc.verdict)
+                        put("evidence", fc.evidence)
+                        put("source", fc.source)
+                        put("reasoning", fc.reasoning)
+                        put("confidence", fc.confidence)
+                    }
+                    fcArr.put(fObj)
+                }
+                put("factChecks", fcArr)
+
+                val srcArr = JSONArray()
+                for (src in record.sources) {
+                    val sObj = JSONObject().apply {
+                        put("url", src.url)
+                        put("title", src.title)
+                        put("snippet", src.snippet)
+                    }
+                    srcArr.put(sObj)
+                }
+                put("sources", srcArr)
             }
             jsonArray.put(obj)
         }

@@ -47,6 +47,12 @@ object VaniRiskBus {
     var last: Snapshot? = null
         private set
 
+    @Volatile
+    var activeCallId: String? = null
+
+    @Volatile
+    var lastRecordedAudioPath: String? = null
+
     fun publish(snapshot: Snapshot) {
         last = snapshot
         listeners.toList().forEach { it(snapshot) }
