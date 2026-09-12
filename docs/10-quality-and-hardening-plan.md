@@ -77,6 +77,29 @@ real.
 
 ---
 
+## Working across two machines
+
+The dev box and the training box both push to
+`fix/protocol-interlock-reconciliation` on the same remote (`origin` and
+`upstream` are the same GitHub repo). Syncthing mirrors `.corpus-manifests/`
+between them; it does **not** mirror the repo, and must never be pointed at
+one — syncing a `.git` directory between machines corrupts both.
+
+- **Pull before you start and before you push.** `git pull --rebase` — the
+  branch has taken concurrent pushes from both machines already. Never force-push.
+- **Checkpoints are write-once.** `data/` now tracks six `.pt` files. They are
+  binary and unmergeable: if both machines write the same path, the conflict
+  cannot be resolved and one side's run is lost. A new run gets a new filename.
+- **Never `git add -A` or `git add .`** in this repo. `.corpus-manifests/`
+  holds ~96 MB of corpus manifests and `handoff/` is the Syncthing exchange;
+  both are gitignored now, but stage files by name regardless — this is a
+  public repo.
+- **Corpus manifests are not in git on purpose.** They live in
+  `.corpus-manifests/` (Syncthing) and are regenerable from the corpus on
+  Drive A. Reference them by path in commands; never commit them.
+
+---
+
 ## G0 — Preserve what already exists (5 minutes, do it first)
 
 `.gitignore` line 34 (`*.pt`) excludes the three checkpoints the entire §12.7

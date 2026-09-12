@@ -129,3 +129,16 @@ opencode.json
 
 # Syncthing exchange folder between dev and training boxes
 handoff/
+
+# Syncthing exchange between the dev box and the training box.
+# .corpus-manifests/ holds the ASVspoof 5 partition manifests (~96 MB of TSV)
+# that Syncthing mirrors between machines. They are derived from the corpus on
+# Drive A, are regenerable by scripts/, and must never enter a public repo --
+# a bare `git add -A` stages all of them otherwise.
+.corpus-manifests/
+# Syncthing's own bookkeeping, wherever a synced folder is rooted.
+.stfolder/
+.stversions/
+.stignore
+*.sync-conflict-*
+
