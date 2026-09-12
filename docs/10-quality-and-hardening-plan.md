@@ -356,10 +356,72 @@ record which mode you used, because a later comparison will need it.
 - [ ] Report the seed-to-seed spread. If it exceeds 0.8 pp, the floor is wider
       than believed and every prior conclusion needs revisiting.
 
-**If it misses:** say so, record the numbers, and do **not** chase it with
-architecture changes. Go to G4.
+**RESULT (2026-09-12): MISSED. Seed 43 not run.**
 
-**Cost:** the long pole. Hours per run, two runs.
+`data/cm_aasist_ft4_s42.pt` -- 4 layers unfrozen (7-10), encoder LR 1e-5,
+merge-12, stopped on patience-5 around epoch 8.
+
+| | seed 42 (ft4) | best frozen | bar |
+|---|---|---|---|
+| Pooled eval EER | **13.529 %** | 12.666 % | <11.0 — **miss** |
+| minDCF | **0.8515** | 0.8731 | <0.75 — **miss** |
+| Dev EER | 14.323 % | 14.287 % (AttM) | — |
+
+EER is 0.86 pp *worse* than the best frozen model, right at the noise floor, so
+a wash at best. minDCF improved slightly and is nowhere near the bar. Seed 43
+was not run: two seeds are for claiming a win, not for confirming a clear miss.
+Recorded per ground rule 5. The scoring artifact was written on the
+training box and must be committed alongside the other benchmark reports;
+until it is, this row rests on prose, the same gap G2's uniform row had.
+
+Four layers at 1e-5 for eight epochs is a reasonable fine-tune. It is not proof
+that no fine-tuning configuration could work, but it is evidence that the
+obvious one does not, on this corpus, at this scale.
+
+---
+
+## The augmentation finding — G4's premise is backwards
+
+G4 was written on the assumption that A19/A20 blindness is a *generalisation
+gap* to be closed with more augmentation. The baseline table says the opposite,
+and this only became visible once there were enough columns to compare.
+
+Pre-aug L12 and post-aug L12 are the same architecture, same layer, same head.
+The **only** difference is the codec/telephony augmenter:
+
+| | A19 | A20 | A27 | A32 | minDCF | CLLR |
+|---|---|---|---|---|---|---|
+| pre-aug L12 | **9.04** | **6.41** | **7.10** | **11.24** | 0.8834 | 1.8171 |
+| post-aug L12 | 21.32 | 23.19 | 12.49 | 17.23 | **0.8048** | **1.6238** |
+
+A19 got 2.4x worse and A20 3.6x worse **when augmentation was added**. These
+attacks were never blind — they were detectable at 9.0 % and 6.4 %, and the
+augmentation is what cost them. Every model since is built on the augmented
+recipe and none has recovered them; the multi-layer merges inherited the damage
+rather than causing it.
+
+So **adding RawBoost on top is the opposite of what the evidence indicates.**
+G4 as written should not be run.
+
+**But it was a trade, not a mistake.** Post-aug L12 has the best minDCF
+(0.8048) and best CLLR (1.6238) in the entire table, and still does after six
+experiments. Augmentation bought cost-metric performance and paid for it in
+per-attack discrimination on four attacks. Whether that is the right trade is a
+*product* question — telephony robustness matters for a system that scores real
+phone calls — not something the eval slice can settle.
+
+**If anyone does want one more CM experiment**, the one the data supports is:
+retrain the current recipe with the codec augmenter's probabilities reduced (or
+off), and see whether A19/A20 return. That tests the hypothesis the evidence
+actually raises. It is not scheduled, and it is not a prerequisite for anything.
+
+**Standing recommendation: stop CM work here.** Six experiments — layer
+selection, attentive merging, uniform merging, calibration, encoder
+fine-tuning — have not beaten `data/cm_aasist.pt` on the metrics that decide
+cost. That checkpoint is already the backend default. The work was not wasted:
+it established a noise floor, fixed the seeding, made the scores usable as
+likelihood ratios, and retired several claims that were not true. But the next
+real gain is not in this subsystem. **Go to G5.**
 
 ---
 

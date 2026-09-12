@@ -106,7 +106,7 @@ def score_checkpoint(ckpt_path: Path, records, device: str):
         for k, v in sorted(per_attack.items())
     }
     return {
-        "checkpoint": str(ckpt_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+        "checkpoint": str(ckpt_path.resolve().relative_to(REPO_ROOT)).replace("\\", "/"),
         "unfreeze_top_n": int(ckpt.get("unfreeze_top_n", 0) or 0),
         "encoder_lr": ckpt.get("encoder_lr"),
         "frontend_layer_indices": ckpt.get("frontend_layer_indices"),
@@ -120,7 +120,9 @@ def score_checkpoint(ckpt_path: Path, records, device: str):
 
 
 def main():
-    paths = [Path(p) for p in sys.argv[1:]]
+    # .resolve() before any relative_to(REPO_ROOT): a relative argument
+    # ("data/x.pt") otherwise raises against an absolute repo root.
+    paths = [Path(p).resolve() for p in sys.argv[1:]]
     if not paths:
         print(__doc__)
         sys.exit(2)
