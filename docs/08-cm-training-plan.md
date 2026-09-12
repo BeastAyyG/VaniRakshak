@@ -1018,16 +1018,16 @@ Per §5, and stated before the run so it cannot be moved afterward:
 > slightly, on EER only" is.
 
 ```powershell
-# the ablation, one flag -- no code change needed
+# the ablation, one flag
 python ml/train_cm.py `
-  --train-manifest data/manifests/train.tsv `
-  --dev-manifest   data/manifests/dev.tsv `
+  --train-manifest A:\cm-corpus\manifests\train.tsv `
+  --dev-manifest   A:\cm-corpus\manifests\dev.tsv `
   --merge-layers 12 --freeze-merge `
   --output data/cm_aasist_meanpool.pt `
   --epochs 10 --batch-size 64 --device cuda
 
-# then score it as a 5th column
-python scripts/evaluate_4way_benchmark.py
+# score it as a 5th column across the 20,000-utterance eval slice
+python scripts/evaluate_meanpool_benchmark.py
 ```
 
 `--freeze-merge` holds the weights at their zero init, so the merge is a
@@ -1035,7 +1035,13 @@ fixed uniform mean and the head has **89,064 trainable parameters — exactly
 the pre-merge count**. Verified: the frozen merge is bit-equal to
 `torch.stack(hidden_states).mean(0)`.
 
-#### 4-Way Evaluation Benchmark Results (`reports/cm_attentive_merge_benchmark.json`)
+##### Empirical Verdict of the `--freeze-merge` Ablation
+- **Result**: Frozen Meanpool achieved **13.504% EER**, **0.9242 minDCF**, and **4.3025 CLLR** on the 20k eval slice (`data/eval_benchmark/eval_slice_20k.tsv`).
+- **Verdict**: Frozen Meanpool is **clearly worse** than Attentive Merging (**13.504% vs 12.666%**, a degradation of **+0.838 pp** in EER, and minDCF 0.9242 vs 0.8804).
+- **Conclusion**: The learned attention is **doing real work** (+0.838 pp gain over static averaging). The near-uniform weights (6.97%–10.28%) are genuinely what the loss landscape preferred under multi-task regularization, rather than inertia from initialization. Plain uniform averaging degrades below both Pre-Aug L12 (12.878%) and AttM (12.666%).
+- **CLLR Status**: Frozen Meanpool also severely fails the calibration bar (CLLR = 4.3025 vs bar < 1.6238 and AttM 3.2391), confirming that uncalibrated multi-layer pooling consistently expands logit variance regardless of whether weights are frozen or learned.
+
+#### 5-Way Evaluation Benchmark Results (`reports/cm_meanpool_ablation_benchmark.json`)
 
 Evaluated on the full 20,000-utterance evaluation slice (`data/eval_benchmark/eval_slice_20k.tsv`):
 
@@ -1045,27 +1051,28 @@ Evaluated on the full 20,000-utterance evaluation slice (`data/eval_benchmark/ev
 | **Post-Aug Model** | Layer 12 (-1) | 13.627% | 0.8048 | 2.7249 | 10.2455 | 1.6238 |
 | **Layer 5 (Pan et al.)** | Layer 5 | 14.096% | 0.8280 | 2.8190 | 12.1242 | 2.4901 |
 | **Attentive Merging (12L)** | **AttentiveMerging [0:12]** | **12.666%** | **0.8804** | **2.5329** | **13.2390** | **3.2391** |
+| **Frozen Meanpool (12L)** | **Uniform Mean [0:12]** | **13.504%** | **0.9242** | **2.6998** | **13.6418** | **4.3025** |
 
 ##### Per-Attack Breakdown (EER %) on Held-Out Evaluation Slice (A17–A32)
 
-| Attack ID | Pre-Aug L12 (%) | Post-Aug L12 (%) | Layer 5 (%) | Attentive Merge 12L (%) | Best Performing Architecture |
-|---|---|---|---|---|---|
-| A17 | 5.347% | 3.869% | 1.984% | **1.134%** | **Attentive Merge** |
-| A18 | 4.707% | 5.347% | 8.034% | 5.002% | Pre-Aug L12 |
-| A19 | 9.044% | 21.316% | 30.828% | **20.214%** | Pre-Aug L12 |
-| A20 | 6.407% | 23.189% | 30.951% | 24.104% | Pre-Aug L12 |
-| A21 | 13.085% | 9.177% | 3.524% | **4.929%** | Layer 5 |
-| A22 | 14.191% | 11.542% | 6.481% | **5.495%** | **Attentive Merge** |
-| A23 | 8.748% | 6.654% | 9.942% | 8.880% | Post-Aug L12 |
-| A24 | 29.333% | 17.846% | 8.034% | **5.150%** | **Attentive Merge** |
-| A25 | 6.506% | 12.543% | 10.098% | **6.037%** | **Attentive Merge** |
-| A26 | 4.633% | 7.615% | 7.048% | 6.982% | Pre-Aug L12 |
-| A27 | 7.097% | 12.488% | 16.387% | 19.181% | Pre-Aug L12 |
-| A28 | 32.257% | 26.220% | 12.945% | **16.008%** | Layer 5 |
-| A29 | 5.067% | 2.932% | 0.931% | **0.827%** | **Attentive Merge** |
-| A30 | 6.407% | 9.038% | 17.989% | 14.662% | Pre-Aug L12 |
-| A31 | 14.810% | 13.221% | 15.530% | 15.845% | Post-Aug L12 |
-| A32 | 11.237% | 17.227% | 20.999% | 24.396% | Pre-Aug L12 |
+| Attack ID | Pre-Aug L12 (%) | Post-Aug L12 (%) | Layer 5 (%) | Attentive Merge 12L (%) | Frozen Meanpool 12L (%) | Best Performing Architecture |
+|---|---|---|---|---|---|---|
+| A17 | 5.347% | 3.869% | 1.984% | **1.134%** | 1.257% | **Attentive Merge** |
+| A18 | 4.707% | 5.347% | 8.034% | 5.002% | 4.876% | Pre-Aug L12 |
+| A19 | 9.044% | 21.316% | 30.828% | **20.214%** | 20.823% | Pre-Aug L12 |
+| A20 | 6.407% | 23.189% | 30.951% | 24.104% | 24.321% | Pre-Aug L12 |
+| A21 | 13.085% | 9.177% | 3.524% | **4.929%** | 5.988% | Layer 5 |
+| A22 | 14.191% | 11.542% | 6.481% | **5.495%** | 7.001% | **Attentive Merge** |
+| A23 | 8.748% | 6.654% | 9.942% | 8.880% | 9.170% | Post-Aug L12 |
+| A24 | 29.333% | 17.846% | 8.034% | **5.150%** | 6.051% | **Attentive Merge** |
+| A25 | 6.506% | 12.543% | 10.098% | **6.037%** | 5.784% | Frozen Meanpool |
+| A26 | 4.633% | 7.615% | 7.048% | 6.982% | 6.580% | Pre-Aug L12 |
+| A27 | 7.097% | 12.488% | 16.387% | 19.181% | 19.147% | Pre-Aug L12 |
+| A28 | 32.257% | 26.220% | 12.945% | **16.008%** | 18.950% | Layer 5 |
+| A29 | 5.067% | 2.932% | 0.931% | **0.827%** | **0.827%** | **Attentive Merge / Meanpool** |
+| A30 | 6.407% | 9.038% | 17.989% | 14.662% | 14.327% | Pre-Aug L12 |
+| A31 | 14.810% | 13.221% | 15.530% | 15.845% | 17.743% | Post-Aug L12 |
+| A32 | 11.237% | 17.227% | 20.999% | 24.396% | 26.737% | Pre-Aug L12 |
 
 ##### Learned Layer Attention Weights (`softmax(model.merge.weights)`)
 

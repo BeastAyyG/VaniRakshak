@@ -578,6 +578,7 @@ def train_recipe_a(
     n_workers: int = 24,
     layer_index: int = 5,
     merge_layers: Optional[int] = None,
+    freeze_merge: bool = False,
     streaming_dev: bool = False,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
