@@ -1,0 +1,45 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <!-- Outer Glow Soft Ring -->
+    <path
+        android:fillColor="#154F46E5"
+        android:pathData="M60,10a50,50 0 1,0 0.1,0z" />
+    <path
+        android:fillColor="#254F46E5"
+        android:pathData="M60,20a40,40 0 1,0 0.1,0z" />
+
+    <!-- Elegant Shield Crest -->
+    <path
+        android:fillColor="#EEF2FF"
+        android:pathData="M60,22L32,34v30c0,22 18,36 28,42 10,-6 28,-20 28,-42V34L60,22z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4F46E5"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"
+        android:pathData="M60,22L32,34v30c0,22 18,36 28,42 10,-6 28,-20 28,-42V34L60,22z" />
+
+    <!-- Acoustic Soundwave Interlace within Shield -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#10B981"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M48,60v4M54,54v16M60,46v32M66,54v16M72,60v4" />
+
+    <!-- Verification Checkmark Accent -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M78,74a12,12 0 1,0 0.1,0z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M73,74l3,3 6,-6" />
+</vector>

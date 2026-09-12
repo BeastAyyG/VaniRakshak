@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <!-- Required from Android 14: an undeclared foreground service type makes
          startForeground() throw MissingForegroundServiceTypeException. -->
@@ -31,29 +33,72 @@
         android:enableOnBackInvokedCallback="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="true"
-        android:icon="@drawable/ic_logo_vanirakshak"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/ic_logo_vanirakshak"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.VaniRakshak">
 
-        <!-- LAUNCHER: VaniRakshak Main Activity -->
+        <!-- LAUNCHER: VaniRakshak Splash Screen -->
         <activity
-            android:name=".temp.TempContactsActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:theme="@style/Theme.VaniRakshak.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Live Call Voice-Clone Defense Screen -->
+        <!-- MAIN APP: VaniRakshak Production Main Activity -->
         <activity
-            android:name=".temp.TempContactDetailActivity"
-            android:exported="false"
+            android:name=".VaniMainActivity"
+            android:exported="true"
+            android:label="@string/app_name" />
+
+        <!-- Voice Verification Activity -->
+        <activity
+            android:name=".verification.VoiceVerificationActivity"
+            android:exported="true" />
+
+        <!-- Factual Claim Result Activity -->
+        <activity
+            android:name=".verification.ClaimResultActivity"
+            android:exported="true" />
+
+        <!-- Scam Threat Result Activity -->
+        <activity
+            android:name=".verification.ScamResultActivity"
+            android:exported="true" />
+
+        <!-- One-Shot Audio Forensic File Inspector -->
+        <activity
+            android:name=".verification.FileForensicActivity"
+            android:exported="true" />
+
+        <!-- Production Contacts Roster Activity -->
+        <activity
+            android:name=".contacts.VaniContactsRosterActivity"
+            android:exported="true"
+            android:label="@string/app_name" />
+
+        <!-- Production Live Call Forensic Screen -->
+        <activity
+            android:name=".contacts.VaniForensicDetailActivity"
+            android:exported="true"
             android:launchMode="singleTop"
-            android:parentActivityName=".temp.TempContactsActivity" />
+            android:theme="@style/Theme.VaniRakshak.Forensic" />
+
+        <!-- Backward Compatibility Aliases for external intents or ADB shortcuts -->
+        <activity-alias
+            android:name="com.vericall.temp.TempContactsActivity"
+            android:targetActivity=".contacts.VaniContactsRosterActivity"
+            android:exported="true" />
+
+        <activity-alias
+            android:name="com.vericall.temp.TempContactDetailActivity"
+            android:targetActivity=".contacts.VaniForensicDetailActivity"
+            android:exported="false" />
 
         <!-- Real-Time Incoming Phone Call Receiver -->
         <receiver

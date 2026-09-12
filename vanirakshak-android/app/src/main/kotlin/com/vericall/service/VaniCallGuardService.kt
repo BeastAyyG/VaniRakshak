@@ -173,7 +173,7 @@ class VaniCallGuardService : Service() {
             )
             return
         }
-        VaniSpeakerVerifier.verify(pcm, 16000) { verdict ->
+        VaniSpeakerVerifier.verify(pcm, 16000, this) { verdict ->
             val (level, message) = when {
                 !verdict.available ->
                     RiskLevel.WARNING to "Speaker verify unavailable: ${verdict.reason ?: "backend not reachable"}"

@@ -5,8 +5,8 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.vericall.contacts.VaniForensicDetailActivity
 import com.vericall.databinding.OverlayCoercionWarningBinding
-import com.vericall.temp.TempContactDetailActivity
 
 /**
  * Fullscreen fallback coercion warning activity when SYSTEM_ALERT_WINDOW
@@ -34,7 +34,7 @@ class VaniCoercionActivity : AppCompatActivity() {
         binding.tvTriggerApp.text = "Target: $pkg"
 
         binding.btnEndCallInstead.setOnClickListener {
-            val detailIntent = Intent(this, TempContactDetailActivity::class.java).apply {
+            val detailIntent = Intent(this, VaniForensicDetailActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             startActivity(detailIntent)

@@ -17,7 +17,27 @@ object VaniRiskBus {
         val synthetic: Int,
         val speakerMatch: Int,
         val level: RiskLevel,
-        val message: String
+        val message: String,
+        val tier: String = when (level) {
+            RiskLevel.DANGER -> "BLOCK"
+            RiskLevel.WARNING -> "CHALLENGE"
+            RiskLevel.SAFE -> "ALLOW"
+        },
+        val pSpoof: Float = synthetic / 100f,
+        val transcript: String = "",
+        val scamType: String = "",
+        val threatScore: Int = 0,
+        val redFlags: List<String> = emptyList(),
+        val actionAdvice: String = "",
+        val receiptHash: String = "",
+        val cmScore: Float = 0.0f,
+        val cmGenuineProb: Float = 0.0f,
+        val asvConsistency: Float = 0.0f,
+        val channelAnomaly: Float = 0.0f,
+        val snrDb: Float = 18.0f,
+        val vocoderFlatness: Float = 0.0f,
+        val microTremor: Float = 0.0f,
+        val phaseJumps: Int = 0
     )
 
     private val listeners = LinkedHashSet<(Snapshot) -> Unit>()

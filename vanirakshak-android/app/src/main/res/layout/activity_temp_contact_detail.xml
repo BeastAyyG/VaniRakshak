@@ -14,9 +14,9 @@
         android:paddingStart="16dp"
         android:paddingTop="12dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="28dp">
+        android:paddingBottom="36dp">
 
-        <!-- Top bar: circular back button + live pill -->
+        <!-- Top bar: back button + live streaming telemetry chip -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -30,30 +30,46 @@
                 android:background="@drawable/bg_chip"
                 android:contentDescription="Back"
                 android:padding="10dp"
-                android:src="@drawable/ic_back" />
+                android:src="@drawable/ic_back"
+                app:tint="@color/ink" />
 
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
                 android:layout_weight="1" />
 
-            <TextView
-                android:id="@+id/tvLiveStreamBadge"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_chip"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.04"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:paddingStart="12dp"
                 android:paddingTop="6dp"
                 android:paddingEnd="12dp"
-                android:paddingBottom="6dp"
-                android:text="LIVE CALL"
-                android:textColor="@color/mute"
-                android:textSize="11sp" />
+                android:paddingBottom="6dp">
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/bg_dot"
+                    android:backgroundTint="@color/accent_emerald" />
+
+                <TextView
+                    android:id="@+id/tvLiveStreamBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.06"
+                    android:text="LIVE FORENSIC SENTINEL"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
 
-        <!-- Caller card -->
+        <!-- Caller Card: Cyber Obsidian Profile -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -61,7 +77,7 @@
             android:background="@drawable/bg_card"
             android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="24dp">
+            android:padding="20dp">
 
             <TextView
                 android:id="@+id/tvCallerAvatar"
@@ -78,7 +94,7 @@
                 android:id="@+id/tvCallerName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="12dp"
                 android:fontFamily="sans-serif-medium"
                 android:letterSpacing="-0.01"
                 android:text="Aarav Sharma"
@@ -90,7 +106,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="+91 98765 43210 - Brother"
+                android:text="+91 98765 43210 • Brother"
                 android:textColor="@color/mute"
                 android:textSize="13sp" />
 
@@ -98,14 +114,14 @@
                 android:id="@+id/tvCallTimer"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="Live - streaming 16 kHz"
-                android:textColor="@color/mute"
-                android:textSize="12sp" />
+                android:layout_marginTop="6dp"
+                android:fontFamily="monospace"
+                android:text="16 kHz PCM Streaming • Dual-Core Ingestion"
+                android:textColor="@color/accent_cyan"
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Speakerphone Nudge Banner -->
+        <!-- Speakerphone Prompt -->
         <LinearLayout
             android:id="@+id/cardSpeakerphonePrompt"
             android:layout_width="match_parent"
@@ -120,7 +136,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
-                android:text="Turn on Speakerphone"
+                android:text="Enable Speakerphone"
                 android:textColor="@color/warning_deep"
                 android:textSize="14sp" />
 
@@ -130,20 +146,20 @@
                 android:layout_marginTop="3dp"
                 android:lineSpacingExtra="2dp"
                 android:text="Android restricts in-ear call recording. Turn on speakerphone so VaniRakshak can analyze the caller's acoustic voice stream."
-                android:textColor="@color/ink"
+                android:textColor="@color/body"
                 android:textSize="12sp" />
 
-            <com.google.android.material.button.MaterialButton
+            <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnTurnOnSpeaker"
-                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:layout_marginTop="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="Enable Speakerphone"
+                android:background="@drawable/bg_button_primary"
+                android:fontFamily="sans-serif-medium"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="Turn On Speaker"
+                android:textColor="@color/ink"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -163,8 +179,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
-                android:text="Banking Notifications Shielded"
-                android:textColor="@color/success_deep"
+                android:text="OTP / SMS Shield Active"
+                android:textColor="@color/accent_emerald"
                 android:textSize="14sp" />
 
             <TextView
@@ -172,30 +188,142 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
                 android:text="Banking OTPs are protected from coercion. Tap below to safely review."
-                android:textColor="@color/ink"
+                android:textColor="@color/body"
                 android:textSize="12sp" />
 
-            <com.google.android.material.button.MaterialButton
+            <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnViewHeldNotifications"
-                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:layout_marginTop="8dp"
+                android:background="@drawable/bg_card_inner"
+                android:fontFamily="sans-serif-medium"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="Review Shielded Alerts"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 1. AUTONOMOUS TRANSACTION INTERLOCK BANNER (from Website) -->
+        <LinearLayout
+            android:id="@+id/cardInterlockBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_interlock_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
+
+            <ImageView
+                android:id="@+id/ivInterlockIcon"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_shield_check_cyber" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvInterlockStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.04"
+                    android:text="TRANSACTION AUTHORIZED"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvInterlockSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Autonomous Interlock: ALLOW • Payment release permitted"
+                    android:textColor="@color/mute"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- EMERGENCY ACTION DIRECTIVE BANNER (When threat >= 75% or BLOCK) -->
+        <LinearLayout
+            android:id="@+id/cardEmergencyBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_alert_danger"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_lock_cyber"
+                    app:tint="@color/accent_rose" />
+
+                <TextView
+                    android:id="@+id/tvEmergencyTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="🚨 CRITICAL SCAM / IMPERSONATION ALERT"
+                    android:textColor="@color/accent_rose"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvEmergencyAdvice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="sans-serif"
+                android:lineSpacingExtra="2dp"
+                android:text="HANG UP IMMEDIATELY. Legitimate police, CBI, or banks never demand money transfers or threaten digital arrest over phone calls."
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnDialHelpline"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_pill_primary"
+                android:fontFamily="sans-serif-medium"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
-                android:text="Review Shielded Alerts"
-                android:textSize="12sp" />
+                android:text="📞 Call 1930 Cyber Helpline"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                app:backgroundTint="@null" />
         </LinearLayout>
 
-        <!-- Verdict card: semantic pale wash, big score, tight tracking -->
+        <!-- 2. FORENSIC THREAT SCORE CARD (Radial / Threat Meter from Website) -->
         <LinearLayout
             android:id="@+id/cardRiskContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:background="@drawable/bg_alert_danger"
+            android:background="@drawable/bg_alert_safe"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -205,23 +333,40 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="Voice-clone risk"
-                    android:textColor="@color/ink"
-                    android:textSize="13sp" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.08"
+                        android:text="THREAT SCORE"
+                        android:textColor="@color/mute"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvVerdictTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Authentic Target Verified"
+                        android:textColor="@color/ink"
+                        android:textSize="16sp" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/tvRiskScoreNumber"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif"
+                    android:fontFamily="monospace"
                     android:letterSpacing="-0.02"
-                    android:text="89%"
-                    android:textColor="@color/error_tone"
+                    android:text="12.4%"
+                    android:textColor="@color/accent_emerald"
                     android:textSize="32sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -233,131 +378,334 @@
                 android:layout_height="8dp"
                 android:layout_marginTop="10dp"
                 android:max="100"
-                android:progress="89"
-                android:progressTint="@color/error_deep" />
-
-            <TextView
-                android:id="@+id/tvVerdictTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="AI voice-clone impersonation"
-                android:textColor="@color/ink"
-                android:textSize="15sp" />
+                android:progress="12"
+                android:progressTint="@color/accent_emerald" />
 
             <TextView
                 android:id="@+id/tvVerdictDesc"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Synthetic vocoder artifacts detected. Speaker does not match the enrolled profile."
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="2dp"
+                android:text="Audio displays natural vocal tract micro-tremor, consistent biomechanics, and robust cosine similarity to the enrolled target anchor."
                 android:textColor="@color/body"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- Detection metrics: quiet rows on cream card, hairline dividers -->
+        <!-- 2.5. INDICCONFORMER LIVE SPEECH ASR & SCAM MATRIX -->
         <LinearLayout
+            android:id="@+id/cardLiveTranscript"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:paddingStart="16dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="4dp">
+            android:padding="16dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="12dp"
-                android:paddingBottom="12dp">
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_dot"
+                    android:backgroundTint="@color/accent_emerald" />
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:text="Acoustic analysis"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.04"
+                    android:text="INDICCONFORMER REAL-TIME SPEECH ASR"
                     android:textColor="@color/mute"
-                    android:textSize="13sp" />
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/tvMetricAcoustic"
+                    android:id="@+id/tvScamBadge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_supported"
                     android:fontFamily="sans-serif-medium"
-                    android:text="94% synthetic"
-                    android:textColor="@color/error_tone"
-                    android:textSize="13sp" />
+                    android:paddingStart="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="2dp"
+                    android:text="SAFE"
+                    android:textColor="@color/verdict_supported"
+                    android:textSize="10sp" />
             </LinearLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/hairline_soft" />
-
-            <LinearLayout
+            <!-- Rolling Transcript Text -->
+            <TextView
+                android:id="@+id/tvRollingTranscript"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="12dp"
-                android:paddingBottom="12dp">
+                android:layout_marginTop="8dp"
+                android:fontFamily="sans-serif"
+                android:lineSpacingExtra="3dp"
+                android:text="Listening to caller voice stream... AI4Bharat multi-lingual speech recognition active."
+                android:textColor="@color/ink"
+                android:textSize="13sp"
+                android:textStyle="italic" />
+
+            <!-- Red Flags Container -->
+            <TextView
+                android:id="@+id/tvRedFlagsHeader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:fontFamily="monospace"
+                android:text="SCAM THREAT RED FLAGS:"
+                android:textColor="@color/mute"
+                android:textSize="9sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvRedFlagsContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/accent_rose"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- 3. 4-VECTOR TECHNICAL EVIDENCE TELEMETRY GRID (from Website) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08"
+            android:text="4-VECTOR FORENSIC TELEMETRY"
+            android:textColor="@color/mute"
+            android:textSize="11sp" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2"
+            android:rowCount="2">
+
+            <!-- Vector 1: Target Anchor ASV -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginEnd="4dp"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_telemetry_tile"
+                android:orientation="vertical"
+                android:padding="12dp">
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Voice profile match"
+                    android:fontFamily="monospace"
+                    android:text="TARGET ANCHOR ASV"
                     android:textColor="@color/mute"
-                    android:textSize="13sp" />
+                    android:textSize="9sp" />
 
                 <TextView
                     android:id="@+id/tvMetricSpeaker"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="26% match"
-                    android:textColor="@color/error_tone"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/hairline_soft" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="12dp"
-                android:paddingBottom="12dp">
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="94.2%"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Telephony channel"
+                    android:layout_marginTop="2dp"
+                    android:text="Target match"
+                    android:textColor="@color/ash"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Vector 2: Vocoder Flatness -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_telemetry_tile"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="VOCODER FLATNESS"
                     android:textColor="@color/mute"
-                    android:textSize="13sp" />
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:id="@+id/tvMetricVocoder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="0.2140"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvMetricAcoustic"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Natural spectrum"
+                    android:textColor="@color/ash"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Vector 3: 8-14 Hz Tremor -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_telemetry_tile"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="8–14 HZ TREMOR"
+                    android:textColor="@color/mute"
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:id="@+id/tvMetricTremor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="0.0412"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Lippold band"
+                    android:textColor="@color/ash"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Vector 4: Phase Jumps & Channel -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_telemetry_tile"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="PHASE JUMPS"
+                    android:textColor="@color/mute"
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:id="@+id/tvMetricPhaseJumps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="0"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tvMetricChannel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="PSTN - 8 kHz"
-                    android:textColor="@color/ink"
-                    android:textSize="13sp" />
+                    android:layout_marginTop="2dp"
+                    android:text="Continuous audio"
+                    android:textColor="@color/ash"
+                    android:textSize="10sp" />
             </LinearLayout>
+        </GridLayout>
+
+        <!-- 4. ENROLLED-VOICE IDENTITY CHECK CARD (Trained ML Model from Website) -->
+        <LinearLayout
+            android:id="@+id/cardIdentityCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_cpu_cyber" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Enrolled-Voice Identity Check"
+                    android:textColor="@color/mute"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/tvIdentityMatch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="monospace"
+                    android:text="MATCH — enrolled voice"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvIdentityStats"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="P(target)=98.5% • LLR=+4.12"
+                android:textColor="@color/ash"
+                android:textSize="10sp" />
         </LinearLayout>
 
-        <!-- Liveness challenge (hidden until triggered) -->
+        <!-- 5. DYNAMIC CHALLENGE-RESPONSE DRILL (from Website) -->
         <LinearLayout
             android:id="@+id/cardChallengeBox"
             android:layout_width="match_parent"
@@ -368,21 +716,39 @@
             android:padding="16dp"
             android:visibility="gone">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:text="Liveness challenge"
-                android:textColor="@color/ink"
-                android:textSize="13sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.04"
+                    android:text="DYNAMIC LIVENESS CHALLENGE"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="ANTI-REPLAY"
+                    android:textColor="@color/mute"
+                    android:textSize="9sp" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Defeats pre-recorded deepfakes. Ask the caller to repeat:"
-                android:textColor="@color/mute"
-                android:textSize="13sp" />
+                android:layout_marginTop="4dp"
+                android:text="Defeats voice cloning &amp; pre-recorded audio. Ask caller to repeat:"
+                android:textColor="@color/body"
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/tvChallengePhrase"
@@ -390,36 +756,110 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_chip_white"
-                android:fontFamily="sans-serif-medium"
+                android:fontFamily="monospace"
                 android:gravity="center"
+                android:letterSpacing="0.04"
                 android:padding="14dp"
-                android:text="Mango, 8, Nadi, 4, Blue"
+                android:text="Mango, 8, Nadi, 4"
                 android:textColor="@color/ink"
-                android:textSize="16sp" />
+                android:textSize="17sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/tvChallengeResult"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="Analyzing caller response latency..."
-                android:textColor="@color/warning_deep"
-                android:textSize="12sp" />
+                android:fontFamily="monospace"
+                android:text="Synthesis response latency: 340ms • Human window (400-4000ms)"
+                android:textColor="@color/accent_emerald"
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Actions: one red CTA, ink secondary, cream tertiary -->
+        <!-- 6. DPDP ACT 2023 STATUTORY COMPLIANCE CARD (from Website) -->
+        <LinearLayout
+            android:id="@+id/cardDpdpCompliance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_dpdp_card"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_stat_shield"
+                    app:tint="@color/accent_emerald" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.04"
+                    android:text="DPDP ACT 2023 STATUTORY COMPLIANCE"
+                    android:textColor="@color/ink"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:lineSpacingExtra="1dp"
+                android:text="Zero-retention verified: Call audio processed in RAM only. Ephemeral 16-bit PCM buffer purged immediately upon call termination."
+                android:textColor="@color/mute"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvDpdpReceipt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="monospace"
+                android:text="RECEIPT SHA-256: 8f4b2e...c39a01f • ZERO DISK EGRESS"
+                android:textColor="@color/ash"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <!-- Action Controls -->
         <Button
             android:id="@+id/btnTriggerChallenge"
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginTop="20dp"
+            android:background="@drawable/bg_button_secondary"
+            android:fontFamily="sans-serif-medium"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:stateListAnimator="@null"
+            android:text="Trigger Anti-Replay Challenge"
+            android:textAllCaps="false"
+            android:textColor="@color/ink"
+            android:textSize="14sp"
+            app:backgroundTint="@null" />
+
+        <Button
+            android:id="@+id/btnInterlock"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/bg_button_primary"
             android:fontFamily="sans-serif-medium"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:stateListAnimator="@null"
-            android:text="Trigger liveness challenge"
+            android:text="Autonomous Interlock: ENGAGED"
             android:textAllCaps="false"
             android:textColor="@color/white"
             android:textSize="14sp"
@@ -436,26 +876,9 @@
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:stateListAnimator="@null"
-            android:text="Block call and report"
+            android:text="Block Call &amp; Generate Audit Report"
             android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="14sp"
-            app:backgroundTint="@null" />
-
-        <Button
-            android:id="@+id/btnInterlock"
-            style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_button_secondary"
-            android:fontFamily="sans-serif-medium"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:stateListAnimator="@null"
-            android:text="Financial interlock"
-            android:textAllCaps="false"
-            android:textColor="@color/ink"
+            android:textColor="@color/error_tone"
             android:textSize="14sp"
             app:backgroundTint="@null" />
 

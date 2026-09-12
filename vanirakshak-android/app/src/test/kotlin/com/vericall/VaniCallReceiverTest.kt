@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
  * incoming-call alert is actually verified rather than just compiled.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [33])
 class VaniCallReceiverTest {
 
     private lateinit var context: Context

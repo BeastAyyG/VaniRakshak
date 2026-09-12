@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- feature-card-soft variant with semantic error tint: pale red wash, 16dp radius -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/error_pale" />
+    <solid android:color="@color/accent_rose_bg" />
     <corners android:radius="16dp" />
+    <stroke android:width="1dp" android:color="@color/accent_rose_border" />
 </shape>

@@ -1,18 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VaniRakshak on Pinterest design system: white canvas, flat surfaces,
-         single red accent for primary CTAs, no chrome shadows. -->
-    <style name="Theme.VaniRakshak" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="colorPrimary">@color/pin_red</item>
-        <item name="colorPrimaryVariant">@color/pin_red_pressed</item>
+    <!-- VaniRakshak Production Theme (Clean Consumer Architecture) -->
+    <style name="Theme.VaniRakshak" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorPrimaryVariant">@color/brand_primary_pressed</item>
         <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSecondary">@color/ink</item>
-        <item name="colorSecondaryVariant">@color/ink_pressed</item>
-        <item name="colorAccent">@color/pin_red</item>
+        <item name="colorSecondary">@color/accent_emerald</item>
+        <item name="colorSecondaryVariant">@color/accent_emerald_border</item>
+        <item name="colorAccent">@color/accent_emerald</item>
+        <item name="android:windowBackground">@color/canvas_light</item>
+        <item name="android:statusBarColor">@color/canvas_light</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="fontFamily">sans-serif</item>
+    </style>
+
+    <!-- Splash Screen Theme -->
+    <style name="Theme.VaniRakshak.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">#0A0D14</item>
+        <item name="android:statusBarColor">#0A0D14</item>
+        <item name="android:navigationBarColor">#0A0D14</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Forensic Deep Telemetry Theme (Live Stream & Bayesian Analysis) -->
+    <style name="Theme.VaniRakshak.Forensic" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent_emerald</item>
+        <item name="colorPrimaryVariant">@color/accent_emerald_border</item>
+        <item name="colorOnPrimary">@color/canvas</item>
+        <item name="colorSecondary">@color/accent_cyan</item>
+        <item name="colorSecondaryVariant">@color/accent_cyan_border</item>
+        <item name="colorAccent">@color/accent_emerald</item>
         <item name="android:windowBackground">@color/canvas</item>
         <item name="android:statusBarColor">@color/canvas</item>
         <item name="android:navigationBarColor">@color/canvas</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:textColor">@color/ink</item>
         <item name="fontFamily">sans-serif</item>
     </style>

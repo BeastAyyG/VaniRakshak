@@ -1,48 +1,146 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Pinterest Design System Palette (DESIGN.md) -->
+    <!-- VaniRakshak Production Design System -->
 
-    <!-- Brand & Accent: single saturated red, reserved for primary CTAs -->
-    <color name="pin_red">#E60023</color>
-    <color name="pin_red_pressed">#CC001F</color>
+    <!-- Consumer Light Theme Tokens (Matching Website Scrollytelling Aesthetic) -->
+    <color name="canvas_light">#F8FAFC</color>
+    <color name="canvas_cream">#F8F7F5</color>
+    <color name="card_light">#FFFFFF</color>
+    <color name="card_light_pressed">#F1F5F9</color>
+    <color name="border_light">#E2E8F0</color>
+    <color name="border_light_subtle">#F1F5F9</color>
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_tertiary">#94A3B8</color>
+    <color name="brand_primary">#2563EB</color>
+    <color name="brand_primary_pressed">#1D4ED8</color>
+    <color name="brand_light">#EFF6FF</color>
+    <color name="brand_glow">#262563EB</color>
+    <color name="ambient_green_glow">#2610B981</color>
+    <color name="ambient_mic_bg">#EDF5F0</color>
 
-    <!-- Surfaces -->
-    <color name="canvas">#FFFFFF</color>
-    <color name="surface_soft">#FBFBF9</color>
-    <color name="surface_card">#F6F6F3</color>
-    <color name="secondary_bg">#E5E5E0</color>
-    <color name="secondary_pressed">#C8C8C1</color>
-    <color name="surface_dark">#262622</color>
+    <!-- M3 / iOS Modern Consumer Tokens -->
+    <color name="surface_canvas">#F8FAFC</color>
+    <color name="surface_card_pure">#FFFFFF</color>
+    <color name="surface_card_elevated">#FFFFFF</color>
+    <color name="surface_tonal_container">#F1F5F9</color>
+    <color name="surface_tonal_pressed">#E2E8F0</color>
+    <color name="surface_dock">#FFFFFF</color>
+    <color name="nav_indicator_active">#EFF6FF</color>
+    <color name="nav_indicator_active_icon">#2563EB</color>
+    <color name="hairline_feather">#0A000000</color>
+    <color name="hairline_subtle">#14000000</color>
 
-    <!-- Text -->
-    <color name="ink">#000000</color>
-    <color name="ink_pressed">#262622</color>
-    <color name="body">#33332E</color>
-    <color name="mute">#62625B</color>
-    <color name="ash">#91918C</color>
-    <color name="stone">#C8C8C1</color>
+    <color name="brand_cobalt">#2563EB</color>
+    <color name="brand_cobalt_pressed">#1D4ED8</color>
+    <color name="brand_cobalt_tonal">#EFF6FF</color>
+    <color name="brand_cobalt_text">#1D4ED8</color>
+    <color name="brand_cobalt_glow">#262563EB</color>
 
-    <!-- Hairlines -->
-    <color name="hairline">#DADAD3</color>
-    <color name="hairline_soft">#E5E5E0</color>
+    <!-- Semantic Verdict Colors (Clean, Reserved Badges) -->
+    <color name="verdict_supported">#059669</color>
+    <color name="verdict_supported_bg">#ECFDF5</color>
+    <color name="verdict_supported_border">#A7F3D0</color>
 
-    <!-- Semantic: success / error / warning -->
-    <color name="success_pale">#C7F0DA</color>
-    <color name="success_deep">#103C25</color>
-    <color name="error_tone">#9E0A0A</color>
-    <color name="error_deep">#CC001F</color>
-    <color name="error_pale">#FBE9E9</color>
-    <color name="warning_deep">#7A4E00</color>
-    <color name="warning_pale">#F7ECD2</color>
+    <color name="verdict_contradicted">#DC2626</color>
+    <color name="verdict_contradicted_bg">#FEF2F2</color>
+    <color name="verdict_contradicted_border">#FECACA</color>
 
-    <!-- Risk levels (notification tint + guard screen) -->
-    <color name="risk_high">#D93025</color>
-    <color name="risk_medium">#E8A33D</color>
-    <color name="risk_low">#1E8E3E</color>
-    <color name="risk_neutral">#91918C</color>
+    <color name="verdict_unverifiable">#D97706</color>
+    <color name="verdict_unverifiable_bg">#FFFBEB</color>
+    <color name="verdict_unverifiable_border">#FDE68A</color>
+
+    <color name="verdict_scam">#E11D48</color>
+    <color name="verdict_scam_bg">#FFF1F2</color>
+    <color name="verdict_scam_border">#FECDD3</color>
+
+    <!-- Core Dark Tokens (Preserved for Forensic Detail & Telemetry) -->
+    <color name="canvas">#0A0A0A</color>
+    <color name="canvas_dark">#0F0E0D</color>
+    <color name="surface_soft">#121212</color>
+    <color name="surface_card">#141414</color>
+    <color name="surface_card_secondary">#181818</color>
+    <color name="surface_dark">#0A0A0A</color>
+    <color name="secondary_bg">#1E1E1E</color>
+    <color name="secondary_pressed">#2A2A2A</color>
+
+    <color name="hairline">#262626</color>
+    <color name="hairline_soft">#1F1F1F</color>
+    <color name="border_subtle">#33292524</color>
+
+    <color name="ink">#F5F5F4</color>
+    <color name="ink_pressed">#FFFFFF</color>
+    <color name="body">#D4D4D8</color>
+    <color name="mute">#A1A1AA</color>
+    <color name="ash">#71717A</color>
+    <color name="stone">#52525B</color>
+
+    <color name="pin_red">#E11D48</color>
+    <color name="pin_red_pressed">#BE123C</color>
+
+    <color name="accent_emerald">#10B981</color>
+    <color name="accent_emerald_bg">#142820</color>
+    <color name="accent_emerald_border">#059669</color>
+    <color name="success_pale">#142820</color>
+    <color name="success_deep">#34D399</color>
+    <color name="risk_low">#10B981</color>
+
+    <color name="accent_amber">#F59E0B</color>
+    <color name="accent_amber_bg">#2C1F0E</color>
+    <color name="accent_amber_border">#D97706</color>
+    <color name="warning_pale">#2C1F0E</color>
+    <color name="warning_deep">#FBBF24</color>
+    <color name="risk_medium">#F59E0B</color>
+
+    <color name="accent_rose">#F43F5E</color>
+    <color name="accent_rose_bg">#2E1018</color>
+    <color name="accent_rose_border">#E11D48</color>
+    <color name="error_tone">#FB7185</color>
+    <color name="error_deep">#F43F5E</color>
+    <color name="error_pale">#2E1018</color>
+    <color name="risk_high">#F43F5E</color>
+
+    <color name="accent_cyan">#06B6D4</color>
+    <color name="accent_cyan_bg">#0E262E</color>
+    <color name="accent_cyan_border">#0891B2</color>
+
+    <color name="accent_purple">#A855F7</color>
+    <color name="accent_purple_bg">#231530</color>
+    <color name="accent_purple_border">#9333EA</color>
+
+    <color name="risk_neutral">#71717A</color>
+
+    <!-- Dashboard Gradient Tokens -->
+    <color name="stat_bg_gradient_start">#EEF2FF</color>
+    <color name="stat_bg_gradient_end">#F8FAFC</color>
+    <color name="stat_tile_bg">#F1F5F9</color>
+    <color name="stat_tile_border">#E2E8F0</color>
+
+    <!-- Avatar Palette (name-hash → 1 of 8) -->
+    <color name="avatar_1">#DBEAFE</color>  <!-- Blue -->
+    <color name="avatar_2">#D1FAE5</color>  <!-- Emerald -->
+    <color name="avatar_3">#FEE2E2</color>  <!-- Rose -->
+    <color name="avatar_4">#E0E7FF</color>  <!-- Indigo -->
+    <color name="avatar_5">#FEF3C7</color>  <!-- Amber -->
+    <color name="avatar_6">#CFFAFE</color>  <!-- Cyan -->
+    <color name="avatar_7">#F3E8FF</color>  <!-- Purple -->
+    <color name="avatar_8">#FCE7F3</color>  <!-- Pink -->
+    <color name="avatar_text_1">#1E40AF</color>
+    <color name="avatar_text_2">#065F46</color>
+    <color name="avatar_text_3">#991B1B</color>
+    <color name="avatar_text_4">#3730A3</color>
+    <color name="avatar_text_5">#92400E</color>
+    <color name="avatar_text_6">#155E75</color>
+    <color name="avatar_text_7">#6B21A8</color>
+    <color name="avatar_text_8">#9D174D</color>
+
+    <!-- Quick Action Accent -->
+    <color name="card_rose_accent">#FEE2E2</color>
+    <color name="card_emerald_accent">#D1FAE5</color>
+    <color name="fab_shadow">#264F46E5</color>
 
     <!-- Base -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="scrim">#80000000</color>
+    <color name="scrim">#CC000000</color>
 </resources>

@@ -21,8 +21,8 @@ import java.util.concurrent.Executors
  */
 object VaniSpeakerVerifier {
 
-    // Set with: adb reverse tcp:8000 tcp:8000  (backend runs on the dev PC :8000)
-    var backendBaseUrl: String = "http://127.0.0.1:8000"
+    // Default or fallback URL; can be dynamically overridden or read from VaniConfig
+    var backendBaseUrl: String = com.vericall.config.VaniConfig.DEFAULT_BACKEND_URL
 
     private val executor = Executors.newSingleThreadExecutor()
     private const val TAG = "VaniSpeakerVerifier"
@@ -38,15 +38,22 @@ object VaniSpeakerVerifier {
 
     /**
      * Encode 16-bit PCM as a WAV file and POST it to /v1/verify-speaker.
-     * @param pcm      mono 16-bit PCM samples
-     * @param sampleRate Hz (typically 16000)
-     * @param onResult called on the calling thread with the model verdict
+     * @param pcm         mono 16-bit PCM samples
+     * @param sampleRate  Hz (typically 16000)
+     * @param context     optional Context to resolve configured server URL from VaniConfig
+     * @param onResult    called on the calling thread with the model verdict
      */
-    fun verify(pcm: ShortArray, sampleRate: Int, onResult: (Verdict) -> Unit) {
+    fun verify(
+        pcm: ShortArray,
+        sampleRate: Int,
+        context: android.content.Context? = null,
+        onResult: (Verdict) -> Unit
+    ) {
+        val activeBaseUrl = context?.let { com.vericall.config.VaniConfig.getBackendUrl(it) } ?: backendBaseUrl
         executor.execute {
             try {
                 val wav = encodeWav(pcm, sampleRate)
-                val verdict = postWav(wav)
+                val verdict = postWav(wav, activeBaseUrl)
                 onResult(verdict)
             } catch (e: Exception) {
                 Log.e(TAG, "verify failed: ${e.message}")
@@ -82,8 +89,8 @@ object VaniSpeakerVerifier {
         return baos.toByteArray()
     }
 
-    private fun postWav(wav: ByteArray): Verdict {
-        val url = URL("$backendBaseUrl/v1/verify-speaker")
+    private fun postWav(wav: ByteArray, baseUrl: String = backendBaseUrl): Verdict {
+        val url = URL("$baseUrl/v1/verify-speaker")
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.doOutput = true

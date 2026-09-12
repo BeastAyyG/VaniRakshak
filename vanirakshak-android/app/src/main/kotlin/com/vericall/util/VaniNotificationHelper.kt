@@ -15,8 +15,7 @@ import com.vericall.receiver.VaniNotificationActionReceiver
 import com.vericall.model.CallScenario
 import com.vericall.model.RiskLevel
 import com.vericall.model.VaniContact
-import com.vericall.temp.TempContactDetailActivity
-import com.vericall.temp.TempContactsActivity
+import com.vericall.contacts.VaniForensicDetailActivity
 
 /**
  * Every notification VaniRakshak shows during a call.
@@ -86,8 +85,8 @@ object VaniNotificationHelper {
         name: String,
         phone: String,
         enrolled: Boolean = false
-    ): Intent = Intent(context, TempContactDetailActivity::class.java).apply {
-        putExtra(TempContactsActivity.EXTRA_CONTACT_ID, "live_call")
+    ): Intent = Intent(context, VaniForensicDetailActivity::class.java).apply {
+        putExtra(VaniForensicDetailActivity.EXTRA_CONTACT_ID, "live_call")
         putExtra(EXTRA_CALLER_NAME, name)
         putExtra(EXTRA_CALLER_PHONE, phone)
         putExtra(EXTRA_CALLER_ENROLLED, enrolled)
@@ -265,8 +264,8 @@ object VaniNotificationHelper {
             scenario.speakerCosineScore
         )
 
-        val intent = Intent(context, TempContactDetailActivity::class.java).apply {
-            putExtra(TempContactsActivity.EXTRA_CONTACT_ID, contact.id)
+        val intent = Intent(context, VaniForensicDetailActivity::class.java).apply {
+            putExtra(VaniForensicDetailActivity.EXTRA_CONTACT_ID, contact.id)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val pending = PendingIntent.getActivity(context, contact.id.hashCode(), intent, pendingIntentFlags())

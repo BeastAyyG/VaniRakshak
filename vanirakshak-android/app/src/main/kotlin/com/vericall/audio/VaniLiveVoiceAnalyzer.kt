@@ -98,6 +98,8 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
         return null
     }
 
+    private val streamingOrchestrator = VaniStreamingOrchestrator(context)
+
     @SuppressLint("MissingPermission")
     fun startListening(activeContact: VaniContact) {
         if (isRecording) return
@@ -118,6 +120,13 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
             audioRecord?.startRecording()
             isRecording = true
 
+            // Start live streaming to backend Forensic & Indic ASR engines
+            streamingOrchestrator.startStreaming(
+                callerName = activeContact.name,
+                callerPhone = activeContact.phone,
+                claimedIdentity = activeContact.name
+            )
+
             recordingThread = Thread({
                 processAudioStream(activeContact)
             }, "VaniVoiceAnalyzerThread").apply { start() }
@@ -135,6 +144,7 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
 
     fun stopListening() {
         isRecording = false
+        streamingOrchestrator.stopStreaming()
         try {
             audioRecord?.stop()
             audioRecord?.release()
@@ -171,6 +181,15 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
             val readCount = audioRecord?.read(shortBuffer, 0, shortBuffer.size) ?: 0
             if (readCount <= 0) continue
             pushRecent(shortBuffer, readCount)
+
+            // Forward raw PCM audio bytes to live WebSocket streaming orchestrator
+            val pcmBytes = ByteArray(readCount * 2)
+            for (i in 0 until readCount) {
+                val s = shortBuffer[i].toInt()
+                pcmBytes[i * 2] = (s and 0xFF).toByte()
+                pcmBytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+            }
+            streamingOrchestrator.sendAudioChunk(pcmBytes)
 
             var sumSquare = 0.0
             var sumDiffSquare = 0.0

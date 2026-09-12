@@ -1,0 +1,168 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="260dp"
+    android:viewportWidth="200"
+    android:viewportHeight="260">
+
+    <!-- Ambient Emerald Backlight Glow (Matching VaniRakshak Website) -->
+    <path
+        android:fillColor="#1510B981"
+        android:pathData="M100,20a70,70 0 1,0 0.1,0z" />
+    <path
+        android:fillColor="#2210B981"
+        android:pathData="M100,35a55,55 0 1,0 0.1,0z" />
+
+    <!-- Lateral Soundwave Acoustic Ripples -->
+    <!-- Left Acoustic Wave Rays -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3310B981"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M45,70C30,75 25,95 25,100c0,15 10,25 20,30" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#204F46E5"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M32,80C20,86 16,98 16,105c0,10 6,18 16,22" />
+
+    <!-- Right Acoustic Wave Rays -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3310B981"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M155,70C170,75 175,95 175,100c0,15 -10,25 -20,30" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#204F46E5"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M168,80C180,86 184,98 184,105c0,10 -6,18 -16,22" />
+
+    <!-- Condenser Microphone Dome Grille Outer Silhouette -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M70,55c0,-16.57 13.43,-30 30,-30s30,13.43 30,30v45H70V55z" />
+
+    <!-- Grille Mesh Shading & Metallic Texture -->
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M72,55c0,-15.46 12.54,-28 28,-28s28,12.54 28,28v43H72V55z" />
+
+    <!-- Mesh Horizontal Grille Lines -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="1.2"
+        android:pathData="M78,38h44M74,46h52M72,54h56M72,62h56M72,70h56M72,78h56M72,86h56M72,94h56" />
+
+    <!-- Vertical Grille Center Spine Rib -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#64748B"
+        android:strokeWidth="2"
+        android:pathData="M100,27v71" />
+
+    <!-- Microphone Center Collar Band (Emblem Ring) -->
+    <path
+        android:fillColor="#475569"
+        android:pathData="M68,100h64v8H68z" />
+    <path
+        android:fillColor="#334155"
+        android:pathData="M70,102h60v4H70z" />
+
+    <!-- Microphone Lower Barrel Body (Titanium Champagne Satin Finish) -->
+    <path
+        android:fillColor="#F1F5F9"
+        android:pathData="M70,108h60v60c0,8 -6,14 -14,14H84c-8,0 -14,-6 -14,-14V108z" />
+    <!-- Subtle Cylindrical Shadow Gradient (Left Side) -->
+    <path
+        android:fillColor="#150F172A"
+        android:pathData="M70,108h12v60c0,8 2,14 2,14H70V108z" />
+
+    <!-- VaniRakshak Wordmark Engraving on Body -->
+    <!-- Brand Shield Icon -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M98,114h4c2,0 3,1 3,3v2c0,2.5 -2,4.5 -5,5.5 -3,-1 -5,-3 -5,-5.5v-2c0,-2 1,-3 3,-3z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M99,117h2v2h-2z" />
+
+    <!-- Upper Gain Rotary Knob -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M94,129h12v12H94z" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M96,131h8v8H96z" />
+    <!-- White Indicator Notch on Knob -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M100,131v3" />
+
+    <!-- Active Status Glow LED (Green Light) -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M99,146h2v2h-2z" />
+    <path
+        android:fillColor="#4010B981"
+        android:pathData="M98,145h4v4h-4z" />
+
+    <!-- Lower Output Volume Knob -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M93,153h14v14H93z" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M95,155h10v10H95z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CBD5E1"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M100,155v3" />
+
+    <!-- U-Shaped Shockmount Yoke Frame -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#334155"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M56,130v30c0,22 20,40 44,40s44,-18 44,-40v-30" />
+
+    <!-- Shockmount Pivot Thumbscrews (Left & Right) -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M50,126h12v10H50z" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M48,128h4v6h-4z" />
+
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M138,126h12v10H138z" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M148,128h4v6h-4z" />
+
+    <!-- Stand Center Vertical Stem -->
+    <path
+        android:fillColor="#475569"
+        android:pathData="M97,200h6v36H97z" />
+
+    <!-- Heavy Cast Broadcast Stand Base -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M74,236h52c5,0 8,3 8,6s-3,4 -8,4H74c-5,0 -8,-1 -8,-4s3,-6 8,-6z" />
+    <path
+        android:fillColor="#334155"
+        android:pathData="M80,234h40v3H80z" />
+
+</vector>

@@ -13,7 +13,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import com.vericall.R
-import com.vericall.temp.TempContactDetailActivity
+import com.vericall.contacts.VaniForensicDetailActivity
 
 /**
  * Manages the high-contrast System Alert Window coercion warning when a banking
@@ -44,7 +44,7 @@ object VaniCoercionOverlay {
 
                     view.findViewById<Button>(R.id.btnEndCallInstead).setOnClickListener {
                         hide(context)
-                        val intent = Intent(context, TempContactDetailActivity::class.java).apply {
+                        val intent = Intent(context, VaniForensicDetailActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         }
                         context.startActivity(intent)
