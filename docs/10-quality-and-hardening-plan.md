@@ -296,6 +296,52 @@ and frozen-feature systems characteristically land about where this one did.
 - Expose as `--unfreeze-top-n` (default 0, preserving today's behaviour) and
   record it in the checkpoint.
 - **Run two seeds.** With a 0.8 pp floor, one run establishes nothing.
+- Name the flag `--unfreeze-top-n`, dashed, like every other flag in the file
+  (`--max-train-utts`, `--merge-layers`, `--freeze-merge`). argparse maps it to
+  the underscored attribute on its own.
+- Pass `--merge-layers 12` on every G3 run, smoke runs included. Every model in
+  the G2 table is a 12-layer merge; omitting it trains a different
+  architecture and the comparison is void.
+
+**Decided (2026-09-12) — checkpoint contents.** Save **only the unfrozen
+top-N encoder layers**, never the whole frontend. WavLM-base-plus is ~94.7 M
+parameters: a full `frontend_state_dict` is **379 MB at fp32, 189 MB at
+bf16**, per checkpoint, against a 28 MB repo in which checkpoints have been
+force-added. Two seeds of that would be unrecoverable in a public history.
+
+**Decided (2026-09-12) — fine-tuned checkpoints stay out of git.** G0
+force-added six frozen-encoder checkpoints because they were ~400 KB each and
+otherwise unreproducible. Neither is true now: fine-tuned checkpoints are
+large, and `--seed` makes them reproducible. Keep them on the training box and
+in the Syncthing exchange. Commit the **report JSON**, which is what the
+argument actually rests on.
+
+**Decided (2026-09-12) — the backend must hard-fail, not fall back.** A head
+trained on fine-tuned features and scored against a stock frontend produces
+**silently wrong** scores: no exception, no missing key, just garbage that
+still passes the integration check. `cm_aasist.py` pins
+`_FRONTEND = "microsoft/wavlm-base-plus"` and loads stock weights, so this is
+the default behaviour today. So: if a checkpoint records `unfreeze_top_n > 0`,
+loading **must raise** unless the matching encoder weights are present and
+actually applied. "Always load when present" is not the safe rule — it says
+nothing about the absent case, which is the dangerous one. Add a test that a
+fine-tuned checkpoint stripped of its encoder weights raises rather than
+scores.
+
+**Decided (2026-09-12) — one dtype end to end.** Training, the eval harnesses,
+and runtime must agree. Training bf16 while `scripts/evaluate_*.py` score in
+fp16 (`.half()`, which they all do today) and runtime scores in a third dtype
+would make every G3 number incomparable with the G2 table. Pick bf16 on CUDA
+for fine-tuned checkpoints and carry it through all three; leave the existing
+fp16 path untouched for the frozen-encoder checkpoints so the published
+numbers stay reproducible.
+
+**Watch item — `.eval()` vs `.train()`.** The frontend is currently
+`.eval()`, so dropout is off. Fine-tuning normally wants the unfrozen layers
+in train mode, which changes feature statistics and is therefore a **second
+variable** moving alongside the unfreeze, against ground rule 3. It is
+intrinsic to fine-tuning rather than avoidable, so it does not block G3 — but
+record which mode you used, because a later comparison will need it.
 
 **Criteria (fixed in advance):**
 
