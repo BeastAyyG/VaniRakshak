@@ -440,6 +440,67 @@ multi-layer models gave those attacks away and never got them back.
 
 ---
 
+## Finding — the impostor interlock threshold is scale-wrong (2026-09-12)
+
+`demo_04_impostor.wav` returns **CHALLENGE** where ground truth and
+`docs/RUNBOOK.md` both say **BLOCK**. Reproduced independently on the dev box
+(REST 67.8) and the training box (WS 67.7), with real backends
+(`VR_CM_BACKEND=aasist VR_ASV_BACKEND=ecapa`). It is systemic, not
+environmental, and `RUNBOOK.md:96`'s "Risk 70.0 BLOCK / asv ~ 0.011" is stale.
+
+**Root cause.** `impostor_block_below` (`vanirakshak/config.py:57`, default
+`0.10`) is a single global constant, but the two ASV backends produce scores
+on entirely different scales:
+
+| backend | non-target (impostor) | target (genuine) | threshold 0.10 |
+|---|---|---|---|
+| stub (the default) | mean 0.982, max 0.991 | min 0.994 | **can never fire** |
+| ecapa | mean 0.199, max 0.328 | min 0.713 | fires only on extreme mismatch |
+
+Both figures come from the anchors' own calibration blocks
+(`data/anchor_asv_embedding.json`, `data/anchor_asv_embedding_ecapa.json`).
+Under the stub, no score is ever below 0.10, so the interlock is dead code.
+Under ECAPA, demo_04 scores 0.044–0.135 — comfortably impostor by ECAPA's own
+calibration, since even its *mean* non-target is 0.199 — yet the final window's
+0.135 clears 0.10 and the override declines to fire.
+
+**Not a windowing artifact.** All six windows are full 4.04 s, `speech_ratio`
+1.000, `is_voiced` true. Similarity climbs monotonically 0.044 → 0.135 across
+the clip; that is real content, not padding.
+
+**Measured separation across all four demo clips (ECAPA):**
+
+| clip | min | max | required behaviour |
+|---|---|---|---|
+| `demo_01_genuine` | 0.854 | 0.917 | must not block |
+| `demo_02_degraded_copy` | **0.610** | 0.858 | must not block (same speaker) |
+| `demo_03_partial_splice` | 0.054 | 0.851 | blocks (correctly) |
+| `demo_04_impostor` | 0.044 | **0.135** | must block |
+
+Any threshold in **0.135 < t < 0.610** separates all four. The ECAPA anchor's
+measured non-target maximum, **0.328**, sits near the centre of that window
+with ~1.9x margin either side, and is derived from enrollment data rather than
+chosen.
+
+**Recommended fix — derive the threshold from the loaded anchor's calibration
+rather than hardcoding one constant for every backend.** Each anchor already
+ships `nontarget_scores.max` and a logistic `mid`; using them makes the
+interlock correct on both scales automatically and revives it under the stub.
+Keep `VR_IMPOSTOR_BLOCK_BELOW` as an explicit override.
+
+**This also dissolves the `/analyze` pooling problem.** At 0.328 demo_04
+blocks on *every* window, so the `VR_ANALYZE_POOLING=last` default stops
+deciding the verdict. Today it does: five of six windows are below 0.10 and
+only the last is above, so the REST path clears a clip that any other window
+would have blocked. Fix the threshold first and pooling becomes a preference
+rather than a correctness issue.
+
+**Not applied.** Changing an interlock threshold changes BLOCK behaviour for
+every caller and is a product decision, not a cleanup. Recorded here with the
+numbers so it can be decided rather than rediscovered.
+
+---
+
 ## G5 — Authentication (product P0, independent of all CM work)
 
 `docs/09-post-cm-roadmap.md` P0 #1. Every REST route and the WebSocket accept

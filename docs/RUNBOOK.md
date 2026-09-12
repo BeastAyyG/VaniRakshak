@@ -93,7 +93,13 @@ Measured on the demo corpus and ASVspoof 5:
   genuine scores autonomously as **ALLOW** in the production sliding-window path
   (`demo_01_genuine.wav` Risk **31.6**, mean LLR **+2.55**, 3.4 points off the CHALLENGE boundary;
   center-crop yields Risk 24.0, LLR +3.85). Impostor speech (`demo_04_impostor.wav`, an authentic human voice)
-  is blocked by the ASV subsystem override (`asv_consistency ~ 0.011 < 0.10` -> Risk 70.0 BLOCK).
+  is **not** currently blocked: measured 2026-09-12 on two machines, it scores
+`asv_consistency` 0.044-0.135 and lands at Risk 67.7-67.8 **CHALLENGE**. The
+`asv ~ 0.011 -> Risk 70.0 BLOCK` figure previously recorded here is stale. The
+override does not fire because `VR_IMPOSTOR_BLOCK_BELOW` (0.10) is a single
+constant applied to two ASV backends whose score scales differ by an order of
+magnitude - see `docs/10-quality-and-hardening-plan.md`, "the impostor
+interlock threshold is scale-wrong", for the measurements and the fix.
 Two operational notes: (1) the tier-match gates in `integration_check.py` were
 calibrated for stub-era operating points and reflect increased sensitivity under
 real backends (`degraded_copy` → CHALLENGE, `partial_splice` → BLOCK); (2) if
