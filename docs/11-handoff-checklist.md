@@ -4,8 +4,18 @@ Exact locations for the work that remains. Read
 `docs/10-quality-and-hardening-plan.md` first — its **Ground rules** section is
 binding, and every criterion below was fixed in advance there.
 
-Branch: `fix/protocol-interlock-reconciliation`. `origin` and `upstream` are the
-same GitHub repo.
+**Base branch: `main`.** The repository is private. The old
+`fix/protocol-interlock-reconciliation` branch was squash-merged as PR #1
+(`4f7e13a`) on 2026-09-13 and is finished: do not commit to it or cut work from
+it, since its 85 commits are not in `main`'s history and would reappear in the
+next PR. New work goes on a short-lived branch from `origin/main`, merged back
+through a PR, which is what triggers CI. `origin` and `upstream` are the same
+GitHub repo.
+
+```bash
+git fetch origin
+git switch -c <topic-branch> origin/main
+```
 
 **Who may write to git depends on the agent:**
 
