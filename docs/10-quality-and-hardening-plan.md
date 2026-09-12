@@ -495,9 +495,9 @@ only the last is above, so the REST path clears a clip that any other window
 would have blocked. Fix the threshold first and pooling becomes a preference
 rather than a correctness issue.
 
-**Not applied.** Changing an interlock threshold changes BLOCK behaviour for
-every caller and is a product decision, not a cleanup. Recorded here with the
-numbers so it can be decided rather than rediscovered.
+**Decided 2026-09-12: fix it, but after G5.** Approved in principle; deferred
+so the auth work lands first. Tracked as **G8** below — this is scheduled
+work, not an open question.
 
 ---
 
@@ -615,8 +615,46 @@ dashboard state unmissably that the similarity shown is synthetic.
 | 6 | G4 attack diversity | G3 misses | long | Conditional only |
 | 7 | G6 semantic decision | — | decision | Needs the product owner |
 | 8 | G7 ASV default | G5 | hours | Decide with auth, ship together |
+| 9 | G8 anchor-derived impostor threshold | G5 | hours | Approved 2026-09-12, deferred behind auth |
 
 G5 depends on no CM work and can proceed alongside it.
+
+---
+
+## G8 — Derive the impostor threshold from the anchor (approved, deferred behind G5)
+
+Full measurements and root cause in "the impostor interlock threshold is
+scale-wrong" above. Approved 2026-09-12; scheduled after G5 so the auth work
+lands first.
+
+**Work.** Replace the single hardcoded `impostor_block_below`
+(`vanirakshak/config.py:57`, default `0.10`) with a threshold read from the
+loaded anchor's own calibration block, which already ships
+`nontarget_scores.max` and a logistic `mid`. Keep `VR_IMPOSTOR_BLOCK_BELOW` as
+an explicit operator override, and fall back to it when an anchor carries no
+calibration.
+
+**Criteria (fixed in advance):**
+
+- [ ] `demo_04_impostor` → **BLOCK** on the REST *and* WS paths, under
+      `VR_ASV_BACKEND=ecapa`.
+- [ ] `demo_01_genuine` → **ALLOW** and `demo_02_degraded_copy` → not BLOCK.
+      0.610 is the binding constraint; a threshold above it blocks the
+      enrolled speaker on a degraded line.
+- [ ] The override fires on **every** window of demo_04, not just some — that
+      is what makes the result independent of `VR_ANALYZE_POOLING`.
+- [ ] Under the stub backend the interlock becomes reachable at all. Today no
+      stub score is ever below 0.10, so it is dead code on the default config.
+      Add a test asserting it can fire, which nothing currently covers.
+- [ ] `scripts/integration_check.py` tier gates pass without being relaxed.
+      `demo_03_partial_splice` → BLOCK stays a documented deviation
+      (`RUNBOOK.md`); do not "fix" it by widening the gate.
+- [ ] `docs/PROTOCOL.md` §3/§8 and `docs/RUNBOOK.md` updated — PROTOCOL.md is
+      binding per `AGENTS.md` §2, and this rule produces tiers.
+
+**Do not** simply retune the constant to 0.328. That number is this anchor's
+non-target maximum; hardcoding it reproduces the original defect one enrollment
+later. The point is that the threshold follows the anchor.
 
 ---
 
