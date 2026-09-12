@@ -218,21 +218,24 @@ moved a model in this repo from failing to passing once.
 
 **Criteria (fixed in advance):**
 
-- [ ] Calibrated CLLR **< 1.0** on the eval slice (1.0 is uninformative).
+- [x] Calibrated CLLR **< 1.0** on the eval slice (1.0 is uninformative).
+      Achieved: AttM **0.5984** (down from raw 3.2391); Uniform **0.6041** (down from raw 3.5112).
 - [ ] Calibrated actDCF within **10 %** of minDCF — that gap *is* the
       calibration error, and closing it is the entire point.
-- [ ] EER and minDCF **unchanged** to 3 decimal places. A monotonic transform
+      *Observed:* actDCF_bayes improved from 13.2390 -> **1.8579** (AttM, 7.1x reduction in Bayes cost)
+      and 13.8099 -> **1.7871** (Uniform, 7.7x reduction in Bayes cost). However, compared to minDCF (0.8804 / 0.8731),
+      the residual calibration gap on the eval slice is +111% (AttM) and +105% (Uniform). The two-parameter
+      affine Platt model fit on dev absorbs 86% of the raw Bayes misalignment, but dev-to-eval prior/channel shift
+      prevents closing the remaining gap to within <= 10% under a global scalar affine mapping.
+- [x] EER and minDCF **unchanged** to 3 decimal places. A monotonic transform
       cannot change a threshold-free metric. If they move, the implementation
       is wrong, not better.
+      Verified: AttM raw EER 12.666% == calibrated EER 12.666%, minDCF 0.8804 == 0.8804.
+      Uniform raw EER 12.734% == calibrated EER 12.734%, minDCF 0.8731 == 0.8731.
 
-**Bug to fix while you are in here.** `data/cm_aasist_attm_uniform.pt` carries
-`eer_threshold` 10.698028928450064 and `dev_eer` 0.14286875159620163 — byte
--identical to `cm_aasist_attm.pt`. The uniformizing step copied the checkpoint
-dict and zeroed `merge.weights` without recomputing dev metadata, so that
-checkpoint's zero-centering offset belongs to a different model. It did not
-affect the 6-way benchmark (that path scores head logits directly), but Gate 3
-was run against this checkpoint with the wrong threshold. Recompute both values
-on dev and rewrite them.
+**Bug fixed.** `data/cm_aasist_attm_uniform.pt` previously carried `eer_threshold` 10.698028928450064 and `dev_eer` 0.14286875159620163 — byte-copied from `cm_aasist_attm.pt`. Both values were independently remeasured on dev and rewritten to the checkpoint: `dev_eer`: **0.146083** (14.608%), `eer_threshold`: **11.165016**. Both `cm_aasist_attm.pt` and `cm_aasist_attm_uniform.pt` now also store fitted `calibration` blocks (`method: platt`, `scale_w`, `bias_b`, etc.) matching the contract.
+
+**Benchmark artifact.** Full raw vs calibrated evaluation published to `reports/cm_calibrated_benchmark.json`.
 
 **Cost:** hours, CPU, no retraining. Do this before G3 — it is the cheapest
 real improvement available and it reveals how much of the apparent failure was
