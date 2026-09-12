@@ -43,6 +43,7 @@ import com.vericall.model.CallDirection
 import com.vericall.model.VaniCallRecord
 import com.vericall.model.VaniContact
 import com.vericall.ui.VaniCallHistoryAdapter
+import com.vericall.util.VaniDefaultDialerManager
 import com.vericall.ui.VaniFavoritesAdapter
 import com.vericall.ui.VaniProtectedCallAdapter
 import com.vericall.util.VaniCallRouter
@@ -657,6 +658,9 @@ class VaniMainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         refreshAllData()
+        if (!VaniDefaultDialerManager.isDefaultDialer(this)) {
+            VaniDefaultDialerManager.promptToSetDefaultDialer(this)
+        }
     }
 
     // ------------------------------------------------------------- Top Bar Gesture & Scroll Collapse

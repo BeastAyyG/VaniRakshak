@@ -7,6 +7,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.telecom.Call
+import android.telecom.CallAudioState
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.TextView
@@ -107,6 +109,7 @@ class VaniActiveCallActivity : AppCompatActivity() {
         setupUI()
         setupTranscriptSheet()
         setupAudioListeners()
+        setupTelecomBridge()
         startCallSession()
     }
 
@@ -117,15 +120,31 @@ class VaniActiveCallActivity : AppCompatActivity() {
         val initial = callerName.firstOrNull { it.isLetter() }?.uppercaseChar() ?: 'V'
         binding.tvCenterAvatarLetter.text = initial.toString()
 
-        binding.tvActiveCallDuration.text = if (isOutgoing) "Calling..." else "Connecting..."
-        binding.tvActiveCallStatus.text = "Initializing Vani Guard Voice Channel..."
+        val isRinging = intent.getBooleanExtra(EXTRA_IS_INCOMING_RINGING, false) || VaniCallManager.isIncomingRinging()
+        updateRingingUI(isRinging)
 
         binding.btnMinimizeCall.setOnClickListener {
             moveTaskToBack(true)
         }
 
+        binding.btnCallAccept.setOnClickListener {
+            VaniCallManager.answer()
+            updateRingingUI(false)
+        }
+
+        binding.btnCallDecline.setOnClickListener {
+            if (VaniCallManager.hasActiveTelecomCall()) {
+                VaniCallManager.reject()
+            }
+            finish()
+        }
+
         binding.btnCallEnd.setOnClickListener {
-            endCallAndSummarize()
+            if (VaniCallManager.hasActiveTelecomCall()) {
+                VaniCallManager.disconnect()
+            } else {
+                endCallAndSummarize()
+            }
         }
 
         binding.btnCallMute.setOnClickListener {
@@ -150,6 +169,87 @@ class VaniActiveCallActivity : AppCompatActivity() {
 
         binding.btnCloseTranscriptSheet.setOnClickListener {
             sheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+        }
+    }
+
+    private fun updateRingingUI(isRinging: Boolean) {
+        if (isRinging) {
+            binding.layoutIncomingCallControls.visibility = View.VISIBLE
+            binding.layoutCallControls.visibility = View.GONE
+            binding.tvActiveCallStatus.text = "Incoming Call • Ringing"
+            binding.tvActiveCallDuration.text = "Incoming..."
+        } else {
+            binding.layoutIncomingCallControls.visibility = View.GONE
+            binding.layoutCallControls.visibility = View.VISIBLE
+            binding.tvActiveCallDuration.text = if (isOutgoing) "Calling..." else "Connecting..."
+            binding.tvActiveCallStatus.text = "Initializing Vani Guard Voice Channel..."
+        }
+    }
+
+    private fun setupTelecomBridge() {
+        VaniCallManager.onStateChanged = { state ->
+            runOnUiThread {
+                when (state) {
+                    Call.STATE_RINGING -> {
+                        updateRingingUI(!isOutgoing)
+                        binding.tvActiveCallStatus.text = if (isOutgoing) "Ringing on recipient's handset..." else "Incoming Call • Ringing"
+                    }
+                    Call.STATE_DIALING -> {
+                        updateRingingUI(false)
+                        binding.tvActiveCallStatus.text = "Dialing across cellular network..."
+                        binding.tvActiveCallDuration.text = "Calling..."
+                    }
+                    Call.STATE_CONNECTING -> {
+                        updateRingingUI(false)
+                        binding.tvActiveCallStatus.text = "Connecting secure channel..."
+                        binding.tvActiveCallDuration.text = "Connecting..."
+                    }
+                    Call.STATE_ACTIVE -> {
+                        updateRingingUI(false)
+                        if (!isCallConnected) {
+                            isCallConnected = true
+                            val connTime = VaniCallManager.currentCall?.details?.connectTimeMillis ?: 0L
+                            callStartTime = if (connTime > 0) {
+                                SystemClock.elapsedRealtime() - (System.currentTimeMillis() - connTime)
+                            } else {
+                                SystemClock.elapsedRealtime()
+                            }
+                            binding.tvActiveCallStatus.text = "Connected • Vani Forensic Guard Active"
+                            timerHandler.post(timerRunnable)
+
+                            // Start guard service
+                            val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
+                            VaniCallRouter.startGuard(this, resolvedCaller)
+                        }
+                    }
+                    Call.STATE_DISCONNECTED -> {
+                        binding.tvActiveCallStatus.text = "Call Disconnected"
+                        endCallAndSummarize()
+                    }
+                }
+            }
+        }
+
+        VaniCallManager.onAudioStateChanged = { audioState ->
+            runOnUiThread {
+                isMuted = audioState.isMuted
+                binding.btnCallMute.setImageResource(if (isMuted) R.drawable.ic_mute else R.drawable.ic_mic)
+                binding.tvCallMuteLabel.text = if (isMuted) "Unmute" else "Mute"
+                binding.btnCallMute.setBackgroundResource(
+                    if (isMuted) R.drawable.bg_badge_warning else R.drawable.bg_call_control
+                )
+
+                isSpeakerOn = audioState.route == CallAudioState.ROUTE_SPEAKER
+                binding.btnCallSpeaker.setBackgroundResource(
+                    if (isSpeakerOn) R.drawable.bg_badge_enrolled else R.drawable.bg_call_control
+                )
+            }
+        }
+
+        VaniCallManager.onCallEnded = {
+            runOnUiThread {
+                endCallAndSummarize()
+            }
         }
     }
 
@@ -187,18 +287,40 @@ class VaniActiveCallActivity : AppCompatActivity() {
     }
 
     private fun startCallSession() {
-        // Connect the call after short simulation delay or immediate
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
-            isCallConnected = true
-            callStartTime = SystemClock.elapsedRealtime()
-            binding.tvActiveCallStatus.text = "Connected • Live Telemetry Active"
-            timerHandler.post(timerRunnable)
+        if (VaniCallManager.hasActiveTelecomCall()) {
+            val call = VaniCallManager.currentCall
+            if (call?.state == Call.STATE_ACTIVE) {
+                isCallConnected = true
+                val connTime = call.details?.connectTimeMillis ?: 0L
+                callStartTime = if (connTime > 0) {
+                    SystemClock.elapsedRealtime() - (System.currentTimeMillis() - connTime)
+                } else {
+                    SystemClock.elapsedRealtime()
+                }
+                binding.tvActiveCallStatus.text = "Connected • Vani Forensic Guard Active"
+                timerHandler.post(timerRunnable)
 
-            // Start guard service
-            val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
-            VaniCallRouter.startGuard(this, resolvedCaller)
-        }, 1200)
+                val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
+                VaniCallRouter.startGuard(this, resolvedCaller)
+            } else if (call?.state == Call.STATE_RINGING) {
+                updateRingingUI(!isOutgoing)
+                binding.tvActiveCallStatus.text = if (isOutgoing) "Ringing on recipient's handset..." else "Incoming Call • Ringing"
+            } else {
+                binding.tvActiveCallStatus.text = "Dialing across cellular network..."
+            }
+        } else {
+            // Standalone or simulated fallback
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (isFinishing || isDestroyed || isCallConnected) return@postDelayed
+                isCallConnected = true
+                callStartTime = SystemClock.elapsedRealtime()
+                binding.tvActiveCallStatus.text = "Connected • Live Telemetry Active"
+                timerHandler.post(timerRunnable)
+
+                val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
+                VaniCallRouter.startGuard(this, resolvedCaller)
+            }, 1200)
+        }
     }
 
     private fun setupAudioListeners() {
@@ -259,8 +381,13 @@ class VaniActiveCallActivity : AppCompatActivity() {
     }
 
     private fun toggleMute() {
-        isMuted = !isMuted
-        audioManager?.isMicrophoneMute = isMuted
+        if (VaniCallManager.hasActiveTelecomCall()) {
+            isMuted = !isMuted
+            VaniCallManager.setMuted(isMuted)
+        } else {
+            isMuted = !isMuted
+            audioManager?.isMicrophoneMute = isMuted
+        }
         binding.btnCallMute.setImageResource(if (isMuted) R.drawable.ic_mute else R.drawable.ic_mic)
         binding.tvCallMuteLabel.text = if (isMuted) "Unmute" else "Mute"
         binding.btnCallMute.setBackgroundResource(
@@ -270,8 +397,13 @@ class VaniActiveCallActivity : AppCompatActivity() {
     }
 
     private fun toggleSpeaker() {
-        isSpeakerOn = !isSpeakerOn
-        audioManager?.isSpeakerphoneOn = isSpeakerOn
+        if (VaniCallManager.hasActiveTelecomCall()) {
+            isSpeakerOn = !isSpeakerOn
+            VaniCallManager.setSpeaker(isSpeakerOn)
+        } else {
+            isSpeakerOn = !isSpeakerOn
+            audioManager?.isSpeakerphoneOn = isSpeakerOn
+        }
         binding.btnCallSpeaker.setBackgroundResource(
             if (isSpeakerOn) R.drawable.bg_badge_enrolled else R.drawable.bg_call_control
         )
@@ -298,6 +430,9 @@ class VaniActiveCallActivity : AppCompatActivity() {
         for ((id, char) in keyIds) {
             dialogView.findViewById<View>(id).setOnClickListener {
                 tvDigits.append(char)
+                if (VaniCallManager.hasActiveTelecomCall()) {
+                    VaniCallManager.sendDtmf(char[0])
+                }
             }
         }
 
@@ -414,6 +549,9 @@ class VaniActiveCallActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        VaniCallManager.onStateChanged = null
+        VaniCallManager.onAudioStateChanged = null
+        VaniCallManager.onCallEnded = null
         timerHandler.removeCallbacksAndMessages(null)
         riskListener?.let { VaniRiskBus.removeListener(it) }
         amplitudeListener?.let { VaniRiskBus.removeAmplitudeListener(it) }

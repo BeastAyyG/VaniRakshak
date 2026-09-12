@@ -148,7 +148,8 @@ object VaniCallRouter {
 
     /**
      * Dials a real phone call across the cellular network so the recipient's phone actually rings.
-     * Uses ACTION_CALL if CALL_PHONE permission is granted, or falls back to ACTION_DIAL.
+     * Integrates with Android Telecom InCallService when set as default dialer so VaniRakshak's
+     * own in-call screen manages the call directly.
      */
     fun makeProperPhoneCall(context: Context, rawNumber: String) {
         val cleanNumber = rawNumber.filter { it.isDigit() || it == '+' }
@@ -156,6 +157,19 @@ object VaniCallRouter {
             android.widget.Toast.makeText(context, "Invalid phone number to call", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+
+        // If not default dialer yet and context is Activity, offer to set as default phone app
+        if (context is android.app.Activity && !VaniDefaultDialerManager.isDefaultDialer(context)) {
+            VaniDefaultDialerManager.promptToSetDefaultDialer(context) {
+                dispatchCallIntent(context, cleanNumber)
+            }
+            return
+        }
+
+        dispatchCallIntent(context, cleanNumber)
+    }
+
+    private fun dispatchCallIntent(context: Context, cleanNumber: String) {
         val uri = Uri.parse("tel:${Uri.encode(cleanNumber)}")
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
             try {
