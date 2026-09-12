@@ -3,6 +3,7 @@ package com.vericall.audio
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
@@ -78,16 +79,27 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private val preferredSources = listOf(
+        MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+        MediaRecorder.AudioSource.MIC,
+        MediaRecorder.AudioSource.DEFAULT,
+        MediaRecorder.AudioSource.VOICE_RECOGNITION
+    )
+    private var activeSourceIndex = 0
+
     private fun createAudioRecord(): AudioRecord? {
-        val sources = listOf(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            MediaRecorder.AudioSource.MIC,
-            MediaRecorder.AudioSource.VOICE_RECOGNITION
-        )
-        for (source in sources) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        try {
+            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+        } catch (_: Exception) {}
+
+        for (i in preferredSources.indices) {
+            val source = preferredSources[i]
             try {
                 val record = AudioRecord(source, sampleRate, channelConfig, audioFormat, bufferSize)
                 if (record.state == AudioRecord.STATE_INITIALIZED) {
+                    activeSourceIndex = i
+                    android.util.Log.i("VaniLiveVoiceAnalyzer", "Initialized AudioRecord with source: $source")
                     return record
                 } else {
                     record.release()
@@ -105,7 +117,7 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
     private var totalAudioBytesWritten: Long = 0L
 
     @SuppressLint("MissingPermission")
-    fun startListening(activeContact: VaniContact) {
+    fun startListening(activeContact: VaniContact, callIdParam: String? = null) {
         if (isRecording) return
 
         try {
@@ -125,9 +137,11 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
             isRecording = true
 
             // Initialize local WAV recording file
+            val callId = callIdParam ?: VaniRiskBus.activeCallId ?: "call_${System.currentTimeMillis()}"
+            VaniRiskBus.activeCallId = callId
+
             try {
                 val recordingsDir = java.io.File(context.filesDir, "recordings").apply { mkdirs() }
-                val callId = VaniRiskBus.activeCallId ?: "call_${System.currentTimeMillis()}"
                 recordedWavFile = java.io.File(recordingsDir, "${callId}.wav")
                 totalAudioBytesWritten = 0L
                 wavFileOutputStream = java.io.FileOutputStream(recordedWavFile)
@@ -141,7 +155,8 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
             streamingOrchestrator.startStreaming(
                 callerName = activeContact.name,
                 callerPhone = activeContact.phone,
-                claimedIdentity = activeContact.name
+                claimedIdentity = activeContact.name,
+                callId = callId
             )
 
             recordingThread = Thread({
@@ -260,6 +275,7 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
         var silentChunks = 0
         var loudestSampleYet = 0
         var reportedNoAudio = false
+        var chunksRead = 0
         val noAudioMessage = context.getString(com.vericall.R.string.analyzer_no_audio)
 
         // Dynamic adaptive noise floor
@@ -274,6 +290,8 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
             val readCount = audioRecord?.read(shortBuffer, 0, shortBuffer.size) ?: 0
             if (readCount <= 0) continue
             pushRecent(shortBuffer, readCount)
+
+            chunksRead++
 
             // Forward raw PCM audio bytes to live WebSocket streaming orchestrator
             val pcmBytes = ByteArray(readCount * 2)
@@ -325,6 +343,9 @@ class VaniLiveVoiceAnalyzer(private val context: Context) {
             val normalizedAmp = min(1.0f, maxAmp / 20000.0f)
 
             if (maxAmp > loudestSampleYet) loudestSampleYet = maxAmp
+            if (chunksRead % 30 == 0) {
+                android.util.Log.d("VaniLiveVoiceAnalyzer", "Audio source $activeSourceIndex, chunk $chunksRead: maxAmp=$maxAmp, loudestSampleYet=$loudestSampleYet")
+            }
 
             // Dispatch visualizer amplitude pulse to UI
             mainHandler.post { onAmplitudeUpdated?.invoke(normalizedAmp) }

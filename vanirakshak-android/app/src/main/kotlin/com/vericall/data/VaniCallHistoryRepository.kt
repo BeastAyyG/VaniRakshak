@@ -92,6 +92,7 @@ object VaniCallHistoryRepository {
      */
     fun getCallById(context: Context, id: String): VaniCallRecord? {
         return getRecents(context).find { it.id == id }
+            ?: loadPersistedRecords(context).find { it.id == id }
     }
 
     /**

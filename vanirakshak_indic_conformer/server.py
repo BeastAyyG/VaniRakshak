@@ -663,6 +663,7 @@ async def verify_audio_chunk(
         raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/api/verify")
+@app.post("/api/verify-claim")
 async def verify_claim(req: FactCheckRequest):
     claim = req.claim.strip()
     if not claim:
@@ -719,6 +720,7 @@ class LiveCallSession:
         self.started_at = time.time()
         self.last_activity = time.time()
         self.audio_buffer = bytearray()
+        self.full_audio_bytes = bytearray()
         self.transcript_segments = []
         self.full_transcript = ""
         self.threat_score = 0
@@ -788,34 +790,38 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
             if "bytes" in message and message["bytes"]:
                 raw_chunk = message["bytes"]
                 session.audio_buffer.extend(raw_chunk)
+                session.full_audio_bytes.extend(raw_chunk)
 
-                # Evaluate buffer periodically (e.g. every 32KB ~ 1-2s audio)
-                if len(session.audio_buffer) >= 32000:
+                # Evaluate buffer periodically (every ~64KB ~ 2.0s audio with 0.5s overlap)
+                if len(session.audio_buffer) >= 64000:
                     chunk_to_process = bytes(session.audio_buffer)
-                    session.audio_buffer.clear()
+                    # Retain 0.5s (16,000 bytes) overlap so words across chunk boundaries aren't severed
+                    session.audio_buffer = bytearray(session.audio_buffer[-16000:])
                     try:
                         res = transcribe_with_indic_conformer(chunk_to_process)
                         new_text = (res.get("transcript") or "").strip()
-                        if new_text:
-                            session.transcript_segments.append(new_text)
-                            session.full_transcript = " ".join(session.transcript_segments)
+                        if new_text and len(new_text) >= 2:
+                            # Deduplicate if this exact text was just added
+                            if not session.transcript_segments or session.transcript_segments[-1].lower() != new_text.lower():
+                                session.transcript_segments.append(new_text)
+                                session.full_transcript = " ".join(session.transcript_segments)
 
-                            # Re-evaluate threat matrix
-                            threat = evaluate_threat_and_scam(session.full_transcript, client)
-                            session.threat_score = threat.get("risk_score", 0)
-                            session.threat_level = threat.get("threat_level", "SAFE")
-                            session.scam_type = threat.get("scam_type", "Normal Conversation")
-                            session.action_advice = threat.get("action_advice", "")
-                            session.red_flags = threat.get("red_flags", [])
+                                # Re-evaluate threat matrix
+                                threat = evaluate_threat_and_scam(session.full_transcript, client)
+                                session.threat_score = threat.get("risk_score", 0)
+                                session.threat_level = threat.get("threat_level", "SAFE")
+                                session.scam_type = threat.get("scam_type", "Normal Conversation")
+                                session.action_advice = threat.get("action_advice", "")
+                                session.red_flags = threat.get("red_flags", [])
 
-                            await websocket.send_json({
-                                "event": "stream_update",
-                                "call_id": call_id,
-                                "incremental_text": new_text,
-                                **session.to_dict()
-                            })
+                                await websocket.send_json({
+                                    "event": "stream_update",
+                                    "call_id": call_id,
+                                    "incremental_text": new_text,
+                                    **session.to_dict()
+                                })
                     except Exception as e:
-                        logger.warn(f"[LiveStream] Buffer transcription warning: {e}")
+                        logger.warning(f"[LiveStream] Buffer transcription warning: {e}")
 
             # B) Text / JSON control frames
             elif "text" in message and message["text"]:
@@ -845,6 +851,23 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
                             })
 
                     elif event_type == "end_call":
+                        # Final pass over full accumulated audio if needed
+                        if (not session.full_transcript or len(session.full_transcript) < 5) and len(session.full_audio_bytes) >= 16000:
+                            try:
+                                final_res = transcribe_with_indic_conformer(bytes(session.full_audio_bytes))
+                                cand = (final_res.get("transcript") or "").strip()
+                                if cand:
+                                    session.full_transcript = cand
+                                    session.transcript_segments = [cand]
+                                    threat = evaluate_threat_and_scam(session.full_transcript, client)
+                                    session.threat_score = threat.get("risk_score", 0)
+                                    session.threat_level = threat.get("threat_level", "SAFE")
+                                    session.scam_type = threat.get("scam_type", "Normal Conversation")
+                                    session.action_advice = threat.get("action_advice", "")
+                                    session.red_flags = threat.get("red_flags", [])
+                            except Exception as fe:
+                                logger.warning(f"[LiveStream] End-call fallback transcription warning: {fe}")
+
                         session.is_completed = True
                         await websocket.send_json({
                             "event": "call_completed",
@@ -864,6 +887,21 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
     except Exception as exc:
         logger.error(f"[LiveStream] Error in WebSocket stream: {exc}", exc_info=True)
     finally:
+        if (not session.full_transcript or len(session.full_transcript) < 5) and len(session.full_audio_bytes) >= 16000:
+            try:
+                final_res = transcribe_with_indic_conformer(bytes(session.full_audio_bytes))
+                cand = (final_res.get("transcript") or "").strip()
+                if cand:
+                    session.full_transcript = cand
+                    session.transcript_segments = [cand]
+                    threat = evaluate_threat_and_scam(session.full_transcript, client)
+                    session.threat_score = threat.get("risk_score", 0)
+                    session.threat_level = threat.get("threat_level", "SAFE")
+                    session.scam_type = threat.get("scam_type", "Normal Conversation")
+                    session.action_advice = threat.get("action_advice", "")
+                    session.red_flags = threat.get("red_flags", [])
+            except Exception:
+                pass
         session.is_completed = True
 
 
@@ -931,12 +969,25 @@ async def finalize_call(
     try:
         final_text = (transcript or "").strip()
 
-        # If audio file is uploaded and transcript is empty or short, transcribe audio
-        if file is not None and len(final_text) < 10:
+        # If audio file is uploaded, transcribe full call audio
+        if file is not None:
             audio_bytes = await file.read()
             if audio_bytes and len(audio_bytes) > 500:
                 res = transcribe_with_indic_conformer(audio_bytes)
-                final_text = (res.get("transcript") or "").strip()
+                cand = (res.get("transcript") or "").strip()
+                if cand and (len(cand) >= len(final_text) or len(final_text) < 10):
+                    final_text = cand
+
+        # Fallback to active WebSocket session audio or transcript if available
+        if len(final_text) < 10 and call_id in active_call_sessions:
+            sess = active_call_sessions[call_id]
+            if sess.full_transcript and len(sess.full_transcript.strip()) >= 5:
+                final_text = sess.full_transcript.strip()
+            elif len(sess.full_audio_bytes) > 2000:
+                res = transcribe_with_indic_conformer(bytes(sess.full_audio_bytes))
+                cand = (res.get("transcript") or "").strip()
+                if cand:
+                    final_text = cand
 
         client = get_gemini_client()
 
@@ -962,7 +1013,7 @@ async def finalize_call(
         # Fact checking with Crawl4AI
         fact_checks = []
         sources = []
-        if verify_fact and final_text and len(final_text) > 15:
+        if verify_fact and final_text and len(final_text) >= 10:
             sources = await discover_and_crawl_sources(
                 query_text=final_text,
                 user_urls=None,

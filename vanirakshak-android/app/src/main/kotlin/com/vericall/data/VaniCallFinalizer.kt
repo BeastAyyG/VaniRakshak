@@ -31,6 +31,9 @@ object VaniCallFinalizer {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    const val ACTION_CALL_FINALIZED = "com.vericall.action.CALL_FINALIZED"
+    const val EXTRA_FINALIZED_CALL_ID = "extra_finalized_call_id"
+
     fun finalizeCallAsync(
         context: Context,
         record: VaniCallRecord,
@@ -38,6 +41,13 @@ object VaniCallFinalizer {
     ) {
         Thread({
             val updated = finalizeCallSync(context, record)
+            try {
+                val intent = android.content.Intent(ACTION_CALL_FINALIZED).apply {
+                    putExtra(EXTRA_FINALIZED_CALL_ID, updated.id)
+                    setPackage(context.packageName)
+                }
+                context.sendBroadcast(intent)
+            } catch (_: Exception) {}
             onComplete?.invoke(updated)
         }, "VaniCallFinalizerThread").start()
     }

@@ -10,13 +10,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.Toast
+import android.app.Activity
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.vericall.R
 import com.vericall.calling.VaniActiveCallActivity
 import com.vericall.calling.VaniCallSummaryActivity
+import com.vericall.data.VaniCallFinalizer
 import com.vericall.databinding.ItemProtectedCallBinding
+import com.vericall.model.TranscriptUtterance
 import com.vericall.model.VaniCallRecord
 import com.vericall.util.VaniCallRouter
 import java.io.File
@@ -265,29 +271,90 @@ class VaniProtectedCallAdapter(
         }
 
         private fun showTranscriptDialog(context: Context, record: VaniCallRecord) {
-            val transcriptText = if (record.transcript.isNotEmpty()) {
-                record.transcript.joinToString("\n\n") { "[${it.speaker}]\n${it.text}" }
-            } else {
-                "No transcript available for this call."
+            val sheet = BottomSheetDialog(context, R.style.Theme_VaniRakshak_BottomSheet)
+            val sheetView = LayoutInflater.from(context).inflate(R.layout.sheet_call_transcript, null)
+            sheet.setContentView(sheetView)
+
+            val tvAvatar = sheetView.findViewById<TextView>(R.id.tvSheetAvatar)
+            val tvCaller = sheetView.findViewById<TextView>(R.id.tvSheetCallerName)
+            val tvMeta = sheetView.findViewById<TextView>(R.id.tvSheetCallMeta)
+            val tvCount = sheetView.findViewById<TextView>(R.id.tvSheetMessageCount)
+            val recycler = sheetView.findViewById<RecyclerView>(R.id.recyclerSheetTranscript)
+            val layoutEmpty = sheetView.findViewById<View>(R.id.layoutSheetEmptyTranscript)
+            val tvEmptySub = sheetView.findViewById<TextView>(R.id.tvSheetEmptySubtitle)
+            val btnTranscribeNow = sheetView.findViewById<TextView>(R.id.btnSheetTranscribeNow)
+            val btnCopy = sheetView.findViewById<TextView>(R.id.btnSheetCopyTranscript)
+            val btnReport = sheetView.findViewById<TextView>(R.id.btnSheetOpenReport)
+            val btnClose = sheetView.findViewById<View>(R.id.btnSheetClose)
+
+            btnClose.setOnClickListener { sheet.dismiss() }
+
+            val name = record.callerName.ifBlank { record.number.ifBlank { "Unknown caller" } }
+            tvCaller.text = name
+            val initial = name.firstOrNull { it.isLetter() }?.uppercaseChar() ?: 'V'
+            tvAvatar.text = initial.toString()
+
+            val mins = record.durationSec / 60
+            val secs = record.durationSec % 60
+            val durStr = String.format("%02d:%02d", mins, secs)
+            val dateStr = SimpleDateFormat("MMM d • h:mm a", Locale.getDefault()).format(Date(record.timestamp))
+            tvMeta.text = "$dateStr • $durStr"
+
+            fun populateTranscript(utterances: List<TranscriptUtterance>) {
+                if (utterances.isNotEmpty()) {
+                    layoutEmpty.visibility = View.GONE
+                    recycler.visibility = View.VISIBLE
+                    tvCount.text = "${utterances.size} messages"
+                    recycler.layoutManager = LinearLayoutManager(context)
+                    recycler.adapter = VaniTranscriptAdapter(utterances.toMutableList())
+                } else {
+                    recycler.visibility = View.GONE
+                    layoutEmpty.visibility = View.VISIBLE
+                    tvCount.text = "0 messages"
+
+                    val audioFile = record.audioFilePath?.let { File(it) }
+                    if (audioFile != null && audioFile.exists() && audioFile.length() > 500) {
+                        tvEmptySub.text = "Call audio recorded (${durStr}). Tap below to run AI4Bharat speech recognition."
+                        btnTranscribeNow.visibility = View.VISIBLE
+                        btnTranscribeNow.setOnClickListener {
+                            btnTranscribeNow.text = "⏳ Transcribing with AI..."
+                            btnTranscribeNow.isEnabled = false
+                            VaniCallFinalizer.finalizeCallAsync(context, record) { updatedRecord ->
+                                (context as? Activity)?.runOnUiThread {
+                                    sheet.dismiss()
+                                    showTranscriptDialog(context, updatedRecord)
+                                }
+                            }
+                        }
+                    } else {
+                        tvEmptySub.text = "No audio recording or speech transcript was captured for this call."
+                        btnTranscribeNow.visibility = View.GONE
+                    }
+                }
             }
 
-            AlertDialog.Builder(context)
-                .setTitle("📄 Transcript • ${record.callerName}")
-                .setMessage(transcriptText)
-                .setPositiveButton("Copy") { _, _ ->
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("VaniRakshak Transcript", transcriptText)
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Transcript copied to clipboard", Toast.LENGTH_SHORT).show()
+            populateTranscript(record.transcript)
+
+            btnCopy.setOnClickListener {
+                val text = if (record.transcript.isNotEmpty()) {
+                    record.transcript.joinToString("\n\n") { "[${it.speaker}] ${it.text}" }
+                } else {
+                    "No transcript available for ${record.callerName}."
                 }
-                .setNeutralButton("Open Report") { _, _ ->
-                    val intent = Intent(context, VaniCallSummaryActivity::class.java).apply {
-                        putExtra(VaniCallSummaryActivity.EXTRA_CALL_ID, record.id)
-                    }
-                    context.startActivity(intent)
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("VaniRakshak Transcript", text))
+                Toast.makeText(context, "Transcript copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+
+            btnReport.setOnClickListener {
+                sheet.dismiss()
+                val intent = Intent(context, VaniCallSummaryActivity::class.java).apply {
+                    putExtra(VaniCallSummaryActivity.EXTRA_CALL_ID, record.id)
                 }
-                .setNegativeButton("Close", null)
-                .show()
+                context.startActivity(intent)
+            }
+
+            sheet.show()
         }
     }
 }

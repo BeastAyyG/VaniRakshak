@@ -53,7 +53,13 @@ class VaniCallDetailActivity : AppCompatActivity() {
         if (record != null) {
             bindRecord(record)
         } else {
-            finish()
+            val fallback = VaniCallHistoryRepository.getRecents(this).firstOrNull()
+            if (fallback != null) {
+                bindRecord(fallback)
+            } else {
+                Toast.makeText(this, "Call record details not found", Toast.LENGTH_SHORT).show()
+                finish()
+            }
         }
 
         binding.btnBackCallDetail.setOnClickListener { finish() }

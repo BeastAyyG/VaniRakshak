@@ -134,11 +134,14 @@ object VaniCallRouter {
      * full-screen guard screen, which is in the foreground and therefore allowed
      * to start the service.
      */
-    fun startGuard(context: Context, caller: Caller): Boolean = try {
+    fun startGuard(context: Context, caller: Caller, callId: String? = null): Boolean = try {
         val intent = Intent(context, VaniCallGuardService::class.java).apply {
             putExtra(VaniNotificationHelper.EXTRA_CALLER_NAME, caller.name)
             putExtra(VaniNotificationHelper.EXTRA_CALLER_PHONE, caller.phone)
             putExtra(VaniNotificationHelper.EXTRA_CALLER_ENROLLED, caller.enrolled)
+            if (!callId.isNullOrBlank()) {
+                putExtra(VaniCallGuardService.EXTRA_CALL_ID, callId)
+            }
         }
         ContextCompat.startForegroundService(context, intent)
         true

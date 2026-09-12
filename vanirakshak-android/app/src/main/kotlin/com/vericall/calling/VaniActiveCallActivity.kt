@@ -217,9 +217,18 @@ class VaniActiveCallActivity : AppCompatActivity() {
                             binding.tvActiveCallStatus.text = "Connected • Vani Forensic Guard Active"
                             timerHandler.post(timerRunnable)
 
+                            // Activate speakerphone so 2-way call audio can be captured by the mic
+                            try {
+                                VaniCallManager.setSpeaker(true)
+                                audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+                                audioManager?.isSpeakerphoneOn = true
+                                isSpeakerOn = true
+                                binding.btnCallSpeaker.setBackgroundResource(R.drawable.bg_badge_enrolled)
+                            } catch (_: Exception) {}
+
                             // Start guard service
                             val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
-                            VaniCallRouter.startGuard(this, resolvedCaller)
+                            VaniCallRouter.startGuard(this, resolvedCaller, callId)
                         }
                     }
                     Call.STATE_DISCONNECTED -> {
@@ -301,7 +310,7 @@ class VaniActiveCallActivity : AppCompatActivity() {
                 timerHandler.post(timerRunnable)
 
                 val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
-                VaniCallRouter.startGuard(this, resolvedCaller)
+                VaniCallRouter.startGuard(this, resolvedCaller, callId)
             } else if (call?.state == Call.STATE_RINGING) {
                 updateRingingUI(!isOutgoing)
                 binding.tvActiveCallStatus.text = if (isOutgoing) "Ringing on recipient's handset..." else "Incoming Call • Ringing"
@@ -318,7 +327,7 @@ class VaniActiveCallActivity : AppCompatActivity() {
                 timerHandler.post(timerRunnable)
 
                 val resolvedCaller = VaniCallRouter.resolve(this, callerNumber)
-                VaniCallRouter.startGuard(this, resolvedCaller)
+                VaniCallRouter.startGuard(this, resolvedCaller, callId)
             }, 1200)
         }
     }
@@ -359,17 +368,22 @@ class VaniActiveCallActivity : AppCompatActivity() {
 
                 // Update live transcript from streaming ASR
                 if (snapshot.transcript.isNotBlank()) {
-                    binding.tvPeekTranscript.text = snapshot.transcript
+                    val fullText = snapshot.transcript.trim()
+                    val sentences = fullText.split(Regex("(?<=[.!?।])\\s+")).filter { it.isNotBlank() }
+                    val latest = sentences.lastOrNull() ?: fullText
+                    binding.tvPeekTranscript.text = latest
                     binding.tvEmptyTranscriptMessage.visibility = View.GONE
 
-                    val utterance = TranscriptUtterance(
-                        speaker = callerName,
-                        text = snapshot.transcript,
-                        timestamp = System.currentTimeMillis(),
-                        isFinal = false
-                    )
-                    transcriptAdapter.addOrUpdateUtterance(utterance)
-                    binding.tvTranscriptCount.text = "${transcriptAdapter.itemCount} messages"
+                    val utterances = sentences.mapIndexed { idx, sent ->
+                        TranscriptUtterance(
+                            speaker = callerName,
+                            text = sent,
+                            timestamp = System.currentTimeMillis() - ((sentences.size - 1 - idx) * 2500L),
+                            isFinal = idx < sentences.size - 1
+                        )
+                    }
+                    transcriptAdapter.setAll(utterances)
+                    binding.tvTranscriptCount.text = "${utterances.size} messages"
 
                     if (binding.btnJumpToLatest.visibility != View.VISIBLE && transcriptAdapter.itemCount > 0) {
                         binding.recyclerFullTranscript.scrollToPosition(transcriptAdapter.itemCount - 1)
@@ -381,13 +395,13 @@ class VaniActiveCallActivity : AppCompatActivity() {
     }
 
     private fun toggleMute() {
+        isMuted = !isMuted
         if (VaniCallManager.hasActiveTelecomCall()) {
-            isMuted = !isMuted
             VaniCallManager.setMuted(isMuted)
-        } else {
-            isMuted = !isMuted
-            audioManager?.isMicrophoneMute = isMuted
         }
+        try {
+            audioManager?.isMicrophoneMute = isMuted
+        } catch (_: Exception) {}
         binding.btnCallMute.setImageResource(if (isMuted) R.drawable.ic_mute else R.drawable.ic_mic)
         binding.tvCallMuteLabel.text = if (isMuted) "Unmute" else "Mute"
         binding.btnCallMute.setBackgroundResource(
@@ -397,13 +411,13 @@ class VaniActiveCallActivity : AppCompatActivity() {
     }
 
     private fun toggleSpeaker() {
+        isSpeakerOn = !isSpeakerOn
         if (VaniCallManager.hasActiveTelecomCall()) {
-            isSpeakerOn = !isSpeakerOn
             VaniCallManager.setSpeaker(isSpeakerOn)
-        } else {
-            isSpeakerOn = !isSpeakerOn
-            audioManager?.isSpeakerphoneOn = isSpeakerOn
         }
+        try {
+            audioManager?.isSpeakerphoneOn = isSpeakerOn
+        } catch (_: Exception) {}
         binding.btnCallSpeaker.setBackgroundResource(
             if (isSpeakerOn) R.drawable.bg_badge_enrolled else R.drawable.bg_call_control
         )
@@ -488,8 +502,13 @@ class VaniActiveCallActivity : AppCompatActivity() {
             ((SystemClock.elapsedRealtime() - callStartTime) / 1000).toInt()
         } else 0
 
-        val utterances = transcriptAdapter.getAll()
+        val rawUtterances = transcriptAdapter.getAll()
         val snapshot = VaniRiskBus.last
+        val utterances = if (rawUtterances.isEmpty() && !snapshot?.transcript.isNullOrBlank()) {
+            listOf(TranscriptUtterance(speaker = callerName, text = snapshot!!.transcript, timestamp = System.currentTimeMillis()))
+        } else {
+            rawUtterances
+        }
         val riskScore = snapshot?.risk ?: 6
         val scamType = snapshot?.scamType ?: ""
 

@@ -41,4 +41,13 @@
         <item name="android:textColor">@color/ink</item>
         <item name="fontFamily">sans-serif</item>
     </style>
+
+    <!-- Clean Modern iOS Bottom Sheet Theme -->
+    <style name="Theme.VaniRakshak.BottomSheet" parent="Theme.Design.Light.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/VaniBottomSheetModal</item>
+    </style>
+
+    <style name="VaniBottomSheetModal" parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@android:color/transparent</item>
+    </style>
 </resources>

@@ -34,8 +34,25 @@ class VaniCallSummaryActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityVaniCallSummaryBinding
+    private var activeCallId: String = ""
     private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     private val dateFormat = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
+
+    private val finalizedReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == com.vericall.data.VaniCallFinalizer.ACTION_CALL_FINALIZED) {
+                val callId = intent.getStringExtra(com.vericall.data.VaniCallFinalizer.EXTRA_FINALIZED_CALL_ID)
+                if (callId == activeCallId) {
+                    runOnUiThread {
+                        val updated = VaniCallHistoryRepository.getCallById(this@VaniCallSummaryActivity, activeCallId)
+                        if (updated != null) {
+                            bindCallRecord(updated)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,14 +67,20 @@ class VaniCallSummaryActivity : AppCompatActivity() {
             insets
         }
 
-        val callId = intent.getStringExtra(EXTRA_CALL_ID) ?: ""
-        val record = VaniCallHistoryRepository.getCallById(this, callId)
+        activeCallId = intent.getStringExtra(EXTRA_CALL_ID) ?: ""
+        val record = VaniCallHistoryRepository.getCallById(this, activeCallId)
 
         if (record != null) {
             bindCallRecord(record)
         } else {
             finish()
         }
+
+        registerReceiver(
+            finalizedReceiver,
+            android.content.IntentFilter(com.vericall.data.VaniCallFinalizer.ACTION_CALL_FINALIZED),
+            android.content.Context.RECEIVER_NOT_EXPORTED
+        )
 
         binding.btnCloseSummary.setOnClickListener { finish() }
         binding.btnSummaryDone.setOnClickListener { finish() }
@@ -323,12 +346,12 @@ class VaniCallSummaryActivity : AppCompatActivity() {
     private fun createFactCheckCard(fc: com.vericall.model.FactCheckItem): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_card_inner)
-            setPadding(12, 12, 12, 12)
+            setBackgroundResource(R.drawable.bg_card_clean)
+            setPadding(16, 14, 16, 14)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 8 }
+            ).apply { topMargin = 10 }
             layoutParams = lp
         }
 
@@ -342,7 +365,7 @@ class VaniCallSummaryActivity : AppCompatActivity() {
             text = fc.verdict
             textSize = 10f
             textStyleBold()
-            setPadding(8, 4, 8, 4)
+            setPadding(10, 4, 10, 4)
             when (fc.verdict) {
                 "SUPPORTED" -> {
                     setBackgroundResource(R.drawable.bg_badge_supported)
@@ -353,8 +376,8 @@ class VaniCallSummaryActivity : AppCompatActivity() {
                     setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.verdict_scam))
                 }
                 else -> {
-                    setBackgroundResource(R.drawable.bg_pill_neobrutal_paper)
-                    setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.neo_ink))
+                    setBackgroundResource(R.drawable.bg_badge_unverifiable)
+                    setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.verdict_unverifiable))
                 }
             }
         }
@@ -364,7 +387,7 @@ class VaniCallSummaryActivity : AppCompatActivity() {
             text = "\"${fc.claim}\""
             textSize = 13f
             textStyleBold()
-            setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.neo_ink))
+            setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.text_primary))
             setPadding(10, 0, 0, 0)
         }
         headerRow.addView(claimTv)
@@ -376,18 +399,29 @@ class VaniCallSummaryActivity : AppCompatActivity() {
                 text = "Evidence: ${fc.evidence}"
                 textSize = 12f
                 setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.text_secondary))
-                setPadding(0, 6, 0, 0)
+                setPadding(0, 8, 0, 0)
+                setLineSpacing(2f, 1f)
             }
             card.addView(evidenceTv)
         }
 
-        // Source Citation
+        // Source Citation (Clickable if web URL)
         if (fc.source.isNotBlank()) {
+            val isWeb = fc.source.startsWith("http")
             val sourceTv = TextView(this).apply {
-                text = "Source: ${fc.source}"
+                text = if (isWeb) "🔗 Source: ${fc.source}" else "Source: ${fc.source}"
                 textSize = 11f
                 setTextColor(ContextCompat.getColor(this@VaniCallSummaryActivity, R.color.brand_primary))
-                setPadding(0, 4, 0, 0)
+                setPadding(0, 6, 0, 0)
+                if (isWeb) {
+                    paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+                    setOnClickListener {
+                        try {
+                            val browserIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(fc.source))
+                            startActivity(browserIntent)
+                        } catch (_: Exception) {}
+                    }
+                }
             }
             card.addView(sourceTv)
         }
@@ -401,6 +435,9 @@ class VaniCallSummaryActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        try {
+            unregisterReceiver(finalizedReceiver)
+        } catch (_: Exception) {}
         try {
             mediaPlayer?.stop()
             mediaPlayer?.release()

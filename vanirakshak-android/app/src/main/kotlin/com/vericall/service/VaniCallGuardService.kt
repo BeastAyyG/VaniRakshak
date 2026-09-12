@@ -31,18 +31,15 @@ class VaniCallGuardService : Service() {
     private var foregroundWatcher: VaniForegroundWatcher? = null
     private var callerName: String = "Caller"
     private var activePhone: String? = null
+    private var activeCallId: String? = null
     private var keywordTrigger: VaniKeywordTrigger? = null
 
     /** Sent by the UI "Verify Speaker" button (or a keyword trigger) to ask the
      *  backend model: "is this the enrolled target voice (Modi ji)?" */
     companion object {
         const val ACTION_VERIFY_SPEAKER = "com.vericall.action.VERIFY_SPEAKER"
-        // Pass this extra (true) to also start the on-device keyword listener. NOTE: it
-        // shares the mic with the live analyzer, so enable only when the analyzer is paused
-        // (see startKeywordTrigger). Manual verify via ACTION_VERIFY_SPEAKER always works.
         const val EXTRA_KEYWORD_TRIGGER = "extra_keyword_trigger"
-        // Best-effort on-device keyword trigger. If SpeechRecognizer is unavailable
-        // (no device speech service / offline), we silently fall back to the button.
+        const val EXTRA_CALL_ID = "extra_call_id"
         val TRIGGER_KEYWORDS = setOf(
             "bank", "banking", "rupee", "rupees", "rupay", "rs ", "rs.", "payment",
             "transaction", "transfer", "account", "otp", "पैसा", "बैंक", "रुपया", "भुगतान"
@@ -61,6 +58,7 @@ class VaniCallGuardService : Service() {
         val name = intent?.getStringExtra(VaniNotificationHelper.EXTRA_CALLER_NAME) ?: "Caller"
         val phone = intent?.getStringExtra(VaniNotificationHelper.EXTRA_CALLER_PHONE) ?: ""
         val enrolled = intent?.getBooleanExtra(VaniNotificationHelper.EXTRA_CALLER_ENROLLED, false) ?: false
+        val incomingCallId = intent?.getStringExtra(EXTRA_CALL_ID) ?: VaniRiskBus.activeCallId ?: "call_${System.currentTimeMillis()}"
 
         callerName = name
 
@@ -70,10 +68,10 @@ class VaniCallGuardService : Service() {
             foregroundWatcher = VaniForegroundWatcher(this).apply { start() }
         }
 
-        // RINGING and OFFHOOK both start the service. Bail out before touching
-        // the notification, otherwise the second start would overwrite a live
-        // risk score with the neutral "analyzing" state.
-        if (analyzer != null && activePhone == phone) return START_NOT_STICKY
+        // Avoid stopping and restarting capture if already actively recording this ongoing call
+        if (analyzer != null && (activePhone == phone || activeCallId == incomingCallId)) {
+            return START_NOT_STICKY
+        }
 
         VaniNotificationHelper.createChannels(this)
         val notif = VaniNotificationHelper.buildAnalyzingNotification(this, name, phone, enrolled)
@@ -89,6 +87,8 @@ class VaniCallGuardService : Service() {
 
         analyzer?.stopListening()
         activePhone = phone
+        activeCallId = incomingCallId
+        VaniRiskBus.activeCallId = incomingCallId
 
         // Listen for the manual "Verify Speaker" broadcast (fired by the UI button).
         registerReceiver(
@@ -124,7 +124,20 @@ class VaniCallGuardService : Service() {
 
         analyzer = VaniLiveVoiceAnalyzer(this).apply {
             onRiskUpdated = { risk, synthetic, speakerMatch, level, message ->
-                val snapshot = VaniRiskBus.Snapshot(risk, synthetic, speakerMatch, level, message)
+                val prev = VaniRiskBus.last
+                val snapshot = prev?.copy(
+                    risk = maxOf(risk, prev.threatScore),
+                    synthetic = synthetic,
+                    speakerMatch = speakerMatch,
+                    level = level,
+                    message = message
+                ) ?: VaniRiskBus.Snapshot(
+                    risk = risk,
+                    synthetic = synthetic,
+                    speakerMatch = speakerMatch,
+                    level = level,
+                    message = message
+                )
                 VaniRiskBus.publish(snapshot)
                 VaniScamShieldController.onRiskScoreUpdated(risk)
                 VaniNotificationHelper.showLiveRiskNotification(
@@ -133,7 +146,7 @@ class VaniCallGuardService : Service() {
                 )
             }
             onAmplitudeUpdated = { VaniRiskBus.publishAmplitude(it) }
-            startListening(contact)
+            startListening(contact, incomingCallId)
         }
 
         // OPT-IN keyword trigger. SpeechRecognizer also uses the mic, so only enable when the

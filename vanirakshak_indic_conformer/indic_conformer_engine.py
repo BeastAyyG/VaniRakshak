@@ -152,27 +152,77 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
     if not transcript and len(audio_bytes) > 200:
         local_whisper = get_local_whisper_model()
         if local_whisper not in (None, "unavailable"):
-            import tempfile
             temp_path = None
             try:
-                ext = ".wav" if audio_bytes[:4] == b"RIFF" else ".mp3"
-                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
-                    tf.write(audio_bytes)
-                    tf.flush()
-                    temp_path = tf.name
+                # 1. Check if audio is PCM or WAV to extract float32 samples directly
+                audio_float = None
+                if audio_bytes.startswith(b"RIFF"):
+                    try:
+                        with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
+                            pcm_raw = wf.readframes(wf.getnframes())
+                            if pcm_raw:
+                                audio_float = np.frombuffer(pcm_raw, dtype=np.int16).astype(np.float32) / 32768.0
+                    except Exception:
+                        audio_float = np.frombuffer(audio_bytes[44:], dtype=np.int16).astype(np.float32) / 32768.0
+                elif not (audio_bytes.startswith(b"ID3") or audio_bytes.startswith(b"\xff\xfb") or audio_bytes.startswith(b"OggS")):
+                    # Raw 16-bit 16kHz mono PCM
+                    audio_float = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-                segs, info = local_whisper.transcribe(temp_path, beam_size=3)
-                detected_lang = info.language or "en"
+                # Check energy
+                if audio_float is not None and len(audio_float) > 0:
+                    max_amp = float(np.max(np.abs(audio_float)))
+                    if max_amp < (300.0 / 32768.0):
+                        # Digital silence
+                        return {
+                            "engine": "Local Faster-Whisper (tiny)",
+                            "model": "whisper-tiny",
+                            "transcript": "",
+                            "hindi_text": "",
+                            "hinglish_text": "",
+                            "segments": [],
+                            "language_code": "en",
+                            "language": "English / Indic",
+                            "language_probability": 1.0,
+                            "duration": round(len(audio_float) / 16000.0, 2),
+                            "inference_sec": 0.001
+                        }
+                    transcribe_input = audio_float
+                else:
+                    import tempfile
+                    ext = ".wav" if audio_bytes.startswith(b"RIFF") else ".mp3"
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
+                        tf.write(audio_bytes)
+                        tf.flush()
+                        temp_path = tf.name
+                    transcribe_input = temp_path
+
+                # Do NOT use vad_filter=True as Silero VAD aggressively strips short streaming/phone audio chunks
+                segs, info = local_whisper.transcribe(
+                    transcribe_input,
+                    beam_size=1,
+                    vad_filter=False,
+                    condition_on_previous_text=False,
+                    initial_prompt="VaniRakshak Indian phone conversation in Hindi, Hinglish, or English"
+                )
+                detected_lang = getattr(info, "language", "en") or "en"
                 duration = float(getattr(info, "duration", 0.0) or 0.0)
                 
+                hallucinations = {
+                    "you", "you.", "you you", "thank you", "thank you.", "thank you very much.",
+                    "thank you very much", "bye", "bye.", "bye bye", "subtitles by",
+                    "subtitle by", "translated by", "amara.org", "thanks for watching",
+                    "watching", "please subscribe", "subscribe"
+                }
+
                 parts = []
                 for s in segs:
-                    if s.text and s.text.strip():
-                        parts.append(s.text.strip())
+                    clean_t = s.text.strip() if s.text else ""
+                    if clean_t and clean_t.lower().strip(" .!?,") not in hallucinations and len(clean_t.strip()) >= 2:
+                        parts.append(clean_t)
                         segments_list.append({
                             "start": round(float(s.start), 1),
                             "end": round(float(s.end), 1),
-                            "text": s.text.strip()
+                            "text": clean_t
                         })
                 transcript = " ".join(parts).strip()
                 inference_sec = time.time() - t0

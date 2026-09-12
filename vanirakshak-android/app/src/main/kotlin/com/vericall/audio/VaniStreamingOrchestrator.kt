@@ -58,12 +58,13 @@ class VaniStreamingOrchestrator(private val context: Context) {
     /**
      * Connects both streaming WebSockets and begins session streaming.
      */
-    fun startStreaming(callerName: String, callerPhone: String, claimedIdentity: String = "") {
+    fun startStreaming(callerName: String, callerPhone: String, claimedIdentity: String = "", callId: String? = null) {
         if (isStreaming) return
         isStreaming = true
 
         currentSessionId = "session_${UUID.randomUUID().toString().take(8)}"
-        currentCallId = "call_${System.currentTimeMillis()}"
+        currentCallId = callId ?: VaniRiskBus.activeCallId ?: "call_${System.currentTimeMillis()}"
+        VaniRiskBus.activeCallId = currentCallId
 
         // Reset state
         lastRiskScore = 0
@@ -197,8 +198,14 @@ class VaniStreamingOrchestrator(private val context: Context) {
     }
 
     private fun publishFusedSnapshot() {
+        val prev = VaniRiskBus.last
+        val effectiveTranscript = if (lastTranscript.isNotBlank()) lastTranscript else (prev?.transcript ?: "")
+        val effectiveScamType = if (lastScamType.isNotBlank()) lastScamType else (prev?.scamType ?: "")
+        val effectiveAdvice = if (lastActionAdvice.isNotBlank()) lastActionAdvice else (prev?.actionAdvice ?: "")
+        val effectiveRedFlags = if (lastRedFlags.isNotEmpty()) lastRedFlags else (prev?.redFlags ?: emptyList())
+
         // Compute effective risk: highest of acoustic forensic risk or scam coercion score
-        val effectiveRisk = maxOf(lastRiskScore, lastThreatScore).coerceIn(0, 100)
+        val effectiveRisk = maxOf(lastRiskScore, lastThreatScore, prev?.threatScore ?: 0).coerceIn(0, 100)
         val level = when {
             effectiveRisk >= 70 || lastTier == "BLOCK" -> RiskLevel.DANGER
             effectiveRisk >= 35 || lastTier == "CHALLENGE" -> RiskLevel.WARNING
@@ -209,7 +216,7 @@ class VaniStreamingOrchestrator(private val context: Context) {
         val speakerMatch = ((lastMetrics["asv_consistency"] ?: ((100 - effectiveRisk) / 100f)) * 100).toInt().coerceIn(0, 100)
 
         val message = when (level) {
-            RiskLevel.DANGER -> if (lastScamType.isNotBlank()) "CRITICAL: $lastScamType detected" else "Synthetic Voice Clone Detected — High Impersonation Risk"
+            RiskLevel.DANGER -> if (effectiveScamType.isNotBlank()) "CRITICAL: $effectiveScamType detected" else "Synthetic Voice Clone Detected — High Impersonation Risk"
             RiskLevel.WARNING -> "Acoustic Anomaly / Suspicious Coercion Cues"
             RiskLevel.SAFE -> "Authentic Target Voice • No Scam Flags"
         }
@@ -222,11 +229,11 @@ class VaniStreamingOrchestrator(private val context: Context) {
             message = message,
             tier = lastTier,
             pSpoof = syntheticScore / 100f,
-            transcript = lastTranscript,
-            scamType = lastScamType,
+            transcript = effectiveTranscript,
+            scamType = effectiveScamType,
             threatScore = lastThreatScore,
-            redFlags = lastRedFlags,
-            actionAdvice = lastActionAdvice,
+            redFlags = effectiveRedFlags,
+            actionAdvice = effectiveAdvice,
             receiptHash = lastReceiptHash,
             cmScore = lastMetrics["cm_score"] ?: 0f,
             cmGenuineProb = lastMetrics["cm_genuine_prob"] ?: 0f,

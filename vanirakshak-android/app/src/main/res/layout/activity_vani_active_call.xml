@@ -280,7 +280,7 @@
                     android:padding="16dp"
                     android:src="@drawable/ic_call_outgoing"
                     android:background="@drawable/bg_call_accept"
-                    app:tint="@color/ink"
+                    app:tint="@color/white"
                     android:contentDescription="Answer Call" />
 
                 <TextView
