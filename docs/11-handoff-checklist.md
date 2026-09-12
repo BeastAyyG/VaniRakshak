@@ -5,8 +5,24 @@ Exact locations for the work that remains. Read
 binding, and every criterion below was fixed in advance there.
 
 Branch: `fix/protocol-interlock-reconciliation`. `origin` and `upstream` are the
-same GitHub repo. `git pull --rebase` before you start and before you push;
-never force-push.
+same GitHub repo.
+
+**Who may write to git depends on the agent:**
+
+- **Claude Code session (main worktree `D:/VaniRakshak`)** — the only agent that
+  commits, pulls and pushes. `git pull --rebase` before starting and before
+  pushing; never force-push.
+- **WorkBuddy (worktrees under `C:/Users/Ayyg/WorkBuddy/Worktrees/`)** — **no git
+  writes at all** (`commit`, `pull`, `push`, `merge`, `rebase`, `stash`). Its
+  sandbox deletes the branch ref on git writes; this has happened five times.
+  Edit files, run the four gates, report the changed-file list and gate numbers,
+  and stop. Never hand-write anything under `.git/refs/`.
+- **Any agent on the training box** — `git pull --rebase` before starting, as
+  above.
+
+If `git worktree list` shows any worktree as `0000000 [branch]`, report it and
+stop. There is no known-and-accepted exception; all worktrees had their refs
+restored on 2026-09-13, so a new `0000000` is always a new failure.
 
 ---
 
