@@ -163,6 +163,29 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class SemanticConfig:
+    """ASR / scam-phrase semantic layer (docs/10 G6).
+
+    **Off by default.** When on, every 4.04 s caller audio window is uploaded
+    to Groq -- a third-party, US-hosted service -- for transcription, which
+    contradicts the zero-retention claim this system otherwise makes under
+    DPDP Act 2023 s.8(7). So it requires an explicit opt-in, and turning it on
+    flips ``zero_retention`` to false on /v1/health and names the processor in
+    every ``dpdp_compliance`` block.
+
+    Deliberately *not* keyed off GROQ_API_KEY alone: that key sits in .env for
+    the separate SACH and IndicConformer prototypes, and its mere presence must
+    not silently start shipping caller audio abroad.
+    """
+
+    enabled: bool = _env("VR_SEMANTIC_ENABLED", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    # Named so the compliance surface can disclose exactly who receives audio.
+    provider: str = "groq"
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     """API-key auth. Disabled when ``api_keys`` is empty (see server/auth.py).
 
@@ -190,6 +213,7 @@ class Settings:
     server: ServerConfig = field(default_factory=ServerConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    semantic: SemanticConfig = field(default_factory=SemanticConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")

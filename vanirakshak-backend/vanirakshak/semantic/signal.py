@@ -59,6 +59,19 @@ class SemanticSignal:
         with self._lock:
             if self._service is not None:
                 return True
+            # G6: off unless explicitly enabled. Checked before the import so a
+            # disabled layer never even constructs a client that could send
+            # caller audio to a third party.
+            from ..config import settings
+
+            if not settings.semantic.enabled:
+                self.load_error = (
+                    "disabled by default (set VR_SEMANTIC_ENABLED=1 to enable); "
+                    f"enabling uploads each audio window to {settings.semantic.provider} "
+                    "(third-party, US-hosted) and turns off zero_retention"
+                )
+                return False
+
             # Every failure below is expected on a minimal install: torch,
             # the `groq` package, and GROQ_API_KEY are all optional. Degrade
             # to available=False instead of raising — a missing dependency

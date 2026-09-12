@@ -330,7 +330,8 @@ alert payload it already received.
 | `VR_RATE_LIMIT_ENROLL` | `10` | Per-key requests/minute for `POST /v1/enroll`; tighter than analyze because it writes a voiceprint. `0` disables. |
 | `VR_ALERT_WEBHOOK_URL` | *(unset)* | Alert webhook target; unset disables dispatch |
 | `VR_FUSION_W_SEMANTIC` | `0.4` | Fusion weight for the ASR/keyword `semantic_risk` term (§3.1) |
-| `GROQ_API_KEY` | *(unset)* | Enables the `semantic` block; unset degrades it to `available: false` (see `requirements-asr.txt`) |
+| `VR_SEMANTIC_ENABLED` | `0` | **Opt-in for the `semantic` block (G6).** Off by default because enabling it uploads each 4.04 s caller audio window to Groq, a third-party US-hosted service. When `1`, `GET /v1/health` reports `models.zero_retention: false` and `models.third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block reports `zero_retention_verified: false` with the same processor list. A `GROQ_API_KEY` alone does **not** enable it — that key is also used by the separate SACH and IndicConformer prototypes. |
+| `GROQ_API_KEY` | *(unset)* | Required, together with `VR_SEMANTIC_ENABLED=1`, for the `semantic` block to populate; either missing degrades it to `available: false` (see `requirements-asr.txt`) |
 | `GEMINI_API_KEY` | *(unset)* | Enables Gemini threat analysis & fact verification; required for the `verify-chunk` and `verify` endpoints (Sotto edition). Missing key raises `ValueError` in `get_gemini_client()`. |
 | `VR_ASV_BACKEND` | `stub` | `ecapa` swaps in real ECAPA-TDNN embeddings (`asv_ecapa.py`); changes the `metrics` distribution and the anchor file loaded (`data/anchor_asv_embedding_ecapa.json`) |
 | `VR_CM_BACKEND` | `stub` | `wavlm` swaps in real self-supervised features (`cm_wavlm.py`) for the countermeasure score |

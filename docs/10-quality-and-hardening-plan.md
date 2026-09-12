@@ -585,6 +585,33 @@ layer by default; keep it and state the third-party transfer explicitly in the
 compliance surface and the consent flow; or replace Groq with local ASR.
 Whichever is chosen, the docs and the code must then agree — today they do not.
 
+**DECIDED AND DONE (2026-09-13): off by default, disclosed when on.**
+Options 1 and 2 combined. Local ASR (option 3) was the only way to keep the
+feature *and* stay literally zero-retention, and was rejected on cost: the
+semantic signal is advisory (fusion weight 0.4 against 2.4 for the
+countermeasure), so disabling it by default costs little detection.
+
+- `VR_SEMANTIC_ENABLED` (default off) gates the layer in
+  `vanirakshak/semantic/signal.py` **before the ASR client is even imported**,
+  so a disabled layer never constructs anything that could upload audio.
+- **A `GROQ_API_KEY` alone does not enable it.** That key sits in `.env` for the
+  separate SACH and IndicConformer prototypes; keying the upload off its mere
+  presence would have shipped caller audio abroad silently. Tested, and
+  mutation-checked — removing the gate fails that test.
+- When enabled, `GET /v1/health` reports `zero_retention: false` and
+  `third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block
+  reports `zero_retention_verified: false` with the same list. Declared from
+  config rather than inferred after a call, so it fails toward disclosure.
+- Disabled, the `semantic` block still returns the full documented key set with
+  `available: false` and a reason naming the flag.
+
+Tests: `vanirakshak-backend/tests/test_semantic_gate.py` (7). Documented in
+`docs/PROTOCOL.md` s.8, `docs/API_SPEC.md`, `docs/RUNBOOK.md`.
+
+**Not done, and stated so:** a consent flow. Disclosure in the compliance fields
+tells an integrator; it does not obtain the caller's consent. Anyone enabling
+the layer in production owns that.
+
 ---
 
 ## G7 — Make ASV real by default

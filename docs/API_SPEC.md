@@ -95,7 +95,7 @@ populated. Full schema and the honest scope of `claim_findings` (rule-based
 against known policy, not open-ended fact-checking) in
 [PROTOCOL.md](PROTOCOL.md) §3.1. Degrades to
 `{"available": false, "semantic_risk": 0.0, "reason": "..."}` when
-`GROQ_API_KEY` or the optional ASR stack (`requirements-asr.txt`) is absent —
+`VR_SEMANTIC_ENABLED` is unset (the default), or `GROQ_API_KEY` or the optional ASR stack (`requirements-asr.txt`) is absent —
 every other field is unaffected.
 
 ## REST API
@@ -116,6 +116,7 @@ speaker anchor.
     "wavlm_model": "synthetic_cm_v1 / synthetic_asv_v1",
     "vad_enabled": true,
     "zero_retention": true,
+    "third_party_audio_processors": [],
     "cm_backend": "synthetic_cm_v1",
     "asv_backend": "synthetic_asv_v1"
   },
@@ -140,6 +141,13 @@ from the running instance, so it stays truthful if `VR_ASV_BACKEND=ecapa` was
 requested but degraded to the stub. The dashboard uses it to relabel the
 "TARGET ANCHOR ASV" tile as synthetic rather than let a projection read as a
 voiceprint. See PROTOCOL.md §3.
+
+`zero_retention` and `third_party_audio_processors` are declared from
+configuration, not inferred after the fact: with `VR_SEMANTIC_ENABLED=1`
+the server reports `zero_retention: false` and `["groq"]` before any call
+is made, because the semantic layer uploads caller audio to Groq. The same
+pair appears in `/analyze`'s `dpdp_compliance` block as
+`zero_retention_verified` and `third_party_audio_processors`. Off by default.
 
 `anchor` describes the single enrolled target speaker loaded at server
 startup (`vanirakshak/anchor.py::load_anchor`) — `user_id` is `null` and
@@ -227,6 +235,7 @@ by the verdict schema above:
     "receipt_sha256": "...",
     "statutory_act": "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
     "zero_retention_verified": true,
+    "third_party_audio_processors": [],
     "timestamp": "2026-09-09T02:20:18Z"
   },
   "target_speaker": {

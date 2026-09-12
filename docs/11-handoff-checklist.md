@@ -20,7 +20,7 @@ never force-push.
 | G3 encoder fine-tune | **missed, closed** | `docs/10` G3 |
 | G4 attack diversity | **do not run as written** | `docs/10`, "augmentation finding" |
 | G5 authentication | done | `vanirakshak-backend/vanirakshak/server/auth.py` |
-| G6 semantic vs zero-retention | **open — needs a product decision** | below |
+| G6 semantic vs zero-retention | **done 2026-09-13 — off by default, disclosed when on** | `docs/10` G6 |
 | G7 ASV default | **done 2026-09-13 — labelled, not flipped** | `docs/10` G7 |
 
 ---
@@ -34,7 +34,7 @@ python scripts/integration_check.py
 python scripts/check_docs.py
 ```
 
-Current baseline: **64** backend tests, **95** e2e, **23/23** integration
+Current baseline: **71** backend tests, **95** e2e, **23/23** integration
 checks, **0** hard doc failures. If any number drops, you broke something.
 
 `scripts/check_docs.py` hard-fails on a doc that references a file path which
@@ -60,28 +60,16 @@ complete one fast-forwarded in. Before starting a goal, run `git status` in
 
 ---
 
-## G6 — Semantic layer vs the zero-retention claim
+## G6 — Semantic layer vs the zero-retention claim — DONE
 
-**This is a decision, not a bug. Do not "fix" it by picking one yourself.**
+Decided 2026-09-13: **off by default, disclosed when on.** `VR_SEMANTIC_ENABLED`
+gates the layer in `vanirakshak-backend/vanirakshak/semantic/signal.py` before
+the ASR client is imported; a `GROQ_API_KEY` alone does not enable it. Enabled,
+`/v1/health` and every `dpdp_compliance` block report `zero_retention: false`
+and name `groq`. Full record in `docs/10` G6.
 
-`vanirakshak-backend/vanirakshak/semantic/signal.py:74` constructs
-`ASRService(ASRConfig(provider="groq"))` and uploads the caller's 4.04 s audio
-window to Groq, a third-party US cloud. Meanwhile the system advertises zero
-retention and cites DPDP Act 2023 §8(7) — see `dpdp_compliance` in
-`docs/API_SPEC.md` and `zero_retention` in `GET /v1/health`.
-
-The code and the compliance claim currently contradict each other. Three
-options, all defensible:
-
-1. Disable the semantic layer by default (it already degrades gracefully to
-   `available: false` when `GROQ_API_KEY` is unset — see
-   `vanirakshak/session.py`'s `_SEMANTIC_IDLE`).
-2. Keep it and state the third-party transfer explicitly in the compliance
-   surface and the consent flow.
-3. Replace Groq with local ASR.
-
-Whichever is chosen, **the docs and the code must then agree.** Surface the
-choice to the product owner; do not decide it in a commit.
+Open and unowned: a caller **consent flow**. Disclosure informs the integrator;
+it does not obtain consent.
 
 ---
 

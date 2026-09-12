@@ -119,7 +119,9 @@ $env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
 #    Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/enroll `
 #      -Form @{ user_id="alice"; audio=[IO.File]::OpenRead("alice_20s.wav") }
 #    then pass "claimed_identity": "alice" in the WS handshake (PROTOCOL.md §1).
-# 4. Semantic layer: pip install groq; $env:GROQ_API_KEY="gsk-..."
+# 4. Semantic layer (OFF by default): pip install groq; $env:GROQ_API_KEY="gsk-...";
+#    $env:VR_SEMANTIC_ENABLED="1". This uploads caller audio to Groq (US) and
+#    flips zero_retention to false on /v1/health and in dpdp_compliance.
 # 5. Android: needs Android Studio (SDK + JDK 17); point
 #    VaniBackendConfig at the LAN host, e.g. ws://192.168.1.10:8000/v1/stream.
 # 6. Auth: VR_API_KEYS="client1:<secret>:stream|analyze:alice" and

@@ -81,6 +81,11 @@ AUTH = Authenticator(
 AUTH.warn_if_open()
 
 
+def _third_party_processors() -> List[str]:
+    """Who receives caller audio beyond this process (G6). Empty = nobody."""
+    return [settings.semantic.provider] if settings.semantic.enabled else []
+
+
 def _guard(
     request: Request, scope: str, route: str, acting_as: Optional[str] = None
 ) -> Optional[ApiKey]:
@@ -272,7 +277,13 @@ def health() -> dict:
             # what's actually running (synthetic stub vs real WavLM/ECAPA-TDNN).
             "wavlm_model": f"{PIPELINE.cm.name} / {PIPELINE.asv.name}",
             "vad_enabled": True,
-            "zero_retention": True,
+            # G6: false whenever the semantic layer is enabled, because it then
+            # uploads caller audio to a third party. Declared from config rather
+            # than from whether a call has happened yet, so it fails toward
+            # disclosure: a server configured to transfer says so before the
+            # first byte leaves.
+            "zero_retention": not settings.semantic.enabled,
+            "third_party_audio_processors": _third_party_processors(),
             "cm_backend": PIPELINE.cm.name,
             "asv_backend": PIPELINE.asv.name,
             # G7: true when asv_backend is the synthetic random-projection stub,
@@ -548,7 +559,10 @@ async def analyze(
     dpdp = {
         "receipt_sha256": last.receipt_hash,
         "statutory_act": "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
-        "zero_retention_verified": True,
+        # G6: a claim of zero retention is only true when no audio left the
+        # box. With the semantic layer enabled it went to a named third party.
+        "zero_retention_verified": not settings.semantic.enabled,
+        "third_party_audio_processors": _third_party_processors(),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
