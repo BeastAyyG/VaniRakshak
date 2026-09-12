@@ -14,6 +14,8 @@ from transformers import WavLMModel
 # checkout on any machine rather than only from one hardcoded path.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cm_frontend import assert_frozen_checkpoint
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
 from ml.augment import prepare_audio_window
@@ -35,6 +37,7 @@ def main():
 
     # Frozen Meanpool (12 layers, uniform)
     ckpt_mp = torch.load("data/cm_aasist_meanpool.pt", map_location="cpu")
+    assert_frozen_checkpoint(ckpt_mp, "scripts/evaluate_meanpool_benchmark.py")
     print(f"Loaded checkpoint data/cm_aasist_meanpool.pt: dev_eer={ckpt_mp.get('dev_eer')}, dev_min_dcf={ckpt_mp.get('dev_min_dcf')}, freeze_merge={ckpt_mp.get('freeze_merge')}")
     m_mp = AASISTLHead(in_dim=768, merge_layers=12, freeze_merge=True).to(device)
     m_mp.load_state_dict(ckpt_mp["state_dict"], strict=True)

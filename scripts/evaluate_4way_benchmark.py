@@ -14,6 +14,8 @@ from transformers import WavLMModel
 # checkout on any machine rather than only from one hardcoded path.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cm_frontend import assert_frozen_checkpoint
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
 from ml.augment import prepare_audio_window
@@ -35,24 +37,28 @@ def main():
 
     # 1. Pre-Aug Layer 12
     ckpt_pre = torch.load("data/pre_aug_cm_aasist.pt", map_location="cpu")
+    assert_frozen_checkpoint(ckpt_pre, "scripts/evaluate_4way_benchmark.py")
     m_pre = AASISTLHead(in_dim=768).to(device)
     m_pre.load_state_dict(ckpt_pre["state_dict"], strict=False)
     m_pre.eval()
 
     # 2. Post-Aug Layer 12
     ckpt_post = torch.load("data/cm_aasist.pt", map_location="cpu")
+    assert_frozen_checkpoint(ckpt_post, "scripts/evaluate_4way_benchmark.py")
     m_post = AASISTLHead(in_dim=768).to(device)
     m_post.load_state_dict(ckpt_post["state_dict"], strict=False)
     m_post.eval()
 
     # 3. Layer 5 (Pan et al.)
     ckpt_l5 = torch.load("data/cm_aasist_layer5.pt", map_location="cpu")
+    assert_frozen_checkpoint(ckpt_l5, "scripts/evaluate_4way_benchmark.py")
     m_l5 = AASISTLHead(in_dim=768).to(device)
     m_l5.load_state_dict(ckpt_l5["state_dict"], strict=False)
     m_l5.eval()
 
     # 4. Attentive Merging 12 layers
     ckpt_attm = torch.load("data/cm_aasist_attm.pt", map_location="cpu")
+    assert_frozen_checkpoint(ckpt_attm, "scripts/evaluate_4way_benchmark.py")
     m_attm = AASISTLHead(in_dim=768, merge_layers=12).to(device)
     m_attm.load_state_dict(ckpt_attm["state_dict"], strict=True)
     m_attm.eval()

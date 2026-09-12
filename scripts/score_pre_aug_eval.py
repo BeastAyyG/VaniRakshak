@@ -10,6 +10,8 @@ from transformers import WavLMModel
 # checkout on any machine rather than only from one hardcoded path.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cm_frontend import assert_frozen_checkpoint
 
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
@@ -29,6 +31,7 @@ with open(manifest_path, 'r', encoding='utf-8') as f:
 
 device = 'cuda'
 ckpt = torch.load('data/pre_aug_cm_aasist.pt', map_location='cpu', weights_only=False)
+assert_frozen_checkpoint(ckpt, "scripts/score_pre_aug_eval.py")
 model = AASISTLHead(in_dim=768).to(device)
 model.load_state_dict(ckpt['state_dict'], strict=False)
 model.eval()

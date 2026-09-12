@@ -966,6 +966,7 @@ def train_recipe_a(
                 "merge_layers": int(merge_layers) if merge_layers else None,
                 "freeze_merge": bool(freeze_merge),
                 "seed": int(seed),
+                "best_epoch": int(best_epoch),
                 "unfreeze_top_n": int(unfreeze_top_n),
                 "encoder_lr": float(encoder_lr) if unfreeze_top_n > 0 else None,
                 "frontend_dtype": str(frontend_dtype).replace("torch.", ""),

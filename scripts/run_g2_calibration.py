@@ -14,6 +14,8 @@ from transformers import WavLMModel
 # checkout on any machine rather than only from one hardcoded path.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cm_frontend import assert_frozen_checkpoint
 from benchmarks.compute_mindcf import (
     TAU_BAYES,
     compute_act_dcf,
@@ -76,12 +78,14 @@ def main():
 
     # Load AttM model
     ck_attm = torch.load(attm_ckpt_path, map_location="cpu")
+    assert_frozen_checkpoint(ck_attm, "scripts/run_g2_calibration.py")
     m_attm = AASISTLHead(in_dim=768, merge_layers=12).to(device)
     m_attm.load_state_dict(ck_attm["state_dict"], strict=True)
     m_attm.eval()
 
     # Load Uniform model
     ck_uni = torch.load(uni_ckpt_path, map_location="cpu")
+    assert_frozen_checkpoint(ck_uni, "scripts/run_g2_calibration.py")
     m_uni = AASISTLHead(in_dim=768, merge_layers=12).to(device)
     m_uni.load_state_dict(ck_uni["state_dict"], strict=True)
     m_uni.eval()

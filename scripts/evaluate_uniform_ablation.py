@@ -14,6 +14,8 @@ from transformers import WavLMModel
 # checkout on any machine rather than only from one hardcoded path.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cm_frontend import assert_frozen_checkpoint
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
 from ml.augment import prepare_audio_window
@@ -39,6 +41,7 @@ def main():
     if not os.path.exists(ckpt_path):
         print(f"{ckpt_path} not found; generating from data/cm_aasist_attm.pt...")
         ck = torch.load("data/cm_aasist_attm.pt", map_location="cpu")
+        assert_frozen_checkpoint(ck, "scripts/evaluate_uniform_ablation.py")
         sd = ck["state_dict"]
         k = [x for x in sd if x.endswith("merge.weights")][0]
         print("Learned softmax before zeroing:", torch.softmax(sd[k], dim=0).tolist())
@@ -48,6 +51,8 @@ def main():
         print(f"Saved {ckpt_path}")
 
     ckpt_uni = torch.load(ckpt_path, map_location="cpu")
+
+    assert_frozen_checkpoint(ckpt_uni, "scripts/evaluate_uniform_ablation.py")
     m_uni = AASISTLHead(in_dim=768, merge_layers=12).to(device)
     m_uni.load_state_dict(ckpt_uni["state_dict"], strict=True)
     m_uni.eval()

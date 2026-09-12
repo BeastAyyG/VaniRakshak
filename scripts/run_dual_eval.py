@@ -10,6 +10,8 @@ from transformers import WavLMModel
 # checkout on any machine rather than only from one hardcoded path.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cm_frontend import assert_frozen_checkpoint
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
 from ml.augment import prepare_audio_window
@@ -30,11 +32,14 @@ wavlm.eval()
 
 # Load models
 ckpt_pre = torch.load('data/pre_aug_cm_aasist.pt', map_location='cpu')
+assert_frozen_checkpoint(ckpt_pre, "scripts/run_dual_eval.py")
 m_pre = AASISTLHead(in_dim=768).to(device)
 m_pre.load_state_dict(ckpt_pre['state_dict'], strict=False)
 m_pre.eval()
 
 ckpt_post = torch.load('data/cm_aasist.pt', map_location='cpu')
+
+assert_frozen_checkpoint(ckpt_post, "scripts/run_dual_eval.py")
 m_post = AASISTLHead(in_dim=768).to(device)
 m_post.load_state_dict(ckpt_post['state_dict'], strict=False)
 m_post.eval()
