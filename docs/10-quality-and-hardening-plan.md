@@ -79,14 +79,18 @@ real.
 
 ## Working across two machines
 
-The dev box and the training box both push to
-`fix/protocol-interlock-reconciliation` on the same remote (`origin` and
-`upstream` are the same GitHub repo). Syncthing mirrors `.corpus-manifests/`
+**Since 2026-09-13 all work lands on `main` through pull requests.** The long-
+lived `fix/protocol-interlock-reconciliation` branch was squash-merged as PR #1
+(`4f7e13a`); its 85 commits are *not* in `main`'s history, so continuing on it
+would drag all of them back into the next PR. Start every new piece of work on a
+short-lived branch cut from `origin/main`. The repository is **private** as of
+the same date. `origin` and `upstream` are the same GitHub repo. Syncthing mirrors `.corpus-manifests/`
 between them; it does **not** mirror the repo, and must never be pointed at
 one — syncing a `.git` directory between machines corrupts both.
 
 - **Pull before you start and before you push.** `git pull --rebase` — the
-  branch has taken concurrent pushes from both machines already. Never force-push.
+  branch has taken concurrent pushes from both machines before. Never force-push,
+  and never push directly to `main` -- CI runs on pull requests.
 - **Checkpoints are write-once.** `data/` now tracks six `.pt` files. They are
   binary and unmergeable: if both machines write the same path, the conflict
   cannot be resolved and one side's run is lost. A new run gets a new filename.
