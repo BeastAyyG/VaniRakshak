@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "dev:all": "node scripts/dev.js",
+    "dev:all:real": "node scripts/dev.js --real",
     "integration:check": "python scripts/integration_check.py",
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",

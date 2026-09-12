@@ -11,7 +11,24 @@ npm run dev:all
 `scripts/dev.js` creates `vanirakshak-backend/.venv` on first run, boots the
 backend on :8000, waits for `/api/v1/health`, then starts the frontend on
 :3001 with `NEXT_PUBLIC_BACKEND_URL`/`NEXT_PUBLIC_BACKEND_WS` pointed at it.
-This is what `.claude/launch.json` uses.
+This is what `.claude/launch.json` uses. **Runs the deterministic stub
+detectors** — no GPU, no model download, plausible-looking numbers that are
+not real spoof detection or biometrics. Fine for demoing the wiring, wrong for
+evaluating detection quality.
+
+### One command, real detectors
+
+```bash
+npm run dev:all:real
+```
+
+Same launcher with `--real`: installs `vanirakshak-backend/requirements-asv.txt`
+into the venv (~one extra `pip install`, first run only) and sets
+`VR_ASV_BACKEND=ecapa` / `VR_CM_BACKEND=aasist` unless you already exported
+either yourself. Both models download pretrained weights from Hugging Face on
+first use (needs network once) and take noticeably longer to load on CPU, so
+the health-check timeout is longer under `--real`. `GET /api/v1/health`'s
+`models.cm_backend` / `models.asv_backend` confirm which is actually running.
 
 ### Backend only (port 8000)
 
@@ -109,9 +126,11 @@ heuristic fallback.
 ### Demo → working system (activation checklist)
 
 ```powershell
-# 1. Real detectors (verified working — see above)
-pip install -r vanirakshak-backend/requirements-asv.txt
-$env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
+# 1. Real detectors: npm run dev:all:real (see above) instead of the four
+#    lines this used to be — installs requirements-asv.txt and sets both
+#    env vars for you. Manual equivalent, for a backend-only launch:
+#    pip install -r vanirakshak-backend/requirements-asv.txt
+#    $env:VR_ASV_BACKEND="ecapa"; $env:VR_CM_BACKEND="aasist"
 # 2. Trained countermeasure — Available via data/cm_aasist.pt (dev EER 16.415%, minDCF 0.9912;
 #    codec/telephony-augmented retrain — see docs/08 §12.1 for the tradeoff vs the 10.404% pre-aug run).
 #    Loaded automatically when VR_CM_BACKEND="aasist"; reports aasist_l_wavlm_dev_eer_0.164.
