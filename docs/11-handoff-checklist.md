@@ -36,6 +36,23 @@ restored on 2026-09-13, so a new `0000000` is always a new failure.
 
 ---
 
+## What stays out of the README
+
+The top-level `README.md` is deliberately **pitch-level** (decided 2026-09-13):
+what the product does and how to run it, nothing more. Do not add back:
+
+- model architectures, layer choices, training recipes or benchmark numbers;
+- fusion weights, risk thresholds, or override values — exact `CHALLENGE` and
+  `BLOCK` cut-offs tell an attacker what to stay under;
+- known weaknesses (per-attack blind spots, the synthetic ASV default);
+- the go-to-market plan, which lives in `docs/12-product-vision.md`;
+- named individuals or their voice data.
+
+That detail belongs in `docs/`, which is for the team. The repository is
+private; if it is ever made public again, re-read `docs/` for these items first.
+
+---
+
 ## Status
 
 | Goal | State | Where |
