@@ -6,8 +6,19 @@
  * console on :3001) and prefixes every log line so you can tell them apart.
  * Ctrl-C tears both down.
  *
- *   node scripts/dev.js
+ *   node scripts/dev.js            # default: stub CM/ASV (no GPU/network needed)
  *   npm run dev:all
+ *
+ *   node scripts/dev.js --real     # real ECAPA-TDNN + WavLM AASIST detectors
+ *   npm run dev:all:real
+ *
+ * --real installs vanirakshak-backend/requirements-asv.txt into the venv (one
+ * extra `pip install`, first run only) and sets VR_ASV_BACKEND=ecapa,
+ * VR_CM_BACKEND=aasist. Without it, every run uses the deterministic stub
+ * detectors: no GPU, no model download, no network — see the "Notes" section
+ * in the docs and docs/PROTOCOL.md before quoting stub-backend numbers as
+ * real detection accuracy. Both pretrained models download from Hugging Face
+ * on first use under --real (network access needed once).
  *
  * The backend interpreter is picked in this order:
  *   1. vanirakshak-backend/.venv            (preferred, isolated)
@@ -30,6 +41,7 @@ const IS_WIN = process.platform === "win32";
 
 const PORT = process.env.VR_PORT || "8000";
 const BASE = `http://127.0.0.1:${PORT}`;
+const REAL = process.argv.includes("--real");
 
 function venvPython() {
   const exe = IS_WIN ? "python.exe" : "python";
@@ -81,35 +93,64 @@ async function waitForHealth(timeoutMs = 60000) {
 
 async function ensureVenv(python) {
   const venvDir = path.join(BACKEND, ".venv");
-  if (fs.existsSync(path.join(venvDir, IS_WIN ? "Scripts" : "bin", IS_WIN ? "python.exe" : "python"))) {
-    return path.join(venvDir, IS_WIN ? "Scripts" : "bin", IS_WIN ? "python.exe" : "python");
+  const vpyPath = path.join(venvDir, IS_WIN ? "Scripts" : "bin", IS_WIN ? "python.exe" : "python");
+  const venvExists = fs.existsSync(vpyPath);
+  if (!venvExists) {
+    console.log("\x1b[36m[dev]\x1b[0m creating backend virtualenv (first run only)...");
+    const created = await run(python, ["-m", "venv", venvDir], { cwd: BACKEND });
+    if (created !== 0) throw new Error("failed to create virtualenv");
+    console.log("\x1b[36m[dev]\x1b[0m installing backend requirements...");
+    const installed = await run(vpyPath, ["-m", "pip", "install", "-q", "-r", "requirements.txt"], { cwd: BACKEND });
+    if (installed !== 0) throw new Error("failed to install backend requirements");
   }
-  console.log("\x1b[36m[dev]\x1b[0m creating backend virtualenv (first run only)...");
-  const created = await run(python, ["-m", "venv", venvDir], { cwd: BACKEND });
-  if (created !== 0) throw new Error("failed to create virtualenv");
-  const vpy = path.join(venvDir, IS_WIN ? "Scripts" : "bin", IS_WIN ? "python.exe" : "python");
-  console.log("\x1b[36m[dev]\x1b[0m installing backend requirements...");
-  const installed = await run(vpy, ["-m", "pip", "install", "-q", "-r", "requirements.txt"], { cwd: BACKEND });
-  if (installed !== 0) throw new Error("failed to install backend requirements");
-  return vpy;
+  if (REAL) {
+    // Marker file, not an import probe: importing torch/speechbrain just to
+    // check presence is slow and can itself throw for unrelated reasons.
+    // pip install is idempotent and cheap once already satisfied, so running
+    // it every --real launch (not only on first venv creation) is simplest
+    // and self-heals a venv that was created without --real before.
+    console.log("\x1b[36m[dev]\x1b[0m --real: installing requirements-asv.txt (real ECAPA-TDNN + WavLM AASIST)...");
+    const installed = await run(
+      vpyPath,
+      ["-m", "pip", "install", "-q", "-r", "requirements-asv.txt",
+       "--extra-index-url", "https://download.pytorch.org/whl/cpu"],
+      { cwd: BACKEND },
+    );
+    if (installed !== 0) throw new Error("failed to install requirements-asv.txt for --real");
+  }
+  return vpyPath;
 }
 
 async function main() {
   const python = await ensureVenv(venvPython());
 
-  console.log(`\x1b[36m[dev]\x1b[0m backend  : ${python} run.py  (${BASE})`);
+  console.log(`\x1b[36m[dev]\x1b[0m backend  : ${python} run.py  (${BASE})  [${REAL ? "REAL detectors" : "stub detectors"}]`);
   console.log(`\x1b[36m[dev]\x1b[0m frontend : next dev -p 3001  (http://localhost:3001)`);
+  if (REAL) {
+    console.log("\x1b[36m[dev]\x1b[0m --real: first run downloads pretrained weights from Hugging Face (needs network).");
+  }
+
+  const backendEnv = { ...process.env, VR_PORT: PORT, VR_HOST: "127.0.0.1" };
+  if (REAL) {
+    // An explicit VR_ASV_BACKEND/VR_CM_BACKEND the user already exported
+    // wins — --real only fills in what they did not set themselves, same
+    // convention as config.py's own real-backend preset.
+    backendEnv.VR_ASV_BACKEND = backendEnv.VR_ASV_BACKEND || "ecapa";
+    backendEnv.VR_CM_BACKEND = backendEnv.VR_CM_BACKEND || "aasist";
+  }
 
   const backend = spawn(python, ["run.py"], {
     cwd: BACKEND,
-    env: { ...process.env, VR_PORT: PORT, VR_HOST: "127.0.0.1" },
+    env: backendEnv,
     shell: IS_WIN,
   });
   backend.stdout.on("data", pipe("\x1b[35m[backend]\x1b[0m ", ""));
   backend.stderr.on("data", pipe("\x1b[35m[backend]\x1b[0m ", ""));
 
   let frontend = null;
-  const healthy = await waitForHealth();
+  // --real loads two pretrained models onto CPU (and downloads them on first
+  // run), which is well past the 60s default that's fine for the stub path.
+  const healthy = await waitForHealth(REAL ? 240000 : 60000);
   if (healthy) {
     console.log("\x1b[36m[dev]\x1b[0m forensic engine online — starting dashboard");
   } else {

@@ -25,7 +25,14 @@ npm run dev:all
 ```
 
 Then open **http://localhost:3001**. That boots the backend and the dashboard
-together.
+together, using fast deterministic stub detectors (no GPU or model download
+needed). For the real detectors:
+
+```bash
+npm run dev:all:real
+```
+
+See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for what that changes.
 
 To confirm everything is wired up:
 
