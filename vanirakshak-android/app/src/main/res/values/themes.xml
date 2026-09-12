@@ -1,26 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VaniRakshak Production Theme (Clean Consumer Architecture) -->
+    <!-- VaniRakshak Production Theme (Website Neo-Brutalist Palette) -->
     <style name="Theme.VaniRakshak" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/brand_primary</item>
-        <item name="colorPrimaryVariant">@color/brand_primary_pressed</item>
-        <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSecondary">@color/accent_emerald</item>
-        <item name="colorSecondaryVariant">@color/accent_emerald_border</item>
-        <item name="colorAccent">@color/accent_emerald</item>
-        <item name="android:windowBackground">@color/canvas_light</item>
-        <item name="android:statusBarColor">@color/canvas_light</item>
-        <item name="android:navigationBarColor">@color/white</item>
+        <item name="colorPrimary">@color/ink</item>
+        <item name="colorPrimaryVariant">@color/ink</item>
+        <item name="colorOnPrimary">@color/paper</item>
+        <item name="colorSecondary">@color/butter</item>
+        <item name="colorSecondaryVariant">@color/butter_pressed</item>
+        <item name="colorAccent">@color/coral</item>
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/paper</item>
+        <item name="android:navigationBarColor">@color/paper2</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="fontFamily">sans-serif</item>
     </style>
 
-    <!-- Splash Screen Theme (Apple iOS Pure White Minimalist) -->
+    <!-- Splash Screen Theme (Website Neo-Brutalist Paper Style) -->
     <style name="Theme.VaniRakshak.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowBackground">#FFFFFF</item>
-        <item name="android:statusBarColor">#FFFFFF</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/paper</item>
+        <item name="android:navigationBarColor">@color/paper</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>

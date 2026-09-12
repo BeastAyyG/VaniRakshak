@@ -2,40 +2,57 @@
 <resources>
     <!-- VaniRakshak Production Design System -->
 
-    <!-- Consumer Light Theme Tokens (Apple iOS Clean Minimalist Aesthetic) -->
-    <color name="canvas_light">#FFFFFF</color>
-    <color name="canvas_cream">#F2F2F7</color>
-    <color name="card_light">#FFFFFF</color>
-    <color name="card_light_pressed">#F2F2F7</color>
-    <color name="border_light">#E5E5EA</color>
-    <color name="border_light_subtle">#F2F2F7</color>
-    <color name="text_primary">#000000</color>
-    <color name="text_secondary">#3C3C43</color>
-    <color name="text_tertiary">#8E8E93</color>
-    <color name="brand_primary">#007AFF</color>
-    <color name="brand_primary_pressed">#0056B3</color>
-    <color name="brand_light">#F0F6FF</color>
-    <color name="brand_glow">#1A007AFF</color>
-    <color name="ambient_green_glow">#1A34C759</color>
-    <color name="ambient_mic_bg">#F2F2F7</color>
+    <!-- VaniRakshak Website Neo-Brutalist Design Tokens (Exact chat.z.ai/space/y1rmd7nsb6u0-art clone) -->
+    <color name="paper">#FFF8EF</color>
+    <color name="paper2">#FFFDF7</color>
+    <color name="ink">#221E1A</color>
+    <color name="ink_muted">#66221E1A</color>
+    <color name="ink_subtle">#33221E1A</color>
+    <color name="butter">#FFE18A</color>
+    <color name="butter_pressed">#FCD34D</color>
+    <color name="mint">#A9EFCB</color>
+    <color name="mint_d">#0E9A5F</color>
+    <color name="peach">#FFC7AD</color>
+    <color name="sky">#AFDBFF</color>
+    <color name="lilac">#E2D6FF</color>
+    <color name="rose">#FFC9DF</color>
+    <color name="coral">#FF6B4A</color>
+    <color name="red">#EF3E36</color>
 
-    <!-- M3 / iOS Modern Consumer Tokens -->
-    <color name="surface_canvas">#FFFFFF</color>
-    <color name="surface_card_pure">#FFFFFF</color>
-    <color name="surface_card_elevated">#FFFFFF</color>
-    <color name="surface_tonal_container">#F2F2F7</color>
-    <color name="surface_tonal_pressed">#E5E5EA</color>
-    <color name="surface_dock">#FFFFFF</color>
-    <color name="nav_indicator_active">#EFF6FF</color>
-    <color name="nav_indicator_active_icon">#007AFF</color>
-    <color name="hairline_feather">#0F000000</color>
-    <color name="hairline_subtle">#1A000000</color>
+    <!-- Theme Aliases matching website palette -->
+    <color name="canvas_light">#FFF8EF</color>
+    <color name="canvas_cream">#FFF8EF</color>
+    <color name="card_light">#FFFDF7</color>
+    <color name="card_light_pressed">#FFE18A</color>
+    <color name="border_light">#221E1A</color>
+    <color name="border_light_subtle">#33221E1A</color>
+    <color name="text_primary">#221E1A</color>
+    <color name="text_secondary">#705E52</color>
+    <color name="text_tertiary">#9C8A7E</color>
+    <color name="brand_primary">#221E1A</color>
+    <color name="brand_primary_pressed">#000000</color>
+    <color name="brand_light">#FFFDF7</color>
+    <color name="brand_glow">#33FFE18A</color>
+    <color name="ambient_green_glow">#330E9A5F</color>
+    <color name="ambient_mic_bg">#FFFDF7</color>
 
-    <color name="brand_cobalt">#007AFF</color>
-    <color name="brand_cobalt_pressed">#0056B3</color>
-    <color name="brand_cobalt_tonal">#EFF6FF</color>
-    <color name="brand_cobalt_text">#007AFF</color>
-    <color name="brand_cobalt_glow">#1A007AFF</color>
+    <!-- Neo-Brutalist Surface Tokens -->
+    <color name="surface_canvas">#FFF8EF</color>
+    <color name="surface_card_pure">#FFFDF7</color>
+    <color name="surface_card_elevated">#FFFDF7</color>
+    <color name="surface_tonal_container">#FFF8EF</color>
+    <color name="surface_tonal_pressed">#FFE18A</color>
+    <color name="surface_dock">#FFFDF7</color>
+    <color name="nav_indicator_active">#FFE18A</color>
+    <color name="nav_indicator_active_icon">#221E1A</color>
+    <color name="hairline_feather">#221E1A</color>
+    <color name="hairline_subtle">#221E1A</color>
+
+    <color name="brand_cobalt">#221E1A</color>
+    <color name="brand_cobalt_pressed">#000000</color>
+    <color name="brand_cobalt_tonal">#FFE18A</color>
+    <color name="brand_cobalt_text">#221E1A</color>
+    <color name="brand_cobalt_glow">#33FFE18A</color>
 
     <!-- Semantic Verdict Colors (Clean, Reserved Badges) -->
     <color name="verdict_supported">#059669</color>
@@ -68,7 +85,7 @@
     <color name="hairline_soft">#1F1F1F</color>
     <color name="border_subtle">#33292524</color>
 
-    <color name="ink">#F5F5F4</color>
+    <color name="ink_legacy_white">#F5F5F4</color>
     <color name="ink_pressed">#FFFFFF</color>
     <color name="body">#D4D4D8</color>
     <color name="mute">#A1A1AA</color>

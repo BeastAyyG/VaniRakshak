@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 
 @SuppressLint("CustomSplashScreen")
@@ -15,12 +16,12 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        // Ensure status bar & navigation bar icons are dark on pure white iOS background
-        window.statusBarColor = android.graphics.Color.WHITE
-        window.navigationBarColor = android.graphics.Color.WHITE
+        // Match website palette: paper status bar, ink navigation bar
+        window.statusBarColor = ContextCompat.getColor(this, R.color.paper)
+        window.navigationBarColor = ContextCompat.getColor(this, R.color.ink)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
+            isAppearanceLightNavigationBars = false
         }
 
         // Smooth subtle loading transition to main app (1100ms)
