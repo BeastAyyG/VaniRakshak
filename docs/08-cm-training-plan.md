@@ -809,7 +809,9 @@ trusting this sentence to stay accurate.
 * **Official ASVspoof 5 Track 1 Eval partition**: 680,774 utterances (138,688 bonafide + 542,086 spoofed across 16 attack families).
 * **Download & Extraction Status**: 9 of 10 archives (`flac_E_aa` through `flac_E_ai`) downloaded, extracted, and verified on Drive A (`A:\cm-corpus\asvspoof5\flac_E_eval\`), yielding **628,848 audio files** (92.4% complete). The 10th archive (`flac_E_aj.tar`, 51,926 utterances) was safely halted and cleaned to protect Drive A disk limits.
 * **Manifests**:
-  - `A:\cm-corpus\manifests\eval.tsv`: Rebuilt using `python ml/build_manifest.py --partition eval --only-existing` to index exactly the **628,848** verified audio files on Drive A (0 missing files on disk).
+  - `A:\cm-corpus\manifests\eval.tsv` (renamed 2026-09-12 to
+    `eval_downloaded_628k.tsv`, because the old name implied the full official
+    680,774-utterance list): Rebuilt using `python ml/build_manifest.py --partition eval --only-existing` to index exactly the **628,848** verified audio files on Drive A (0 missing files on disk).
   - All 16 held-out evaluation attack families A17–A32 are fully represented in this set.
 * **Side-by-Side Eval Comparison (20,000 Representative Sample)**:
   Evaluated on the exact same 20,000-utterance sample (4,058 bonafide, 15,942 spoof) committed directly to git at [`data/eval_benchmark/eval_slice_20k.tsv`](file:///c:/VaniRakshak/data/eval_benchmark/eval_slice_20k.tsv) for full external reproducibility:

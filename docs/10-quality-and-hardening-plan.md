@@ -61,12 +61,13 @@ So the benchmark is measuring generalisation to unseen attacks, which is what
 it claims. The §12.7 results are weak, but they are not an artifact of a bad
 split.
 
-**One trap.** `eval.tsv` and `eval_available.tsv` are **byte-identical**
-(same SHA-256). `eval.tsv` is *not* the full official 680,774-utterance eval
-list — it was overwritten with the 628,848 actually downloaded (9 of 10
-archives; the 10th was halted for disk space, see §12). The shortfall is
-disclosed in §12, but the filename invites the opposite assumption. Do not
-treat `eval.tsv` as the official list.
+**A trap, since fixed.** The file formerly named `eval.tsv` was
+byte-identical to `eval_available.tsv` (same SHA-256): it was *not* the full
+official 680,774-utterance eval list, but the 628,848 actually downloaded —
+9 of 10 archives, the 10th halted for disk space (§12). The shortfall was
+disclosed in §12, but the filename invited the opposite assumption. It is now
+`eval_downloaded_628k.tsv` on the training box. §12 line 812 still describes
+it under the old name; that reference is historical and correct for its date.
 
 Two low counts worth knowing: A19 (28,535) and A20 (28,998) are the smallest
 attack sets *and* the two where the multi-layer models regressed hardest
