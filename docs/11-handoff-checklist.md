@@ -44,17 +44,19 @@ commit.
 
 ---
 
-## Loose ends (small, do these first)
+## Loose ends — both closed 2026-09-13
 
-**1. Commit the G3 benchmark artifact.** `reports/cm_finetune_benchmark.json`
-exists only on the training box. Until it is committed, the 13.529 % row in
-`docs/10` G3 rests on prose — the same gap the G2 uniform row had. Commit it
-next to the other reports. Do **not** commit `data/cm_aasist_ft4_s42.pt`
-(54.5 MB, reproducible from `--seed 42`, and `.gitignore:34` already covers it).
+1. ~~Commit `reports/cm_finetune_benchmark.json`.~~ Done in `8985855`.
+   `data/cm_aasist_ft4_s42.pt` correctly stays untracked.
+2. ~~Discard stray local `auth.py` / `test_auth.py`.~~ None present.
 
-**2. Discard any local `auth.py` / `test_auth.py` on the training box.** G5
-landed in commit `baa390a`; a local copy from an earlier session will conflict.
-`git checkout -- .` or delete them, then pull.
+**Watch out for duplicate work across worktrees.** An earlier session left a
+partial G7 (5 files, no tests or docs) *uncommitted* in the main worktree while
+WorkBuddy, in its own worktree, reported that work "never persisted" and wrote
+G7 from scratch. Both used the same design. The partial copy was stashed, not
+discarded (`git stash list`: `partial-G7-superseded-by-894eead`), and the
+complete one fast-forwarded in. Before starting a goal, run `git status` in
+**every** worktree (`git worktree list`), not just your own.
 
 ---
 
