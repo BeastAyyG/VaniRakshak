@@ -40,6 +40,42 @@ and having to retract a published conclusion.
 
 ---
 
+## Corpus integrity — verified 2026-09-12
+
+Checked directly against the manifests (synced from the training box to
+`.corpus-manifests/`, outside the repo tree). None of this had ever been
+verified; every number in §12.7 depends on it, so it is recorded rather than
+re-derived.
+
+| Check | Result |
+|---|---|
+| Partition sizes | train 182,357 · dev 140,950 · eval 628,848 |
+| Attack separation | train A01–A08 · dev A09–A16 · eval A17–A32 — disjoint, as ASVspoof 5 intends |
+| Duplicate utterances within a partition | 0 in all three |
+| train ∩ dev, train ∩ eval, dev ∩ eval | **0, 0, 0** — no leakage |
+| 20k eval slice ⊂ eval partition | **true**, and 0 overlap with train or dev |
+| Slice balance | 4,058 bonafide / 15,942 spoof, matching the reports |
+| Per-attack eval counts | 28,535–31,795, max/min ratio 1.11 — the missing 10th archive did not gut any attack |
+
+So the benchmark is measuring generalisation to unseen attacks, which is what
+it claims. The §12.7 results are weak, but they are not an artifact of a bad
+split.
+
+**One trap.** `eval.tsv` and `eval_available.tsv` are **byte-identical**
+(same SHA-256). `eval.tsv` is *not* the full official 680,774-utterance eval
+list — it was overwritten with the 628,848 actually downloaded (9 of 10
+archives; the 10th was halted for disk space, see §12). The shortfall is
+disclosed in §12, but the filename invites the opposite assumption. Do not
+treat `eval.tsv` as the official list.
+
+Two low counts worth knowing: A19 (28,535) and A20 (28,998) are the smallest
+attack sets *and* the two where the multi-layer models regressed hardest
+(~20 % and ~24 % against a pre-augmentation Layer-12 baseline of 9.0 % and
+6.4 %). At 28k samples that is not a sample-size artifact — the regression is
+real.
+
+---
+
 ## G0 — Preserve what already exists (5 minutes, do it first)
 
 `.gitignore` line 34 (`*.pt`) excludes the three checkpoints the entire §12.7
