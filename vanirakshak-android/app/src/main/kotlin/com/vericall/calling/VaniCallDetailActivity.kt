@@ -19,6 +19,7 @@ import com.vericall.databinding.ActivityVaniCallDetailBinding
 import com.vericall.model.CallDirection
 import com.vericall.model.VaniCallRecord
 import com.vericall.ui.VaniTranscriptAdapter
+import com.vericall.util.VaniCallRouter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -93,7 +94,7 @@ class VaniCallDetailActivity : AppCompatActivity() {
 
         // Primary Actions
         binding.btnDetailActionCall.setOnClickListener {
-            VaniActiveCallActivity.startOutgoingCall(this, record.number, record.callerName)
+            VaniCallRouter.makeProperPhoneCall(this, record.number)
         }
 
         binding.btnDetailActionMessage.setOnClickListener {

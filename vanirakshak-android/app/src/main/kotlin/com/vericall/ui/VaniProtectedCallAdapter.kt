@@ -18,6 +18,7 @@ import com.vericall.calling.VaniActiveCallActivity
 import com.vericall.calling.VaniCallSummaryActivity
 import com.vericall.databinding.ItemProtectedCallBinding
 import com.vericall.model.VaniCallRecord
+import com.vericall.util.VaniCallRouter
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -191,7 +192,7 @@ class VaniProtectedCallAdapter(
 
             // Button: Call
             binding.btnCallBack.setOnClickListener {
-                VaniActiveCallActivity.startOutgoingCall(context, record.number, record.callerName)
+                VaniCallRouter.makeProperPhoneCall(context, record.number)
             }
         }
 

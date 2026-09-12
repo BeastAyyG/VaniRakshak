@@ -68,7 +68,8 @@ class VaniContactsRosterActivity : AppCompatActivity() {
                 Manifest.permission.READ_PHONE_STATE,
                 Manifest.permission.READ_CALL_LOG,
                 Manifest.permission.READ_CONTACTS,
-                Manifest.permission.RECORD_AUDIO
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.CALL_PHONE
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 list.add(Manifest.permission.POST_NOTIFICATIONS)

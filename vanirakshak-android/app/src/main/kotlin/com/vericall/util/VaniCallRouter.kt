@@ -145,4 +145,42 @@ object VaniCallRouter {
     } catch (e: Exception) {
         false
     }
+
+    /**
+     * Dials a real phone call across the cellular network so the recipient's phone actually rings.
+     * Uses ACTION_CALL if CALL_PHONE permission is granted, or falls back to ACTION_DIAL.
+     */
+    fun makeProperPhoneCall(context: Context, rawNumber: String) {
+        val cleanNumber = rawNumber.filter { it.isDigit() || it == '+' }
+        if (cleanNumber.isBlank()) {
+            android.widget.Toast.makeText(context, "Invalid phone number to call", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = Uri.parse("tel:${Uri.encode(cleanNumber)}")
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val callIntent = Intent(Intent.ACTION_CALL, uri).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(callIntent)
+            } catch (_: Exception) {
+                val dialIntent = Intent(Intent.ACTION_DIAL, uri).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(dialIntent)
+            }
+        } else {
+            if (context is android.app.Activity) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    context,
+                    arrayOf(Manifest.permission.CALL_PHONE),
+                    102
+                )
+            }
+            val dialIntent = Intent(Intent.ACTION_DIAL, uri).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(dialIntent)
+        }
+    }
 }

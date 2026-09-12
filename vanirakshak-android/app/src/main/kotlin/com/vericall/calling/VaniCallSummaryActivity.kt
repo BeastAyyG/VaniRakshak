@@ -16,6 +16,7 @@ import com.vericall.data.VaniCallHistoryRepository
 import com.vericall.databinding.ActivityVaniCallSummaryBinding
 import com.vericall.model.VaniCallRecord
 import com.vericall.ui.VaniTranscriptAdapter
+import com.vericall.util.VaniCallRouter
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -217,7 +218,7 @@ class VaniCallSummaryActivity : AppCompatActivity() {
 
         // Quick Call Again
         binding.btnSummaryQuickCall.setOnClickListener {
-            VaniActiveCallActivity.startOutgoingCall(this, record.number, record.callerName)
+            VaniCallRouter.makeProperPhoneCall(this, record.number)
             finish()
         }
 

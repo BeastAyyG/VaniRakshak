@@ -260,7 +260,7 @@ class VaniMainActivity : AppCompatActivity() {
             favorites = emptyList(),
             onContactClicked = { contact -> openContactDetail(contact.id) },
             onCallClicked = { contact ->
-                VaniActiveCallActivity.startOutgoingCall(this, contact.phone, contact.name)
+                VaniCallRouter.makeProperPhoneCall(this, contact.phone)
             }
         )
         binding.recyclerFavorites.layoutManager = LinearLayoutManager(this)
@@ -279,7 +279,7 @@ class VaniMainActivity : AppCompatActivity() {
                 startActivity(intent)
             },
             onQuickCallClicked = { record ->
-                VaniActiveCallActivity.startOutgoingCall(this, record.number, record.callerName)
+                VaniCallRouter.makeProperPhoneCall(this, record.number)
             }
         )
         binding.recyclerRecents.layoutManager = LinearLayoutManager(this)
@@ -396,7 +396,7 @@ class VaniMainActivity : AppCompatActivity() {
         // Tap on suggested contact match
         binding.cardKeypadContactMatch.setOnClickListener {
             matchedContact?.let { contact ->
-                VaniActiveCallActivity.startOutgoingCall(this, contact.phone, contact.name)
+                VaniCallRouter.makeProperPhoneCall(this, contact.phone)
             }
         }
 
@@ -405,8 +405,7 @@ class VaniMainActivity : AppCompatActivity() {
             it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
             val number = keypadBuffer.toString().trim()
             if (number.isNotBlank()) {
-                val targetName = matchedContact?.name ?: VaniCallRouter.resolve(this, number).name
-                VaniActiveCallActivity.startOutgoingCall(this, number, targetName)
+                VaniCallRouter.makeProperPhoneCall(this, number)
             } else {
                 Toast.makeText(this, "Enter a phone number to dial", Toast.LENGTH_SHORT).show()
             }
@@ -639,7 +638,8 @@ class VaniMainActivity : AppCompatActivity() {
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.RECORD_AUDIO
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CALL_PHONE
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
