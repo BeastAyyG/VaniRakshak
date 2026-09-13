@@ -555,6 +555,40 @@ reports are not touched.
    0.8 pp, ground rule 1 must be updated — the current floor was measured on
    fine-tunes and would not apply here.
 
+**How to run it** (on the training box — the Windows dev machine here is
+CPU-only and has no `transformers`, so `ml/train_cm.py` will not even import):
+
+```
+python scripts/run_from_scratch_experiment.py --device cuda
+```
+
+That trains S42, tees every line to `handoff/logs/<date>-s42.log`, projects
+total wall time from epoch 1, and **stops**. Review the projection, then:
+
+```
+python scripts/run_from_scratch_experiment.py --device cuda --continue-anyway
+```
+
+which skips runs whose checkpoint already exists and, once all four are done,
+scores them into `reports/cm_from_scratch_<date>.json` via
+`scripts/score_checkpoint_eval.py`. `--score-only` re-scores without
+retraining. Checkpoints are `data/cm_scratch_<COND><SEED>.pt`; `*.pt` is
+gitignored, so they stay out of git without anyone having to remember.
+
+**Scoring note — settled before the numbers exist.** `ml/train_cm.py` fits no
+Platt scaler, so all four checkpoints are scored on raw LLRs. The post-aug
+baseline they are compared against — 13.627 % / 0.8048 / 1.6238 — is **also
+raw**: its entry in `reports/cm_uniform_ablation_benchmark.json` carries
+`"calibrated": false`. So the comparison is like for like on every metric,
+CLLR included. (The *calibrated* CLLR for that model is 0.7204, §12; do not
+compare the quartet against that figure.) EER and minDCF are threshold-free
+and unaffected by calibration either way.
+
+An earlier draft of this note said the opposite — that the baseline was
+calibrated and CLLR therefore not comparable — and restricted criterion 1 to
+EER and minDCF on that basis. The premise was wrong; the restriction is
+withdrawn. Recorded rather than silently corrected, per ground rule 4.
+
 A negative result is a result. **No re-running until something passes.**
 
 ---
