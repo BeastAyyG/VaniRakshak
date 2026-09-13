@@ -430,6 +430,135 @@ real gain is not in this subsystem. **Go to G5.**
 
 ---
 
+## Finding — every §12.7 checkpoint is a warm start of one head (2026-09-13)
+
+**Measurement.** For each `data/*.pt`, per-tensor cosine similarity against
+`data/cm_aasist.pt`, over float tensors with at least 256 elements (40 tensors
+per pair). Control: two independently drawn random tensors of the identical
+shapes, through the same code path.
+
+| checkpoint | median cos vs `cm_aasist.pt` | mean | min |
+|---|---|---|---|
+| `cm_aasist_layer5.pt` | 0.9940 | 0.9890 | 0.9368 |
+| `pre_aug_cm_aasist.pt` | 0.9843 | 0.9822 | 0.9292 |
+| `cm_aasist_meanpool.pt` | 0.9841 | 0.9781 | 0.8902 |
+| `cm_aasist_attm.pt` | 0.9772 | 0.9718 | 0.8564 |
+| `cm_aasist_attm_uniform.pt` | 0.9772 | 0.9718 | 0.8564 |
+| **random control** | **~0.007** | — | — |
+
+The control lands where it must: median 0.007, largest absolute value 0.13 over
+40 tensors. Every real checkpoint sits between 0.977 and 0.994. These are not
+five independent models. They are one model, moved slightly, five times.
+
+**Mechanism.** `ml/train_cm.py` defaulted `--init-weights` to
+`data/cm_aasist.pt`, and `load_state_dict(..., strict=False)` accepted the
+partial match without printing anything. Nobody passed `--init-weights`
+explicitly, so nobody overrode the default, so every run fine-tuned that one
+head while being written up as an independent experiment.
+
+### Implications
+
+1. **§12.7 compared fine-tunes of one head, not models.** Layer selection,
+   attentive merging and uniform merging were read as three answers to three
+   questions. They are three short walks from the same starting point. Nothing
+   in §12.7 is evidence about architecture; it is all evidence about how far
+   ten epochs move you from `cm_aasist.pt`.
+
+2. **Every model inherited the A19/A20 loss.** The parent is the post-aug
+   layer-12 model (13.627 % EER, 0.8048 minDCF) — the exact model the
+   augmentation finding says gave away A19 (21.32 %) and A20 (23.19 %). A
+   fine-tune of it was never going to recover those two attacks, so the
+   observation that "none of the multi-layer merges got them back" is not a
+   finding about merging. It is the warm start, showing through.
+
+3. **The 0.8 pp floor is a fine-tuning floor, not a training floor.** Ground
+   rule 1 was measured between two sets of weights that share a parent. It
+   bounds how far fine-tuning wanders; it says nothing about how far
+   from-scratch training wanders, which is very likely larger. Until there is
+   a from-scratch pair of seeds, every "within the noise floor" judgement in
+   this document is using a floor measured on a different process than the one
+   being judged.
+
+### Fixed in the same change
+
+- `--init-weights` now defaults to `None`. Warm start is opt-in.
+- `strict=False` loading logs missing and unexpected key counts every time.
+- Every saved checkpoint records `init_weights` (path or null) and the five
+  augmenter probabilities.
+- `vanirakshak-backend/tests/test_ml_train_defaults.py` fails if the default
+  ever comes back. Placed there, not under `tests/`, because
+  `pytest.ini`'s `testpaths` only covers `vanirakshak-backend/tests` — a test
+  anywhere else runs on a laptop but never in CI. AST-parses `ml/train_cm.py`
+  rather than importing it, so it needs neither `torch` nor `transformers` and
+  runs on a CPU-only box.
+
+### Open question — is `pre_aug_cm_aasist.pt` actually pre-augmentation?
+
+It sits at 0.9843 against `cm_aasist.pt`, the same range as every other
+fine-tune. Two lineages fit that number:
+
+- **It is genuinely pre-aug**, and `cm_aasist.pt` was later fine-tuned from it
+  with augmentation on. The augmentation finding stands.
+- **It was produced after `cm_aasist.pt`** with the augmenter disabled but the
+  default `--init-weights` still in force — i.e. it is a fine-tune of the
+  post-aug model with augmentation off. Then "pre-aug vs post-aug" differs in
+  *two* things, not one, and ground rule 3 is violated by the comparison the
+  augmentation finding rests on.
+
+This could not be settled here. Git history is a single squashed commit
+(`4f7e13a`), and **none of the six checkpoints carries `seed`, `best_epoch`,
+`unfreeze_top_n` or `frontend_dtype`** — all predate the current payload
+schema, and none records where its weights came from, which is precisely the
+gap the changes above close. Resolving this needs the training box's shell
+history or the original run logs. **Until it is resolved, the A19/A20 numbers
+in the pre-aug column should be treated as unverified.**
+
+---
+
+## The from-scratch experiment — pre-registered (2026-09-13)
+
+This schedules the one experiment §12.7 said the data supports and explicitly
+left unscheduled. Criteria are fixed here before any run starts.
+
+**Recipe.** Layer 12, post-aug architecture, `--epochs 10 --batch-size 64
+--device cuda`, **from random init** (`--init-weights` omitted). One variable:
+band-limiting augmentation.
+
+| condition | flags | meaning |
+|---|---|---|
+| **S** | augmenter defaults | full augmentation, from scratch |
+| **B** | `--p-codec 0 --p-bandpass 0` | band-limiting off; noise 0.3, RIR 0.2, gain 0.3 unchanged |
+
+Defaults are `--p-codec 0.5 --p-noise 0.3 --p-bandpass 0.3 --p-rir 0.2
+--p-gain 0.3`, i.e. today's hard-coded values, now CLI-exposed and recorded in
+each checkpoint.
+
+**Seeds 42 and 43. Run order S42, B42, S43, B43** — interleaved so that any
+drift on the training box does not line up with the condition. Every run is
+teed to `handoff/logs/<date>-<cond><seed>.log`. New checkpoints get unique
+names, never overwrite anything, and stay out of git. All four are scored on
+`data/eval_benchmark/eval_slice_20k.tsv` into a new `reports/` JSON; existing
+reports are not touched.
+
+**Criteria, fixed now:**
+
+1. **S vs the warm-started post-aug model** (13.627 % EER, 0.8048 minDCF):
+   report the difference. **No pass/fail** — this is the first from-scratch
+   baseline and its sign is not known in advance.
+2. **Band-limiting hypothesis:** B beats S on **both A19 and A20 by more than
+   5 pp, on both seeds.** Then band-limiting is what costs those attacks.
+   Otherwise **the hypothesis fails, and we say so.**
+3. **The trade:** report B vs S pooled minDCF and CLLR. If B recovers A19/A20
+   **and** pooled minDCF stays within **0.02** of S, recommend B as the new
+   recipe. Otherwise report the trade and **do not recommend**.
+4. **From-scratch noise floor:** report the S42 vs S43 spread. If it exceeds
+   0.8 pp, ground rule 1 must be updated — the current floor was measured on
+   fine-tunes and would not apply here.
+
+A negative result is a result. **No re-running until something passes.**
+
+---
+
 ## G4 — Attack diversity (conditional — only if G3 misses)
 
 The training partition contains only A01–A08 (§12). A13/A19/A20 blindness is a
