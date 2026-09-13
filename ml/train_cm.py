@@ -613,8 +613,20 @@ def train_recipe_a(
     seed: int = 42,
     unfreeze_top_n: int = 0,
     encoder_lr: float = 1e-5,
+    aug_p_codec: float = 0.5,
+    aug_p_noise: float = 0.3,
+    aug_p_bandpass: float = 0.3,
+    aug_p_rir: float = 0.2,
+    aug_p_gain: float = 0.3,
 ) -> Path:
-    """Train Recipe A with on-the-fly codec/telephony augmentation."""
+    """Train Recipe A with on-the-fly codec/telephony augmentation.
+
+    The five ``aug_p_*`` values are the augmenter's per-effect probabilities.
+    They are CLI-exposed and recorded in the checkpoint because they are an
+    experiment variable, not a constant: docs/10 attributes the A19/A20
+    regression to the codec/telephony augmenter, so "same recipe with the
+    band-limiting effects off" has to be expressible and auditable.
+    """
     # Seed RNGs for reproducibility
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -627,12 +639,16 @@ def train_recipe_a(
     # 1. Setup Audio Training Set & DataLoader
     train_set = AudioDataset(train_manifest)
     augmenter = CodecTelephonyAugmenter(
-        p_codec=0.5,
-        p_noise=0.3,
-        p_bandpass=0.3,
-        p_rir=0.2,
-        p_gain=0.3,
+        p_codec=aug_p_codec,
+        p_noise=aug_p_noise,
+        p_bandpass=aug_p_bandpass,
+        p_rir=aug_p_rir,
+        p_gain=aug_p_gain,
         seed=seed,
+    )
+    logger.info(
+        "Augmenter probabilities: codec=%.2f noise=%.2f bandpass=%.2f rir=%.2f gain=%.2f",
+        aug_p_codec, aug_p_noise, aug_p_bandpass, aug_p_rir, aug_p_gain,
     )
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
@@ -766,12 +782,47 @@ def train_recipe_a(
     # 5. Initialize AASIST-L Head
     model = AASISTLHead(in_dim=768, merge_layers=merge_layers,
                         freeze_merge=freeze_merge).to(dev)
+    # Warm start is opt-in and must never be silent. It defaulted to
+    # data/cm_aasist.pt, which made every run a fine-tune of one head while
+    # looking like an independent experiment -- see docs/10 (2026-09-13).
+    applied_init_weights: Optional[str] = None
     if init_weights and Path(init_weights).is_file():
         logger.info("Loading initial weights from %s...", init_weights)
         init_ckpt = torch.load(str(init_weights), map_location="cpu")
         if "state_dict" in init_ckpt:
-            model.load_state_dict(init_ckpt["state_dict"], strict=False)
-            logger.info("Successfully loaded state_dict from %s", init_weights)
+            incompatible = model.load_state_dict(init_ckpt["state_dict"], strict=False)
+            missing = list(incompatible.missing_keys)
+            unexpected = list(incompatible.unexpected_keys)
+            applied_init_weights = str(init_weights)
+            logger.info(
+                "Warm start from %s: %d/%d keys applied, %d missing, %d unexpected",
+                init_weights,
+                len(init_ckpt["state_dict"]) - len(unexpected),
+                len(init_ckpt["state_dict"]),
+                len(missing), len(unexpected),
+            )
+            if missing or unexpected:
+                # strict=False is what let a head with a different merge
+                # config inherit a parent silently. Say so, every time.
+                logger.warning(
+                    "Partial warm start from %s. Missing keys keep their random "
+                    "init; unexpected keys are discarded. The two models are not "
+                    "the same architecture. missing(%d)=%s unexpected(%d)=%s",
+                    init_weights, len(missing), missing[:8],
+                    len(unexpected), unexpected[:8],
+                )
+        else:
+            logger.warning(
+                "--init-weights %s has no 'state_dict' key: no warm start applied, "
+                "training from random init.", init_weights,
+            )
+    elif init_weights:
+        logger.warning(
+            "--init-weights %s is not a file: no warm start applied, training "
+            "from random init.", init_weights,
+        )
+    else:
+        logger.info("No --init-weights given: training from random init.")
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("AASIST-L Head initialized with %d trainable parameters", n_params)
@@ -970,7 +1021,21 @@ def train_recipe_a(
                 "unfreeze_top_n": int(unfreeze_top_n),
                 "encoder_lr": float(encoder_lr) if unfreeze_top_n > 0 else None,
                 "frontend_dtype": str(frontend_dtype).replace("torch.", ""),
+                # Provenance. A checkpoint that does not say where its weights
+                # came from cannot be compared to another one honestly.
+                "init_weights": applied_init_weights,
+                "augmentation": {
+                    "p_codec": float(aug_p_codec),
+                    "p_noise": float(aug_p_noise),
+                    "p_bandpass": float(aug_p_bandpass),
+                    "p_rir": float(aug_p_rir),
+                    "p_gain": float(aug_p_gain),
+                },
             }
+            logger.info(
+                "Checkpoint provenance: init_weights=%s augmentation=%s",
+                applied_init_weights, checkpoint_payload["augmentation"],
+            )
             if unfreeze_top_n > 0:
                 # Only the tuned layers, never the whole frontend: WavLM-base-plus
                 # is ~94.7M params (379 MB fp32 / 189 MB bf16) and these
@@ -1082,7 +1147,13 @@ def main() -> None:
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--init-weights", type=Path, default=REPO_ROOT / "data" / "cm_aasist.pt")
+    parser.add_argument(
+        "--init-weights", type=Path, default=None,
+        help="Warm-start checkpoint. There is deliberately no default: it used "
+             "to be data/cm_aasist.pt, which made every run a fine-tune of that "
+             "one head while looking like an independent experiment (docs/10, "
+             "2026-09-13). Omit the flag to train from random init.",
+    )
     parser.add_argument("--max-train-utts", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42, help="Random seed for torch, cuda, and DataLoader generator (default: 42)")
     parser.add_argument(
@@ -1097,9 +1168,26 @@ def main() -> None:
              "Ignored when --unfreeze-top-n is 0.",
     )
     parser.add_argument("--workers", type=int, default=24)
+    parser.add_argument("--p-codec", type=float, default=0.5,
+                        help="Augmenter codec probability (default 0.5).")
+    parser.add_argument("--p-noise", type=float, default=0.3,
+                        help="Augmenter additive-noise probability (default 0.3).")
+    parser.add_argument("--p-bandpass", type=float, default=0.3,
+                        help="Augmenter band-pass probability (default 0.3).")
+    parser.add_argument("--p-rir", type=float, default=0.2,
+                        help="Augmenter reverberation probability (default 0.2).")
+    parser.add_argument("--p-gain", type=float, default=0.3,
+                        help="Augmenter gain probability (default 0.3).")
     args = parser.parse_args()
 
-    init_w = args.init_weights if (args.init_weights and args.init_weights.is_file()) else None
+    # A warm start that was asked for and did not happen is a silent experiment
+    # change, which is the exact failure this flag's old default caused.
+    init_w = args.init_weights
+    if init_w is not None and not init_w.is_file():
+        parser.error(
+            f"--init-weights {init_w} does not exist. Pass a real checkpoint, or "
+            "omit the flag to train from scratch."
+        )
 
     train_recipe_a(
         train_manifest=args.train_manifest,
@@ -1122,6 +1210,11 @@ def main() -> None:
         seed=args.seed,
         unfreeze_top_n=args.unfreeze_top_n,
         encoder_lr=args.encoder_lr,
+        aug_p_codec=args.p_codec,
+        aug_p_noise=args.p_noise,
+        aug_p_bandpass=args.p_bandpass,
+        aug_p_rir=args.p_rir,
+        aug_p_gain=args.p_gain,
     )
 
 
