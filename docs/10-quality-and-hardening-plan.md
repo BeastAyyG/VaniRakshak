@@ -591,6 +591,64 @@ withdrawn. Recorded rather than silently corrected, per ground rule 4.
 
 A negative result is a result. **No re-running until something passes.**
 
+### Results — measured 2026-09-14
+
+Scored on `data/eval_benchmark/eval_slice_20k.tsv` (20 000 utts: 4 058 bonafide /
+15 942 spoof; 6 unreadable, 0.03 %, scored as silence). Raw LLR, no Platt — see
+the scoring note above. Report: `reports/cm_from_scratch_2026-09-14.json`.
+
+| run | EVAL EER | EVAL minDCF | EVAL CLLR | DEV EER | DEV minDCF |
+|---|---|---|---|---|---|
+| S42 | 11.336 % | 0.6515 | 1.4038 | 12.749 % | 0.9425 |
+| B42 | 13.775 % | 0.8688 | 1.6905 | 12.769 % | 0.8866 |
+| S43 | 11.855 % | 0.7261 | 1.4815 | 12.683 % | 0.9759 |
+| B43 | 12.050 % | 0.8196 | 1.2718 | 11.772 % | 0.8984 |
+
+**Criterion 1 — S vs the warm-started post-aug model. No pass/fail.** Baseline
+13.627 % EER / 0.8048 minDCF (raw).
+
+- **S42** — EER 11.336 % (−2.291 pp), minDCF 0.6515 (−0.1533).
+- **S43** — EER 11.855 % (−1.772 pp), minDCF 0.7261 (−0.0787).
+
+Both from-scratch runs measured *lower* than the baseline on both metrics. This is
+the measured difference only; no cause is assigned and no mechanism is claimed.
+The baseline was built with older code — before the seeding and per-item
+augmentation fixes — so head initialisation is **not** the only difference between
+it and these runs, and the two are not a controlled pair.
+
+**Criterion 2 — band-limiting hypothesis. FAIL.** B must beat S on **both** A19
+and A20 by more than 5 pp on **both** seeds. Per seed (Δ = B − S; negative = B better):
+
+| seed | attack | S | B | Δ (pp) |
+|---|---|---|---|---|
+| 42 | A19 | 6.417 % | 7.664 % | **+1.247 — B worse** |
+| 42 | A20 | 13.572 % | 10.227 % | −3.345 |
+| 43 | A19 | 7.639 % | 4.337 % | −3.302 |
+| 43 | A20 | 15.919 % | 6.189 % | −9.730 |
+
+Only one of the four cells clears 5 pp (B43 on A20). Seed 42 moves the *wrong* way
+on A19, and seed 43's A19 gain is 3.30 pp. **The hypothesis fails, and we say so.**
+
+**Criterion 3 — the trade. FAIL. Do not recommend B.** A19/A20 are not recovered
+(criterion 2 fails). Pooled minDCF: **S 0.6888, B 0.8442** — a gap of **0.1554**,
+far outside the 0.02 window. **B is not recommended as the new recipe.**
+
+**Criterion 4 — from-scratch noise floor. PASS.** S42 vs S43, S condition:
+**DEV EER** 12.749 % vs 12.683 % → spread **0.067 pp**; **EVAL EER** 11.336 % vs
+11.855 % → spread **0.519 pp**. Both are below 0.8 pp, so the existing floor holds
+and **ground rule 1 does not need revisiting** on this evidence.
+
+**Scope — what this is not.** This is the first clean measurement of the S-vs-B
+contrast, **not** confirmation of the A19/A20 gap. The earlier "all augmentation
+off" figure came from a possibly warm-started model, whereas B turns off **only**
+codec and bandpass (noise 0.3, RIR 0.2, gain 0.3 unchanged). Nothing here confirms
+that gap.
+
+**Provenance.** B42 was started without explicit confirmation (session record).
+S43 and B43 were run from the committed revision (`e661b9f`) with the HuggingFace
+hub offline, after the original S43 attempt died on a transient `502 Bad Gateway`
+while loading WavLM.
+
 ---
 
 ## G4 — Attack diversity (conditional — only if G3 misses)
