@@ -88,6 +88,45 @@ def test_gpu_busy_is_none_without_a_state_file(tmp_path, monkeypatch):
     assert mod.gpu_busy() is None
 
 
+def test_archive_partial_renames_and_keeps_the_bytes(tmp_path):
+    """A killed trainer leaves a valid but under-trained checkpoint at --output.
+
+    Scoring it would produce a number the control never earned -- biased towards
+    'worse', which is exactly what criterion 3 wants. So the partial must be
+    moved aside, not overwritten and not deleted.
+    """
+    ckpt = tmp_path / "cm_warmstart_S42_L12.pt"
+    ckpt.write_bytes(b"PARTIAL-WEIGHTS")
+    dest = mod.archive_partial(ckpt)
+    assert not ckpt.exists()
+    assert ".partial-" in dest.name
+    assert dest.read_bytes() == b"PARTIAL-WEIGHTS"
+
+
+def test_score_only_refuses_an_interrupted_checkpoint(tmp_path, monkeypatch):
+    ckpt = tmp_path / "cm_warmstart_S42_L12.pt"
+    ckpt.write_bytes(b"PARTIAL")
+    state = tmp_path / "warmstart_control_state.json"
+    state.write_text(json.dumps({"train": {"status": "running"}}))
+    monkeypatch.setattr(mod, "CONTROL_STATE", state)
+    monkeypatch.setattr(mod, "checkpoint_for", lambda seed, layer: ckpt)
+    with pytest.raises(SystemExit) as exc:
+        mod.main(["--score-only"])
+    assert "interrupted" in str(exc.value)
+
+
+def test_a_completed_checkpoint_is_not_treated_as_interrupted(tmp_path, monkeypatch):
+    """...but the guard must not fire on a genuinely finished control."""
+    state = tmp_path / "warmstart_control_state.json"
+    state.write_text(json.dumps({"train": {"status": "done"}}))
+    monkeypatch.setattr(mod, "CONTROL_STATE", state)
+    monkeypatch.setattr(mod, "checkpoint_for",
+                        lambda seed, layer: tmp_path / "missing.pt")
+    with pytest.raises(SystemExit) as exc:
+        mod.main(["--score-only"])
+    assert "interrupted" not in str(exc.value)
+
+
 def test_default_init_weights_is_the_warm_start_lineage():
     # docs/10 (2026-09-13): every historical checkpoint is a warm start of THIS
     # file. The control is only the right control if it starts from it.

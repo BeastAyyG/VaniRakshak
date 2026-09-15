@@ -74,6 +74,30 @@ def checkpoint_for(seed: int, layer_index: int) -> Path:
     return REPO_ROOT / "data" / f"cm_warmstart_S{seed}_L{layer_index}.pt"
 
 
+def archive_partial(path: Path) -> Path:
+    """Move an interrupted run's checkpoint aside instead of overwriting it.
+
+    A killed trainer leaves a *valid but under-trained* checkpoint at --output
+    (ml/train_cm.py saves every new best epoch). Scoring one would silently
+    produce a number the control never earned -- and it would be biased towards
+    "worse", i.e. towards passing criterion 3 for the wrong reason. So the
+    partial is renamed, never overwritten and never deleted.
+    """
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    dest = path.with_name(f"{path.stem}.partial-{stamp}{path.suffix}")
+    path.rename(dest)
+    return dest
+
+
+def load_prior() -> dict:
+    if not CONTROL_STATE.is_file():
+        return {}
+    try:
+        return json.loads(CONTROL_STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def gpu_busy() -> str | None:
     """Return a human-readable reason if another orchestrated run is in flight."""
     if not EXPERIMENT_STATE.is_file():
@@ -91,7 +115,7 @@ def gpu_busy() -> str | None:
     return None
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__.split("\n")[0],
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -119,12 +143,20 @@ def main() -> int:
                          "cm_warmstart_control_<date>.json)")
     ap.add_argument("--score-only", action="store_true",
                     help="Skip training; score an existing control checkpoint.")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="With --score-only: score a checkpoint whose training "
+                         "stage was interrupted anyway. Refused by default, "
+                         "because an under-trained control is biased towards "
+                         "looking worse -- which is exactly what criterion 3 "
+                         "wants it to look.")
     ap.add_argument("--force", action="store_true",
                     help="Start even if another orchestrated run looks in flight.")
     ap.add_argument("--allow-cpu-fallback", action="store_true")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     out = checkpoint_for(args.seed, args.layer_index)
+    prior_train = load_prior().get("train", {}).get("status")
+    train_needed = not args.score_only
 
     if not args.score_only:
         if not args.init_weights.is_file():
@@ -135,11 +167,17 @@ def main() -> int:
             if not Path(m).is_file():
                 raise SystemExit(f"manifest not found: {m}")
         if out.exists():
-            raise SystemExit(
-                f"{out.name} already exists - refusing to overwrite. The control is "
-                f"a measurement; re-running it to get a better number is exactly "
-                f"what ground rule 5 forbids.")
-        busy = gpu_busy()
+            if prior_train == "done":
+                print(f"  {out.name} exists and its training stage completed - "
+                      f"skipping to scoring")
+                train_needed = False
+            else:
+                archived = archive_partial(out)
+                print(f"  {out.name} is from an interrupted run - archived to "
+                      f"{archived.name} (never overwritten, never deleted). "
+                      f"Retraining from scratch.")
+                train_needed = True
+        busy = gpu_busy() if train_needed else None
         if busy and not args.force:
             raise SystemExit(
                 f"another run is using the GPU: {busy}.\n"
@@ -148,17 +186,26 @@ def main() -> int:
         if busy and args.force:
             print(f"  WARNING: --force given while: {busy}", file=sys.stderr)
 
+    if args.score_only and prior_train == "running" and not args.allow_partial:
+        raise SystemExit(
+            f"{out.name} is from an interrupted run: the previous training stage "
+            f"never finished, so this checkpoint is under-trained and scoring it "
+            f"would report a number the control never earned (biased towards "
+            f"'worse', i.e. towards passing criterion 3 for the wrong reason).\n"
+            f"Re-run WITHOUT --score-only to archive the partial and retrain, or "
+            f"pass --allow-partial to score it anyway knowing that.")
+
     state = {
         "schema_version": 1,
         "seed": args.seed,
         "layer_index": args.layer_index,
         "init_weights": str(args.init_weights),
         "checkpoint": str(out),
-        "train": {"status": "skipped" if args.score_only else "pending"},
+        "train": {"status": "skipped" if not train_needed else "pending"},
         "scoring": {"status": "pending"},
     }
 
-    if not args.score_only:
+    if train_needed:
         log_path = LOG_DIR / f"{date.today().isoformat()}-warmstart-s{args.seed}.log"
         archived = archive_existing_log(log_path)
         if archived:
