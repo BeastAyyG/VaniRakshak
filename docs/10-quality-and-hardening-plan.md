@@ -778,7 +778,25 @@ Operationally:
 - [ ] A19 eval EER below 12 % (G4's own bar) reported as a **secondary outcome**,
       not as the claim.
 
-If the control matches or beats the from-scratch runs, **the claim is dead** and
+**Note — 2026-09-15: criterion 2 has two readings. Flagged, not changed.**
+Written down now, before the full-partition result exists, so that the reading
+cannot be chosen after the fact. The bar as *stated* is "below 12.666 %"; the bar
+as *justified* is "beating the best model on record by more than the 0.8 pp
+floor", i.e. below **11.866 %**. Those are 0.8 pp apart and the difference is
+decisive for one existing seed:
+
+| seed | 20 k-slice EER | vs 12.666 % (stated) | vs 11.866 % (justified) |
+|---|---|---|---|
+| S42 | 11.336 % | clears by 1.330 pp | clears by 0.530 pp |
+| S43 | 11.855 % | clears by 0.811 pp | clears by **0.011 pp** |
+
+Both readings pass for both seeds on the 20 k slice, so nothing is decided yet —
+but S43's margin under the justified reading is 0.011 pp, which is well inside
+any noise. The original text is left exactly as pre-registered; this note records
+the ambiguity and the numbers rather than resolving it. Deciding which reading
+governs is the user's call, not a silent edit.
+
+**If the control matches or beats the from-scratch runs, the claim is dead** and
 the honest conclusion is "the seeding fix, not initialisation, was worth 0.15
 minDCF" — still a result worth having, per ground rule 5.
 
