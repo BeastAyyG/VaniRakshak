@@ -105,3 +105,11 @@ crawl4ai_downloads/
 # Local backups & scratch
 *.bak
 scratch/
+
+# ASVspoof5 corpus audio imported on demand by scripts/import_clone_demo.py.
+# Not redistributed here: rerun that script after a fresh clone to restore the
+# clone pair into the demo suite. (`git add -f` if you have redistribution rights.)
+data/demo/demo_05_voice_clone.wav
+data/demo/demo_06_same_speaker_bonafide.wav
+frontend/public/demo/demo_05_voice_clone.wav
+frontend/public/demo/demo_06_same_speaker_bonafide.wav

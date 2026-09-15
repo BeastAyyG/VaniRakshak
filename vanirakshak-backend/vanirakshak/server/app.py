@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import os
 import time
 import uuid
@@ -192,9 +193,38 @@ class ChallengeGradeRequest(BaseModel):
 # Routes
 # ---------------------------------------------------------------------------
 
+def _detector_report() -> dict:
+    """What is *actually* loaded, read off the live pipeline instance.
+
+    Keyed off the instantiated backends (not the env vars) so a requested
+    backend that failed to load and degraded to the stub reports honestly as
+    the stub. ``cm_aasist`` names itself ``aasist_missing_weights`` until a
+    real checkpoint is in place, so that string — not ``VR_CM_BACKEND`` — is
+    the signal for "is the trained model in the request path".
+    """
+    cm = PIPELINE.cm
+    name = str(getattr(cm, "name", "unknown"))
+    dev_eer = float(getattr(cm, "dev_eer", float("nan")))
+    try:
+        from ..detectors.cm_aasist import weights_path as _aasist_weights_path
+
+        weights = str(_aasist_weights_path())
+    except Exception:
+        weights = None
+    return {
+        "cm_backend": name,
+        "cm_weights_loaded": not name.startswith(("synthetic", "aasist_missing_weights")),
+        "cm_weights_path": weights,
+        "cm_dev_eer": None if math.isnan(dev_eer) else round(dev_eer, 4),
+        "asv_backend": "stub_random_projection" if PIPELINE.asv_is_synthetic else "ecapa-tdnn",
+        "asv_is_synthetic": bool(PIPELINE.asv_is_synthetic),
+    }
+
+
 @app.get("/v1/health")
 @app.get("/api/v1/health")
 def health() -> dict:
+    detectors = _detector_report()
     return {
         "ok": True,
         "status": "healthy",
@@ -205,10 +235,13 @@ def health() -> dict:
             "device_name": "CPU (Acoustic Forensic Core)",
         },
         "models": {
-            "wavlm_model": "AASIST / ECAPA Forensic Pipeline",
+            # Kept under its historical key for wire compatibility; it now
+            # carries the real backend name instead of a fixed string.
+            "wavlm_model": detectors["cm_backend"],
             "vad_enabled": True,
             "zero_retention": True,
         },
+        "detectors": detectors,
         "anchor": {
             "user_id": ANCHOR_STATE.get("user_id"),
             "enrolled": bool(ANCHOR_STATE.get("enrolled")),

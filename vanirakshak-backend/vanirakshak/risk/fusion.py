@@ -26,7 +26,26 @@ def _sigmoid(x: float) -> float:
 def calibrate(window: WindowResult, context_risk: float, fusion: FusionConfig) -> float:
     """Return P(spoof | features, context) in [0, 1]."""
     cm_spoof = 1.0 - window.features.get("cm_genuine_prob", 0.5)
-    asv_mismatch = 1.0 - window.asv_score  # high when not enrolled or not matching
+    # The ASV term counts only when there is something to compare against.
+    #
+    # Three cases, and they are NOT the same:
+    #   1. caller claims an enrolled identity -> real score, use it.
+    #   2. caller claims an identity nobody enrolled -> unverifiable; the ASV
+    #      returns the neutral 0.5 and the pre-existing policy of treating
+    #      that as a half-mismatch is kept deliberately (an unverifiable claim
+    #      is legitimately weaker evidence than a verified one).
+    #   3. caller claims nothing at all -> the ASV never ran. Scoring the
+    #      neutral 0.5 as a 0.5 mismatch added a flat ``w_asv * 0.5`` (0.8 at
+    #      the default weight) to every anonymous caller, enough on its own to
+    #      move genuine audio from ALLOW (risk ~27) to CHALLENGE (risk ~37).
+    #      Absence of identity evidence is not evidence of spoofing.
+    #
+    # ``asv_claimed`` is what separates 2 from 3: both return (0.5, False).
+    asv_mismatch = (
+        (1.0 - window.asv_score)
+        if (window.asv_enrolled or getattr(window, "asv_claimed", False))
+        else 0.0
+    )
     prosody_unn = window.prosody_unnatural
     chan_anom = window.channel_anomaly
     z = (

@@ -193,6 +193,24 @@ export default function Home() {
           }
           addEvent(`Forensic engine online: ${data.models?.wavlm_model || "WavLM Base+"}`, "info");
 
+          // Report which detectors are actually in the request path. The
+          // backend degrades to stubs silently, so without this the console
+          // looks identical whether or not the trained model is loaded.
+          const det = data.detectors;
+          if (det) {
+            addEvent(
+              det.cm_weights_loaded
+                ? `Countermeasure: ${det.cm_backend} (dev EER ${
+                    typeof det.cm_dev_eer === "number" ? (det.cm_dev_eer * 100).toFixed(1) + "%" : "n/a"
+                  })`
+                : `Countermeasure: ${det.cm_backend} — no trained weights, scoring is the stub heuristic`,
+              det.cm_weights_loaded ? "info" : "warning",
+            );
+            if (det.asv_is_synthetic) {
+              addEvent(`Speaker check: ${det.asv_backend} — not a real voiceprint`, "warning");
+            }
+          }
+
           // Verify the SHA-256 append-only audit chain (flowchart node Q).
           try {
             const ar = await fetch(`${BACKEND_URL}/api/v1/audit?n=1`);

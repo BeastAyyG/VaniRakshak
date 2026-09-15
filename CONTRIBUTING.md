@@ -84,6 +84,9 @@ VaniRakshak/
   coverage of the heavy `backend/` tree, so a green board of "12 passed" is
   misleading. The missing modules are **torchaudio** and **librosa** — an older
   skip message blamed torch/soundfile, which was wrong.
+  Note: `backend/` is the **deprecated, non-serving** tree — see the warning at
+  the top of `backend/README.md`. All new backend work belongs in
+  `vanirakshak-backend/`.
 * **Python Standard:** Python 3.10+ with strict type hinting (`from __future__ import annotations`).
 * **Deterministic Fallbacks ("Honest Stubs"):**
   * When real heavy checkpoints (WavLM, ECAPA-TDNN) are not loaded or GPU is absent, models must gracefully fall back to the deterministic synthetic stubs in `vanirakshak/detectors/`.
