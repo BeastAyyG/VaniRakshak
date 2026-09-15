@@ -260,13 +260,43 @@ moved a model in this repo from failing to passing once.
       calibration.** An actDCF/minDCF gap that survives optimal calibration is
       a statement about minDCF ~ 0.88, which is G3's problem, not G2's.
 
-- [ ] **Replacement criterion for future calibration work: CLLR vs minCLLR.**
+- [x] **Replacement criterion for future calibration work: CLLR vs minCLLR.**
       CLLR decomposes as discrimination loss (minCLLR, the CLLR after the
       optimal monotonic transform) plus calibration loss. `minCLLR` is the
       only metric here that isolates calibration quality, and
       `benchmarks/compute_mindcf.py` does not currently compute it — it has
       `compute_cllr` and nothing else. Add it, then the criterion is
       `CLLR - minCLLR` small. Do this before any future calibration claim.
+
+      **Done — 2026-09-15.** `compute_mincllr` and `compute_calibration_loss`
+      are added to `benchmarks/compute_mindcf.py`, and `evaluate_system` now
+      reports `minCLLR` / `min_cllr` and `CLLR_minus_minCLLR` /
+      `cllr_calibration_loss`. The text above is kept unedited as the record
+      of what was missing.
+
+      Two definitional choices, recorded because they are auditable and were
+      not specified before:
+
+      - The transform is the standard BOSARIS/FoCal **affine** family
+        (`s' = a*s + b`, `a >= 0`), which is what the ASVspoof/BOSARIS
+        toolkits report as minCLLR. A general monotone (pool-adjacent-
+        violators) transform would give a weakly lower value; "optimal
+        monotonic transform" above describes the affine family.
+      - Implemented numpy-only, preserving this module's no-scipy contract.
+        It is validated against scipy's Nelder-Mead on the same objective
+        (agreement to 2.2e-16) and is exactly invariant under positive affine
+        rescaling of the inputs, which is the property that makes it a
+        ranking-only measure.
+
+      `tests/test_compute_mindcf_mincllr.py` pins those properties, and the
+      four pre-existing metrics (`compute_eer`, `compute_mindcf`,
+      `compute_act_dcf`, `compute_cllr`) are confirmed bit-identical to the
+      previous implementation — this was an addition, not a change.
+
+      Note for interpretation: `CLLR - minCLLR` is small exactly when the
+      remaining CLLR is a *discrimination* problem, i.e. G3's. So a small
+      value is a reason to stop looking for a calibration fix, not a
+      result in itself.
 
 **Bug fixed.** `data/cm_aasist_attm_uniform.pt` previously carried `eer_threshold` 10.698028928450064 and `dev_eer` 0.14286875159620163 — byte-copied from `cm_aasist_attm.pt`. Both values were independently remeasured on dev and rewritten to the checkpoint: `dev_eer`: **0.146083** (14.608%), `eer_threshold`: **11.165016**. Both `cm_aasist_attm.pt` and `cm_aasist_attm_uniform.pt` now also store fitted `calibration` blocks (`method: platt`, `scale_w`, `bias_b`, etc.) matching the contract.
 
