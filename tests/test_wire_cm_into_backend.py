@@ -77,6 +77,29 @@ def test_env_block_warns_that_fusion_must_be_refitted(tmp_path):
     assert "Re-fit" in block
 
 
+def test_env_block_does_not_export_fusion_weights(tmp_path):
+    """Exporting VR_FUSION_W_CM would DISABLE the config's real-backend preset.
+
+    config.py's _REAL_BACKEND_OVERRIDES supplies w_cm=1.5/w_asv=2.0 whenever a
+    real backend is active, but only for keys absent from the environment
+    (config.py:229). The stub-era w_cm=2.4 is documented at config.py:126 as
+    having "pushed genuine real clips into CHALLENGE", so emitting it here would
+    re-introduce that false alarm. Measured on data/demo with cm_scratch_S42.pt:
+    w_cm=2.4 gives demo_01 (genuine) risk 43.2, the preset's 1.5 gives 38.3.
+    """
+    block = mod.env_block(_write_ckpt(tmp_path))
+    # Match *export lines*, not the bare name: the explanatory comment
+    # legitimately names the variables it is declining to export.
+    exported = [
+        ln.strip()
+        for ln in block.splitlines()
+        if ln.strip().startswith("export VR_FUSION")
+    ]
+    assert exported == [], f"env block must not export fusion weights: {exported}"
+    # The block should still say WHY it stays silent, not just omit the keys.
+    assert "config.py" in block
+
+
 def test_a_valid_checkpoint_passes_and_emits_config(tmp_path, monkeypatch):
     p = _write_ckpt(tmp_path)
     monkeypatch.setattr(mod, "load_backend_detector", lambda root: _FakeBackend())
