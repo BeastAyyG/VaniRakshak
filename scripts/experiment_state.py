@@ -598,7 +598,16 @@ def read_state(path: Path = STATE_PATH) -> Dict[str, object]:
         return {}
 
 
-def new_state(pid: int, argv: Sequence[str]) -> Dict[str, object]:
+def new_state(pid: int, argv: Sequence[str],
+              runs: Optional[Sequence[Tuple[str, int]]] = None) -> Dict[str, object]:
+    """Initialise the state file.
+
+    ``runs`` defaults to the pre-registered RUN_ORDER, but the orchestrator now
+    accepts --seeds/--conditions, so it passes the resolved order in. Without
+    that the state file would claim 4 runs were queued while 3 were running.
+    """
+    if runs is None:
+        runs = RUN_ORDER
     return {
         "schema_version": SCHEMA_VERSION,
         "orchestrator_pid": pid,
@@ -609,7 +618,7 @@ def new_state(pid: int, argv: Sequence[str]) -> Dict[str, object]:
             {"label": f"{c}{s}", "cond": c, "seed": s, "status": "pending",
              "started_at": None, "finished_at": None, "exit_code": None,
              "child_pid": None}
-            for c, s in RUN_ORDER
+            for c, s in runs
         ],
         "scoring": {"status": "pending", "started_at": None, "finished_at": None,
                     "report": None, "exit_code": None},

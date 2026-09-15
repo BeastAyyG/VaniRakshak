@@ -74,6 +74,48 @@ SEEDS = [42, 43]
 # S42, B42, S43, B43 -- interleaved by seed.
 RUN_ORDER = [(cond, seed) for seed in SEEDS for cond in ("S", "B")]
 
+
+def _run_order(seeds_raw: str | None, conds_raw: str | None) -> list[tuple[str, int]]:
+    """Resolve the run list from CLI overrides, defaulting to the pre-registered set.
+
+    Interleaved by seed, not grouped by condition, so any drift on the training
+    box does not line up with the condition.
+
+    This exists because the seed set was hardcoded to [42, 43] while docs/10's
+    pre-registered claim is defined over FIVE seeds (S42-S46). The claim could
+    therefore never be adjudicated: S44-S46 were unreachable however many runs
+    were spent. Widening the seed set is a scope decision, so it belongs in the
+    launch command and the run log rather than in a silent source edit.
+    """
+    def _split(raw: str, flag: str) -> list[str]:
+        items = [x.strip() for x in raw.split(",") if x.strip()]
+        if not items:
+            raise SystemExit(f"{flag}: no values given")
+        return items
+
+    seeds = list(SEEDS)
+    if seeds_raw is not None:
+        parts = _split(seeds_raw, "--seeds")
+        try:
+            seeds = [int(p) for p in parts]
+        except ValueError:
+            raise SystemExit(f"--seeds: not integers: {seeds_raw!r}")
+        if len(set(seeds)) != len(seeds):
+            raise SystemExit(f"--seeds: duplicate seeds in {seeds_raw!r}")
+
+    conds = list(CONDITIONS)
+    if conds_raw is not None:
+        conds = _split(conds_raw, "--conditions")
+        unknown = [c for c in conds if c not in CONDITIONS]
+        if unknown:
+            raise SystemExit(
+                f"--conditions: unknown {unknown}; known: {list(CONDITIONS)}"
+            )
+        if len(set(conds)) != len(conds):
+            raise SystemExit(f"--conditions: duplicates in {conds_raw!r}")
+
+    return [(cond, seed) for seed in seeds for cond in conds]
+
 # Must match ml/train_cm.py's --patience default. Used ONLY to project wall
 # time (early stopping ends a run at best_epoch + patience). It is deliberately
 # not forwarded to the trainer, because that would change the recipe.
@@ -315,13 +357,35 @@ def main() -> int:
                     help="Skip training; just score whatever checkpoints exist.")
     ap.add_argument("--out", type=str, default=None,
                     help="Report path (default reports/cm_from_scratch_<date>.json)")
+    ap.add_argument("--score-manifest", type=str, default=None,
+                    help="Manifest for the final scoring stage. Default is the "
+                         "SCORER's default, which is the 20k slice "
+                         "(data/eval_benchmark/eval_slice_20k.tsv) -- NOT the full "
+                         "eval partition. docs/10's criterion 1 is 'minDCF below "
+                         "0.75 on the full eval partition', so grading the claim "
+                         "requires --score-manifest A:/cm-corpus/manifests/"
+                         "eval_available.tsv. Passed through verbatim.")
     ap.add_argument("--respect-pause", action="store_true",
                     help="Hold before each stage while handoff/PAUSE exists. Opt-in, "
                          "so a scheduled run can never be stalled by a stale gate.")
     ap.add_argument("--allow-cpu-fallback", action="store_true",
                     help="Permit --device cuda where CUDA is unavailable "
                          "(ml/train_cm.py would silently run the whole thing on CPU).")
+    ap.add_argument("--seeds", type=str, default=None,
+                    help="Comma-separated seeds, overriding the pre-registered "
+                         f"{','.join(str(s) for s in SEEDS)}. Widening this is a "
+                         "SCOPE change, not a convenience: docs/10's headline claim "
+                         "is defined over five seeds, S42-S46, and this script "
+                         "could not previously produce S44-S46 at all.")
+    ap.add_argument("--conditions", type=str, default=None,
+                    help="Comma-separated condition labels from "
+                         f"{{{','.join(CONDITIONS)}}} (default: "
+                         f"{','.join(CONDITIONS)}). 'S' alone runs the claim's seeds "
+                         "without the no-augmentation ablation, which is not part "
+                         "of the claim.")
     args = ap.parse_args()
+
+    run_order = _run_order(args.seeds, args.conditions)
 
     # The whole point of the experiment: nothing may warm-start these runs.
     assert "--init-weights" not in sys.argv, "this experiment trains from scratch"
@@ -341,20 +405,20 @@ def main() -> int:
     print(f"  layer index: {args.layer_index}"
           f"{' (the 2026-09-14 default)' if args.layer_index == DEFAULT_LAYER_INDEX else ''}")
     pending = []
-    for cond, seed in RUN_ORDER:
+    for cond, seed in run_order:
         p = checkpoint_for(cond, seed, args.layer_index)
         if p.exists():
             print(f"  {cond}{seed}: {p.name} already exists - skipping (never overwritten)")
         else:
             pending.append((cond, seed))
     if not args.score_only and not pending:
-        print(f"  all four layer-{args.layer_index} runs already have checkpoints; "
-              f"nothing to train")
+        print(f"  all {len(run_order)} layer-{args.layer_index} runs already have "
+              f"checkpoints; nothing to train")
         if args.layer_index == DEFAULT_LAYER_INDEX:
             print("  (to run a different layer index, pass --layer-index N; "
                   "outputs are named cm_scratch_<cond><seed>_L<N>.pt)")
 
-    state = xs.new_state(os.getpid(), sys.argv)
+    state = xs.new_state(os.getpid(), sys.argv, runs=run_order)
     xs.update_state(state)
 
     if not args.score_only:
@@ -413,7 +477,7 @@ def main() -> int:
         REPO_ROOT / "reports" / f"cm_from_scratch_{date.today().isoformat()}.json"
     )
     specs = []
-    for cond, seed in RUN_ORDER:
+    for cond, seed in run_order:
         p = checkpoint_for(cond, seed, args.layer_index)
         if p.exists():
             specs += ["--checkpoint", f"{cond}{seed}={p}"]
@@ -430,6 +494,12 @@ def main() -> int:
     scoring_log = LOG_DIR / f"{date.today().isoformat()}-scoring.log"
     cmd = [sys.executable, str(REPO_ROOT / "scripts" / "score_checkpoint_eval.py"),
            *specs, "--out", str(out_path), "--device", args.device]
+    if args.score_manifest:
+        cmd += ["--manifest", args.score_manifest]
+        print(f"  scoring manifest: {args.score_manifest}")
+    else:
+        print("  scoring manifest: the scorer's default (the 20k slice). "
+              "Pass --score-manifest for the full eval partition.")
     print("\nScoring:", " ".join(cmd), "\n")
     state["scoring"].update({
         "status": "running",
