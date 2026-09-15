@@ -13,6 +13,135 @@ and major critique is addressed; the ledger is at the end.
 
 ---
 
+## Amendment 1 (2026-09-15) — completeness critique, before anything ran
+
+The automated synthesis and completeness-critic steps failed on a usage limit,
+so the first version of this file was synthesised by hand and not
+independently reviewed. A completeness critic then checked it against the code
+and found 2 fatal and 15 major problems. Nothing gated by this plan has run
+yet, so these corrections are legitimate under ground rule 4. **Where this
+amendment conflicts with the text below, this amendment wins.** The original
+text is kept unchanged below it.
+
+**§0 was overstated.** The table assumed wideband audio with prosody, channel,
+context and semantic terms all at zero. Recomputed from the fusion constants
+(intercept `config.py:75`, overrides `config.py:136-139`):
+
+| clone ASV | wideband, all other terms 0 | narrowband (channel 0.25, prosody 0.5) | every term at max |
+|---|---|---|---|
+| 1.00 | 47.5 CHALLENGE | 61.7 CHALLENGE | 91.7 BLOCK |
+| 0.95 | 50.0 CHALLENGE | 64.0 CHALLENGE | 92.4 BLOCK |
+| 0.80 | 57.4 CHALLENGE | 70.6 **BLOCK** | 94.3 BLOCK |
+
+With a fully confident CM and nothing else, any clone with ASV ≤ 0.526 already
+BLOCKs. The corrected claim: **a clone that matches the enrolled voice closely
+(ASV ≳ 0.9) cannot be blocked by the CM alone on most channels**, and the
+one-shot, text-graded challenge is then passable. Improving the CM helps
+lower-ASV clones. The ordering stands — the decision layer first — but "close to
+zero value" is withdrawn.
+
+**Fatal 1 — Phase 1 could not be evaluated.** Every manifest has only
+`path, label, attack_id` (no speaker column); there are no enrolment lists; and
+the audio lives on `A:`, which the dev box does not have. **New 1.0
+(prerequisite):** rebuild the eval and dev manifests with a speaker column from
+the ASVspoof 5 protocol files on `A:`; build target-enrolment lists; define a
+session as consecutive utterances of one speaker concatenated to ≥ 60 s. Phase 1
+code is written on the dev box; **its evaluation runs on the training box**
+(CPU or GPU scoring, no training). P1-S grid cells use **injected** ASV and
+channel values; a real-ECAPA run is reported separately and does not gate.
+
+**Fatal 2 — checkpoints would never leave the training box.** `*.pt` is
+gitignored, so a bundle carries no weights. **New 0.1a:** copy every
+`cm_scratch_*.pt` to `C:\vr-save\ckpt\` and to USB with a sha256 manifest,
+before any tree is retired.
+
+**Phase 0 safety.**
+- **New 0.0:** before any git command, raw-copy both trees including `.git`
+  (`robocopy <tree> C:\vr-save\raw\<name> /E /DCOPY:T /COPY:DAT`). `git status`
+  fails in a tree whose worktree entry was deleted.
+- 0.2 uses `git diff --binary HEAD --output=…` (plain `git diff` omits staged
+  changes) and `git status --porcelain --untracked-files=all --ignored`.
+- 0.3's mtime rule excludes a run only if the log also lacks
+  `Training finished. Best epoch N`; a later tooling edit alone does not.
+- **Fewer than four valid runs:** if either condition keeps fewer than two
+  runs, C-2b cannot compute a seed SD and Phase 3 cannot run.
+- The landing PR (0.5) **grades docs/10's four pre-registered from-scratch
+  criteria exactly as written** before anything in this file is applied.
+- The bundle leaves the box on **USB**, since sync tools are stopped in 0.1.
+
+**Phase 1 corrections.**
+- **1.1 clone rule** fires when the claimed identity is **enrolled** AND
+  ASV ≥ `VR_IMPOSTOR_BLOCK_BELOW` AND CM LLR ≤ −k. That closes the gap for
+  clones between ASV 0.53 and a high percentile. When the caller is not
+  enrolled (ASV is the fusion-neutral 0.5), the rule does not apply; that case is
+  documented, not hidden.
+- **1.2 changes a recorded protocol decision.** `docs/PROTOCOL.md` §3 records
+  the one-shot challenge as decided, so 1.2 needs a PROTOCOL amendment, a new
+  challenge-response audio message, and matching `page.tsx` and `app.py`
+  changes (`AGENTS.md` §2). It gets its own criterion **P1-C**: synthetic
+  response audio fails the challenge in ≥ 90 % of trials. The critic
+  also flagged that the verdict sends `expected_digits` and `expected_full` to
+  the client (`challenge/engine.py:43-50`, `session.py:208`). Checked: this is
+  not an independent hole, because the phrase itself already contains the
+  digits the caller must say. The real weakness remains text-only grading;
+  1.2's audio scoring is the fix. Stop sending the redundant fields anyway as
+  part of the protocol change.
+- **P1-F had a ceiling.** Genuine per-call challenge probability is already
+  near 100 % for a 60 s call, so "rises by ≤ 5 pp" is empty. Replaced with an
+  absolute cap: P(challenge within 60 s | genuine, measured ASV, wideband)
+  ≤ 50 % after Phase 1, counting **every** challenge including re-arms. If the
+  incumbent already exceeds this, reducing friction (1.3) is part of Phase 1,
+  not optional.
+
+**§6 statistics.**
+- Pooling within {S42,S43} and {B42,B43} gives **2** degrees of freedom:
+  margin = max(stated margin, **6.09** × SD) (= t(2, 0.975) × √2). Futility
+  ceiling fixed now: if the margin for per-attack miss exceeds **5 pp**, the arm
+  does not run.
+- **No new hole** corrected to: miss_c ≤ miss_i + 2.0 pp **and**
+  miss_c ≤ **min**(2 × miss_i, miss_i + 2.0 pp) for attacks where the incumbent
+  is below 2 %, else the first clause alone. (The original max-form clause was
+  implied by the first and did nothing.)
+- **Sealed attacks, pinned now** (numpy 2.5.3): **A24, A26, A27, A31**. These
+  per-attack numbers are already public in `docs/08`, so "sealed" means sealed
+  from here on, not unseen. **Incumbent top-3 worst, pinned now:** A28, A20,
+  A19.
+
+**Phase 2 / C-2a.** `data/cm_aasist_layer5.pt` is a warm-started fine-tune, so
+S42 + layer5 differs from the control in layer **and** lineage. C-2a is
+relabelled a **screen**, must hold for **both** S42 + layer5 and S43 + layer5,
+and uses the §6 margin. Drop `data/cm_aasist_attm.pt` from 2.4 (no criterion
+used it). Scorer v2 must stream audio: the gate split is ~156 GB as float32.
+
+**Definitions (§2.2 onward).** "Miss" = the session is not BLOCKed, evaluated
+with Phase 1's final k, τ_asv and operating threshold pinned. The unsourced
+friction bound (ASV 0.855, channel 0.242) is replaced by the grid cell
+ASV 0.80 / channel 0.25. `VR_CM_NATURAL_OFFSET` must be 0 in the pinned
+settings.
+
+**STOP-B** no longer picks "the best Phase 2 single head" on the gate split:
+select on the screen split, confirm on the gate split.
+
+**Phase 3.** Uses the **S** augmentation. With `--patience 10` every run does 10
+epochs: **~4.0 GPU-h per run, ~12 h for three seeds.** Per-epoch heads, a
+`.done.json` marker, layer-aware names, and outputs to `C:\vr-out\` need trainer
+and orchestrator changes, scheduled as Phase 2 dev work.
+
+**Phase 4 needs code no phase built.** Scheduled as Phase 2 dev work: runtime
+head load `strict=True`, checkpoint sha in the health label, a runtime path for
+a fused head. The parity bar is set from the incumbent's own measured
+CPU-fp32 vs CUDA-fp16 parity, not the guessed p99 ≤ 0.01. The telephony
+35 % bar applies at the security bound.
+
+**Budget.** 30 GPU-h and 6 weeks cap Phases 2–3 only (STOP-D); §8's table
+total is corrected accordingly.
+
+**docs/11 amendment.** `docs/11` says the training box does `git pull --rebase`;
+under this plan it makes no git writes after Phase 0. `docs/11` is updated in a
+follow-up PR.
+
+---
+
 ## 0. The finding that reorders everything
 
 **A perfect countermeasure cannot block a voice clone in the shipped product.**
