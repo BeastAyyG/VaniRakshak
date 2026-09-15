@@ -16,29 +16,48 @@ Conventions this script enforces rather than leaves to memory:
   the flag now defaults to ``None``, but it is asserted here too.
 * Checkpoints are named ``data/cm_scratch_<COND><SEED>.pt`` and are **never
   overwritten** -- an existing file aborts the run.
-* Every run is teed to ``handoff/logs/<YYYY-MM-DD>-<cond><seed>.log``.
+* Every run is teed to ``handoff/logs/<YYYY-MM-DD>-<cond><seed>.log``. An
+  existing log is **archived** to ``<stem>.prev-<HHMMSS>.log`` rather than
+  truncated, so re-running a crashed condition cannot destroy the traceback.
+* The scoring stage is teed too, to ``handoff/logs/<date>-scoring.log`` --
+  otherwise the final eval step is a black box that emits nothing for minutes.
 * After run 1, wall time is projected from the measured epoch time and the
   script **stops** so the projection can be reviewed. Pass ``--continue-anyway``
   to go straight through.
+* Progress is written to ``handoff/experiment_state.json`` for the two
+  companion tools; nothing else reads or depends on it.
+
+Companion tools (both read-only against the experiment):
+
+    python scripts/experiment_progress.py --watch 30   # bar + ETA, whole process
+    python scripts/experiment_control.py pause|resume  # freeze/resume, lossless
 
 Usage:
     python scripts/run_from_scratch_experiment.py --device cuda
     python scripts/run_from_scratch_experiment.py --device cuda --continue-anyway
     python scripts/run_from_scratch_experiment.py --score-only
+    python scripts/run_from_scratch_experiment.py --continue-anyway --respect-pause
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import time
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import experiment_state as xs  # noqa: E402  (sibling module, not a package)
+
 TRAIN = REPO_ROOT / "ml" / "train_cm.py"
 LOG_DIR = REPO_ROOT / "handoff" / "logs"
 
@@ -55,6 +74,11 @@ SEEDS = [42, 43]
 # S42, B42, S43, B43 -- interleaved by seed.
 RUN_ORDER = [(cond, seed) for seed in SEEDS for cond in ("S", "B")]
 
+# Must match ml/train_cm.py's --patience default. Used ONLY to project wall
+# time (early stopping ends a run at best_epoch + patience). It is deliberately
+# not forwarded to the trainer, because that would change the recipe.
+PATIENCE = 5
+
 
 def checkpoint_for(cond: str, seed: int) -> Path:
     return REPO_ROOT / "data" / f"cm_scratch_{cond}{seed}.pt"
@@ -64,14 +88,43 @@ def log_for(cond: str, seed: int) -> Path:
     return LOG_DIR / f"{date.today().isoformat()}-{cond.lower()}{seed}.log"
 
 
-def run_training(cmd: list[str], log_path: Path) -> tuple[int, list[float]]:
-    """Run `cmd`, teeing to `log_path`; return (exit code, per-epoch seconds)."""
+def archive_existing_log(log_path: Path) -> Path | None:
+    """Move an existing log aside instead of truncating it.
+
+    ``run_logged`` opens each log with ``"w"``. The runbook flags the
+    consequence: if a run crashes and is re-invoked the same day, that
+    truncation destroys the only copy of the traceback. Archiving keeps the
+    evidence while leaving the live path parseable by the progress tool.
+    """
+    if not log_path.exists() or log_path.stat().st_size == 0:
+        return None
+    stamp = datetime.now().strftime("%H%M%S")
+    archived = log_path.with_name(f"{log_path.stem}.prev-{stamp}.log")
+    n = 1
+    while archived.exists():
+        archived = log_path.with_name(f"{log_path.stem}.prev-{stamp}-{n}.log")
+        n += 1
+    shutil.move(str(log_path), str(archived))
+    return archived
+
+
+def run_logged(cmd: list[str], log_path: Path, on_line=None, on_spawn=None) -> int:
+    """Run ``cmd`` with cwd=REPO_ROOT, teeing stdout+stderr to ``log_path``.
+
+    Returns the exit code. Shared by the training loop and the scoring stage so
+    that every stage of the experiment leaves a log behind -- the scoring stage
+    previously ran with an inherited stdout and produced no artefact at all.
+    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    epoch_times: list[float] = []
+    archived = archive_existing_log(log_path)
+    if archived:
+        print(f"    archived previous log -> {archived.name}")
     print(f"    logging to {log_path}")
     with open(log_path, "w", encoding="utf-8", errors="replace") as log:
         proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT), stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
+        if on_spawn:
+            on_spawn(proc.pid)
         assert proc.stdout is not None
 
         def reader():
@@ -80,30 +133,140 @@ def run_training(cmd: list[str], log_path: Path) -> tuple[int, list[float]]:
                 log.flush()
                 sys.stdout.write(line)
                 sys.stdout.flush()
-                m = EPOCH_RE.search(line)
-                if m:
-                    epoch_times.append(float(m.group(3)))
+                if on_line:
+                    on_line(line)
 
         t = threading.Thread(target=reader, daemon=True)
         t.start()
         proc.wait()
         t.join(timeout=30)
-    return proc.returncode, epoch_times
+    return proc.returncode
 
 
-def project(total_epochs: int, first_epoch_s: float, n_runs: int) -> None:
-    per_run = first_epoch_s * total_epochs
+def run_training(cmd: list[str], log_path: Path,
+                 on_spawn=None) -> tuple[int, list[float]]:
+    """Run `cmd`, teeing to `log_path`; return (exit code, per-epoch seconds)."""
+    epoch_times: list[float] = []
+
+    def collect(line: str) -> None:
+        m = EPOCH_RE.search(line)
+        if m:
+            epoch_times.append(float(m.group(3)))
+
+    rc = run_logged(cmd, log_path, on_line=collect, on_spawn=on_spawn)
+    return rc, epoch_times
+
+
+def project(rp: xs.RunProgress, n_runs: int, patience: int = 5) -> None:
+    """Print the wall-time projection from what the first run actually did.
+
+    Mean epoch time, not epoch 1 alone -- epoch 1 carries the one-off warm-up.
+    And the horizon is ``best_epoch + patience``, not ``--epochs``: early
+    stopping is the normal ending here (S42 stopped at 9 of 10), so assuming 10
+    would overstate every remaining run by about 11%.
+    """
+    times = rp.epoch_seconds or []
+    mean_epoch_s = (sum(times) / len(times)) if times else xs.DEFAULT_EPOCH_SECONDS
+    planned = rp.total_epochs or xs.EPOCHS_PLANNED_DEFAULT
+    n_expected = xs.expected_epochs(planned, rp.best_epoch, patience)
+    per_run_s = mean_epoch_s * n_expected
     remaining = max(0, n_runs - 1)
-    total = per_run * n_runs
+    total_s = per_run_s * n_runs + xs.DEFAULT_SCORING_SECONDS
+    eta = datetime.now() + timedelta(
+        seconds=per_run_s * remaining + xs.DEFAULT_SCORING_SECONDS)
+
+    actual_s = sum(times)
     print("\n" + "=" * 68)
-    print("WALL-TIME PROJECTION (from epoch 1 of run 1)")
+    print("WALL-TIME PROJECTION (from what run 1 actually did)")
     print("=" * 68)
-    print(f"  epoch 1 duration      : {first_epoch_s / 60.0:.1f} min")
-    print(f"  per run ({total_epochs} epochs) : {per_run / 3600.0:.1f} h")
-    print(f"  {remaining} runs remaining     : {per_run * remaining / 3600.0:.1f} h")
-    print(f"  projected total ({n_runs} runs): {total / 3600.0:.1f} h"
-          f"  ({total / 86400.0:.1f} days)")
+    print(f"  measured epoch         : {mean_epoch_s / 60.0:.1f} min"
+          f"  (mean of {len(times)} epoch(s))")
+    if actual_s:
+        print(f"  run 1 took             : {actual_s / 3600.0:.2f} h"
+              f"  ({rp.epochs_completed} epochs, best epoch {rp.best_epoch})")
+    print(f"  expected per run       : {per_run_s / 3600.0:.2f} h"
+          f"  ({n_expected} epochs x {mean_epoch_s / 60.0:.1f} min)")
+    print(f"  {remaining} runs remaining       : "
+          f"{per_run_s * remaining / 3600.0:.2f} h")
+    print(f"  scoring (4 checkpoints): {xs.DEFAULT_SCORING_SECONDS / 3600.0:.2f} h")
+    print(f"  projected total        : {total_s / 3600.0:.2f} h"
+          f"  ({total_s / 86400.0:.2f} days)")
+    print(f"  projected finish       : {eta:%Y-%m-%d %H:%M}")
     print("=" * 68)
+    print("  track it live:  python scripts/experiment_progress.py --watch 30")
+
+
+def wait_for_pause_gate(poll_s: float = 15.0) -> None:
+    """Hold before starting a stage while ``handoff/PAUSE`` exists.
+
+    Zero-risk by construction: the four runs share no state -- separate
+    processes, separate seeds, separate checkpoints -- so an arbitrary delay
+    between them cannot change any result. Opt-in via ``--respect-pause`` so a
+    scheduled or unattended invocation can never be stalled by a stale gate.
+    """
+    if not xs.GATE_PATH.exists():
+        return
+    note = ""
+    try:
+        note = json.loads(xs.GATE_PATH.read_text(encoding="utf-8")).get("note", "")
+    except (OSError, json.JSONDecodeError):
+        pass
+    print(f"\n  PAUSE gate present ({xs.GATE_PATH}); holding before the next stage."
+          + (f"\n    note: {note}" if note else ""))
+    print("    clear with: python scripts/experiment_control.py resume")
+    while xs.GATE_PATH.exists():
+        time.sleep(poll_s)
+    print("  gate cleared; continuing.")
+
+
+def preflight(device: str, allow_cpu_fallback: bool) -> None:
+    """Fail in seconds, not after WavLM loads, if ``--device cuda`` cannot work.
+
+    ``ml/train_cm.py`` silently falls back to CPU when CUDA is unavailable
+    (``dev = torch.device(device if ... torch.cuda.is_available() else "cpu")``),
+    so a CUDA run on a broken environment becomes a multi-day CPU run that still
+    emits plausible numbers. The runbook makes this a manual check; doing it here
+    means a pre-registered run cannot be lost to it. torch is imported lazily --
+    the CPU-only dev box has no torch and must not be broken by this.
+    """
+    if not device.startswith("cuda"):
+        return
+    try:
+        import torch
+    except Exception as exc:  # pragma: no cover - environment dependent
+        print(f"  preflight: torch not importable ({exc}); the trainer will "
+              "report the real error.")
+        return
+    if torch.cuda.is_available():
+        try:
+            name = torch.cuda.get_device_name(0)
+        except Exception:
+            name = "unknown device"
+        print(f"  preflight: CUDA OK -- {name}")
+        return
+    message = (
+        "--device cuda was requested but torch.cuda.is_available() is False.\n"
+        "  A driver being present is not the same as a usable CUDA build, and\n"
+        "  ml/train_cm.py would silently fall back to CPU -- turning this into a\n"
+        "  multi-day run whose wall time is not comparable to the others.\n"
+        "  Fix the environment, or pass --allow-cpu-fallback if you truly want CPU."
+    )
+    if allow_cpu_fallback:
+        print(f"  preflight WARNING: {message}")
+    else:
+        raise SystemExit(message)
+
+
+def update_run(state: dict, label: str, **fields) -> None:
+    """Record per-run progress. Bookkeeping must never break the experiment."""
+    try:
+        for run in state.get("runs", []):
+            if run.get("label") == label:
+                run.update(fields)
+                break
+        xs.update_state(state)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"  (state bookkeeping skipped: {exc})", file=sys.stderr)
 
 
 def main() -> int:
@@ -126,16 +289,23 @@ def main() -> int:
                     help="Skip training; just score whatever checkpoints exist.")
     ap.add_argument("--out", type=str, default=None,
                     help="Report path (default reports/cm_from_scratch_<date>.json)")
+    ap.add_argument("--respect-pause", action="store_true",
+                    help="Hold before each stage while handoff/PAUSE exists. Opt-in, "
+                         "so a scheduled run can never be stalled by a stale gate.")
+    ap.add_argument("--allow-cpu-fallback", action="store_true",
+                    help="Permit --device cuda where CUDA is unavailable "
+                         "(ml/train_cm.py would silently run the whole thing on CPU).")
     args = ap.parse_args()
 
     # The whole point of the experiment: nothing may warm-start these runs.
     assert "--init-weights" not in sys.argv, "this experiment trains from scratch"
 
-    # Fail in seconds, not after WavLM loads, if the manifests are not here.
+    # Fail in seconds, not after WavLM loads, if the environment is wrong.
     if not args.score_only:
         for m in (args.train_manifest, args.dev_manifest):
             if not Path(m).is_file():
                 raise SystemExit(f"manifest not found: {m}")
+        preflight(args.device, args.allow_cpu_fallback)
 
     # Resume, never overwrite: an existing checkpoint means that run is done.
     pending = []
@@ -148,10 +318,17 @@ def main() -> int:
     if not args.score_only and not pending:
         print("  all four runs already have checkpoints; nothing to train")
 
+    state = xs.new_state(os.getpid(), sys.argv)
+    xs.update_state(state)
+
     if not args.score_only:
         projected = False
         for i, (cond, seed) in enumerate(pending):
+            if args.respect_pause:
+                wait_for_pause_gate()
             out = checkpoint_for(cond, seed)
+            label = f"{cond}{seed}"
+            log_path = log_for(cond, seed)
             cmd = [
                 sys.executable, str(TRAIN),
                 "--train-manifest", args.train_manifest,
@@ -165,18 +342,30 @@ def main() -> int:
                 "--workers", str(args.workers),
                 *CONDITIONS[cond],
             ]
-            print(f"\n[{i + 1}/{len(pending)}] {cond}{seed} "
+            print(f"\n[{i + 1}/{len(pending)}] {label} "
                   f"({' '.join(CONDITIONS[cond]) or 'full augmenter'})")
             print(f"    {' '.join(cmd)}\n")
-            t0 = time.time()
-            rc, epoch_times = run_training(cmd, log_for(cond, seed))
-            if rc != 0:
-                raise SystemExit(f"run {cond}{seed} failed with exit code {rc}")
-            print(f"\n    {cond}{seed} finished in {(time.time() - t0) / 3600.0:.2f} h -> {out}")
+            update_run(state, label, status="running",
+                       started_at=datetime.now().isoformat(timespec="seconds"))
 
-            if not projected and epoch_times:
+            def on_spawn(pid: int, label: str = label) -> None:
+                update_run(state, label, child_pid=pid)
+
+            t0 = time.time()
+            rc, _ = run_training(cmd, log_path, on_spawn=on_spawn)
+            if rc != 0:
+                update_run(state, label, status="failed", exit_code=rc,
+                           finished_at=datetime.now().isoformat(timespec="seconds"))
+                raise SystemExit(f"run {label} failed with exit code {rc}")
+            print(f"\n    {label} finished in {(time.time() - t0) / 3600.0:.2f} h -> {out}")
+            update_run(state, label, status="done", exit_code=rc,
+                       finished_at=datetime.now().isoformat(timespec="seconds"))
+
+            if not projected:
                 projected = True
-                project(args.epochs, epoch_times[0], len(pending))
+                # Parse the log rather than trusting the tee'd epoch times: this
+                # also yields best_epoch, which the projection needs.
+                project(xs.parse_run_log(log_path), len(pending), PATIENCE)
                 if not args.continue_anyway:
                     print("\nStopping after the first run, as pre-registered. "
                           "Review the projection above, then re-run with "
@@ -197,10 +386,30 @@ def main() -> int:
     if not specs:
         raise SystemExit("no checkpoints to score")
 
+    if args.respect_pause:
+        wait_for_pause_gate()
+
+    # Tee the scoring stage as well. It used to inherit stdout, so the last and
+    # least predictable step of the experiment left no log at all.
+    scoring_log = LOG_DIR / f"{date.today().isoformat()}-scoring.log"
     cmd = [sys.executable, str(REPO_ROOT / "scripts" / "score_checkpoint_eval.py"),
            *specs, "--out", str(out_path), "--device", args.device]
     print("\nScoring:", " ".join(cmd), "\n")
-    return subprocess.call(cmd, cwd=str(REPO_ROOT))
+    state["scoring"].update({
+        "status": "running",
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "report": str(out_path),
+    })
+    xs.update_state(state)
+
+    rc = run_logged(cmd, scoring_log)
+    state["scoring"].update({
+        "status": "done" if rc == 0 else "failed",
+        "finished_at": datetime.now().isoformat(timespec="seconds"),
+        "exit_code": rc,
+    })
+    xs.update_state(state)
+    return rc
 
 
 if __name__ == "__main__":
