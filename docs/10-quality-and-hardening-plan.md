@@ -799,6 +799,78 @@ gap holds there, the claim is most of the way to defensible before a single new
 epoch is spent. Note `score_checkpoint_eval.py` refuses to overwrite an existing
 report (ground rule 6) — use a new filename.
 
+**Correction — 2026-09-15: step 5 could not run, and the cost above is wrong.**
+
+The "~1 h GPU" estimate was wrong twice over, and the step itself was
+impossible as written.
+
+`score_checkpoint_eval.py` decoded every utterance in the manifest into a
+Python list *before* scoring anything, on the reasoning that all checkpoints
+score the same audio so re-decoding per checkpoint would waste I/O. That holds
+for the 20 k slice and fails for the full partition:
+
+| partition | utterances | window | audio resident |
+|---|---|---|---|
+| 20 k slice | 20,000 | 4 s @ 16 kHz, float32 = 256 KB | **4.8 GB** — fits |
+| full eval | 628,848 | same | **149.9 GB** — impossible |
+
+A first attempt at the full-partition re-score was killed by the OOM killer
+after **1 h 18 m**, having written no report and — because Python block-buffers
+stdout when it is piped into `tee` — no log either. It failed silently, which is
+the worst way for a pre-registered step to fail.
+
+Fixed: audio is now decoded in `--audio-chunk` windows and discarded once
+scored; only the scores are retained (~10 MB for the whole partition). This is
+metric-preserving because EER, minDCF, actDCF and CLLR are all computed from the
+pooled score arrays. The window is rounded up to a multiple of `--batch-size`,
+so batches are formed identically to a whole-array pass and the numbers are
+bit-reproducible — verified by re-scoring identical input before and after the
+change and getting **max |Δ| = 0.000e+00 on every metric and every per-attack
+EER**. Peak memory is now `--audio-chunk × 256 KB` (default 4,096 → 1.0 GB).
+
+Two related lessons recorded because they will recur:
+
+- Wall time scales with the number of checkpoints, so four checkpoints cost four
+  forward passes. Budget accordingly.
+- Run long scorers with `python -u`. Block-buffered stdout through `tee` hides
+  all progress and loses everything on a kill.
+
+**Verification of the refactor — 2026-09-15, bit-identical against the record.**
+Two independent checks, both max |Δ| = 0.000e+00:
+
+1. Same 2,000-utterance input, pre-refactor vs post-refactor
+   (`full_partition_smoketest_2026-09-15.json` vs
+   `streaming_smoketest_2026-09-15.json`) — 5 metrics × 4 models, 16 attacks.
+2. The full 20,000-utterance slice re-scored post-refactor and compared against
+   the **committed** record `reports/cm_from_scratch_2026-09-14.json`:
+   bit-identical on all 16 headline metrics and all 64 per-attack EERs, with
+   `n_records`, `n_bonafide=4058`, `n_spoof=15942` and `unreadable=6` all equal.
+   (`min_cllr` / `cllr_calibration_loss` are absent from the record because it
+   predates `19636f8`; that is expected, not a mismatch.)
+
+**Measured cost of step 5, superseding the ~1 h and ~2.1 h figures above.** The
+steady-state rate is **60.3 utts/s wall for all four checkpoints together**
+(20,000 utterances in 5.5 min; 65.9 → 60.3 as loading amortised). So:
+
+    628,848 utts / 60.3 utts/s = 10,428 s = 2.90 h
+
+Budget **~2.9–3.0 h**, not 2.1 h. The earlier 338.9 utts/s figure could not be
+corroborated anywhere in the rescued logs, so the measured rate is authoritative.
+
+**Scope caveat for step 5 — the "full partition" is 92.4 %, uniformly sampled.**
+`manifests/eval_available.tsv` (628,848 rows) is *not* the whole eval protocol
+(680,773 rows): 51,926 clips (7.6 %) are absent. The absence is **uniform**, so
+it does not bias per-attack comparisons:
+
+| | protocol | manifest | missing |
+|---|---|---|---|
+| each of A17–A32 | ~31.3 k–34.4 k | ~28.5 k–31.8 k | 7.49 %–7.90 % |
+| bonafide | 138,688 | 128,292 | 7.49 % |
+
+Every manifest utterance ID resolves to exactly one protocol row, with no
+duplicates. Step 5 therefore measures the *downloaded* partition; any claim it
+supports should say so.
+
 **Only if the EER bar is still missed.** `--merge-layers 12` is implemented,
 adds 12 parameters, and is untried from scratch. docs/08 §12.6 measured that no
 single layer wins across attack families (layer 5 better on A17/A21/A24/A29,
