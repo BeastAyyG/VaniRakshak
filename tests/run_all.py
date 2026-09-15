@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import io
 import sys
 import traceback
 import types
@@ -154,6 +155,30 @@ class _MonkeyPatch:
         self._undo.clear()
 
 
+class _Capture:
+    """Minimal stand-in for pytest's capsys fixture."""
+
+    def __init__(self):
+        self._out = io.StringIO()
+        self._err = io.StringIO()
+        self._saved = None
+
+    def start(self):
+        self._saved = (sys.stdout, sys.stderr)
+        sys.stdout, sys.stderr = self._out, self._err
+
+    def readouterr(self):
+        out, err = self._out.getvalue(), self._err.getvalue()
+        self._out.seek(0); self._out.truncate(0)
+        self._err.seek(0); self._err.truncate(0)
+        return types.SimpleNamespace(out=out, err=err)
+
+    def stop(self):
+        if self._saved:
+            sys.stdout, sys.stderr = self._saved
+            self._saved = None
+
+
 def _call_with_fixtures(fn, tmp_root: Path):
     """Call a test function, supplying the built-in fixtures it asks for.
 
@@ -168,6 +193,7 @@ def _call_with_fixtures(fn, tmp_root: Path):
     kwargs = {}
     made: list[Path] = []
     mp: _MonkeyPatch | None = None
+    cap: _Capture | None = None
     try:
         for p in params:
             if p.name == "tmp_path":
@@ -177,10 +203,16 @@ def _call_with_fixtures(fn, tmp_root: Path):
             elif p.name == "monkeypatch":
                 mp = _MonkeyPatch()
                 kwargs[p.name] = mp
+            elif p.name == "capsys":
+                cap = _Capture()
+                cap.start()
+                kwargs[p.name] = cap
             else:
                 raise _Skipped(f"fixture {p.name!r} is not implemented in run_all.py")
         return fn(**kwargs)
     finally:
+        if cap is not None:
+            cap.stop()
         if mp is not None:
             mp.undo()
         for d in made:
