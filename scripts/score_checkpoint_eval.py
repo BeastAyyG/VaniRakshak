@@ -73,7 +73,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from benchmarks.compute_mindcf import compute_eer, evaluate_system  # noqa: E402
+from benchmarks.compute_mindcf import (  # noqa: E402
+    compute_act_dcf,
+    compute_eer,
+    evaluate_system,
+)
 from cm_frontend import assert_frozen_checkpoint, load_frontend_for  # noqa: E402
 from ml.aasist_model import AASISTLHead  # noqa: E402
 from ml.augment import prepare_audio_window  # noqa: E402
@@ -119,6 +123,12 @@ def main() -> int:
                          "batch composition matches a whole-array pass.")
     ap.add_argument("--max-missing-frac", type=float, default=0.05,
                     help="Abort if more than this fraction of utterances fail to read.")
+    ap.add_argument("--dump-scores", type=Path, default=None,
+                    help="Optional TSV of per-utterance scores: "
+                         "path, label, attack, then one column per checkpoint. "
+                         "Enables post-hoc slicing (per speaker, codec, AC, "
+                         "source utterance) without re-scoring. Scores only -- "
+                         "no audio is written.")
     args = ap.parse_args()
 
     models: Dict[str, Path] = {}
@@ -224,7 +234,7 @@ def main() -> int:
             "model": model,
             "layer_index": layer_index,
         }
-        accum[label] = {"bon": [], "spf": [], "atk": {}}
+        accum[label] = {"bon": [], "spf": [], "atk": {}, "per_utt": []}
 
     if not loaded:
         raise SystemExit("no checkpoints to score")
@@ -262,6 +272,7 @@ def main() -> int:
                     llrs = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                     for s, y, a in zip(llrs, y_b, a_b):
                         score = float(s)
+                        acc["per_utt"].append(score)
                         if y == 1:
                             acc["bon"].append(score)
                         else:
@@ -291,6 +302,32 @@ def main() -> int:
           f"{(time.time() - t0) / 60:.1f} min")
 
     # ------------------------------------------------------------------
+    # Optional per-utterance score dump. Written BEFORE the metrics so that a
+    # crash in metric computation cannot lose an hour of scoring, and so that
+    # any later question ("is A28 hard because of codec X?") can be answered by
+    # slicing this file instead of re-running the GPU.
+    # ------------------------------------------------------------------
+    if args.dump_scores is not None:
+        n = len(records)
+        for label, acc in accum.items():
+            if len(acc["per_utt"]) != n:
+                raise SystemExit(
+                    f"{label}: collected {len(acc['per_utt'])} scores for {n} "
+                    "utterances -- refusing to write a misaligned dump."
+                )
+        args.dump_scores.parent.mkdir(parents=True, exist_ok=True)
+        labels_out = list(loaded.keys())
+        with open(args.dump_scores, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f, delimiter="\t")
+            writer.writerow(["path", "label", "attack", *labels_out])
+            for i, (p, y, a) in enumerate(records):
+                # repr(float) is the shortest round-trippable form, so the dump
+                # reproduces the scored values exactly rather than approximately.
+                writer.writerow([p, "bonafide" if y == 1 else "spoof", a,
+                                 *[repr(accum[lb]["per_utt"][i]) for lb in labels_out]])
+        print(f"\nWrote {n} per-utterance scores -> {args.dump_scores}")
+
+    # ------------------------------------------------------------------
     # Metrics, from the pooled scores only.
     # ------------------------------------------------------------------
     for label, st in loaded.items():
@@ -303,6 +340,19 @@ def main() -> int:
         print(f"  pooled EER : {res['eer'] * 100.0:.3f}%")
         print(f"  minDCF     : {res['min_dcf']:.4f}")
         print(f"  CLLR       : {res['cllr']:.4f}")
+
+        # actDCF at the threshold the checkpoint actually ships with. Every
+        # actDCF above this line is oracle-thresholded (evaluate_system with
+        # threshold=None resolves to the EER operating point of THIS partition),
+        # so it is an upper bound on performance, not a deployment figure. This
+        # one is what the system would do if deployed with its stored threshold.
+        stored_thr = ckpt.get("eer_threshold")
+        if stored_thr is not None:
+            stored_thr = float(stored_thr)
+            act_stored = compute_act_dcf(bon, spf, threshold=stored_thr)
+            res["stored_threshold"] = stored_thr
+            res["act_dcf_at_stored_threshold"] = act_stored
+            print(f"  actDCF @ stored dev threshold ({stored_thr:.4f}) : {act_stored:.4f}")
 
         per_atk: Dict[str, float] = {}
         for a, scores in sorted(acc["atk"].items()):
