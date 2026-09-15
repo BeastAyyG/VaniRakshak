@@ -152,8 +152,24 @@ available. **No protocol-level condition explains A28.** The difficulty lives in
 the synthesis method, so the fix must be model-side — which is what the planned
 levers (layer 5, encoder unfreezing) are.
 
-**Negative result, recorded as such.** It closes off data-slicing as an
-explanation for the A28 gap and stops anyone re-testing it.
+### 6.1 And not a speaker effect either
+
+The one field the table above cannot show is speaker, so it was tested directly.
+All sixteen eval attacks draw from **the same 367 speakers** — the Jaccard
+overlap between A28's speaker set and every other attack's is **exactly 1.000**,
+with 0 speakers unique to A28 and 0 unique to any other attack:
+
+| pair | shared | A28-only | other-only | Jaccard |
+|---|---|---|---|---|
+| A28 vs A17…A32 (all 15) | 367 | 0 | 0 | **1.000** |
+
+So every attack is evaluated on an identical speaker cohort. A28's error cannot
+be attributed to A28 being tested on harder speakers — there is no such subset.
+
+**Negative result, recorded as such.** Between §6 and §6.1, A28 is now ruled out
+as an artifact of attack set, speaker set, codec, codec quality, source
+presence, source multiplicity, gender, or the AC axis. It closes off data-slicing
+as an explanation for the A28 gap and stops it being re-tested.
 
 ## 7. Open question: what is `AC1` / `AC2` / `AC3`?
 
