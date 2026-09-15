@@ -80,8 +80,34 @@ RUN_ORDER = [(cond, seed) for seed in SEEDS for cond in ("S", "B")]
 PATIENCE = 5
 
 
-def checkpoint_for(cond: str, seed: int) -> Path:
-    return REPO_ROOT / "data" / f"cm_scratch_{cond}{seed}.pt"
+# The layer index the 2026-09-14 run used. It is the default so that the
+# existing checkpoint names (cm_scratch_S42.pt, ...) do not move: this is a
+# backward-compatible change, not a rename.
+DEFAULT_LAYER_INDEX = 12
+
+
+def checkpoint_for(cond: str, seed: int, layer_index: int = DEFAULT_LAYER_INDEX) -> Path:
+    """Path for a condition's checkpoint, keyed by layer index when non-default.
+
+    Why the layer index is in the name: the checkpoint path used to depend only
+    on (condition, seed), so a run at a different --layer-index targeted the
+    SAME file as the layer-12 run. Two bad outcomes followed, and the second is
+    destructive:
+
+      1. `--layer-index 5` silently did nothing -- every checkpoint already
+         existed, so the "resume, never overwrite" check skipped all four runs
+         and the command exited having trained nothing. docs/10's run plan
+         ("from scratch at layer 5", the headline candidate) is written this
+         way, so the plan as written could not run.
+      2. Anyone who cleared the existing checkpoints to force the run would have
+         had the layer-5 output land on data/cm_scratch_S42.pt, destroying the
+         layer-12 S42 result the whole project is built on.
+
+    With the suffix, a layer-5 run gets its own file and cannot collide.
+    Default-12 runs keep their original names.
+    """
+    suffix = "" if layer_index == DEFAULT_LAYER_INDEX else f"_L{layer_index}"
+    return REPO_ROOT / "data" / f"cm_scratch_{cond}{seed}{suffix}.pt"
 
 
 def log_for(cond: str, seed: int) -> Path:
@@ -308,15 +334,25 @@ def main() -> int:
         preflight(args.device, args.allow_cpu_fallback)
 
     # Resume, never overwrite: an existing checkpoint means that run is done.
+    # Always state the layer index, because it is part of the checkpoint's
+    # identity now -- "nothing to train" at layer 5 is a different statement
+    # from "nothing to train" at layer 12, and silently conflating them is how
+    # the layer-5 run plan came to do nothing at all.
+    print(f"  layer index: {args.layer_index}"
+          f"{' (the 2026-09-14 default)' if args.layer_index == DEFAULT_LAYER_INDEX else ''}")
     pending = []
     for cond, seed in RUN_ORDER:
-        p = checkpoint_for(cond, seed)
+        p = checkpoint_for(cond, seed, args.layer_index)
         if p.exists():
             print(f"  {cond}{seed}: {p.name} already exists - skipping (never overwritten)")
         else:
             pending.append((cond, seed))
     if not args.score_only and not pending:
-        print("  all four runs already have checkpoints; nothing to train")
+        print(f"  all four layer-{args.layer_index} runs already have checkpoints; "
+              f"nothing to train")
+        if args.layer_index == DEFAULT_LAYER_INDEX:
+            print("  (to run a different layer index, pass --layer-index N; "
+                  "outputs are named cm_scratch_<cond><seed>_L<N>.pt)")
 
     state = xs.new_state(os.getpid(), sys.argv)
     xs.update_state(state)
@@ -326,7 +362,7 @@ def main() -> int:
         for i, (cond, seed) in enumerate(pending):
             if args.respect_pause:
                 wait_for_pause_gate()
-            out = checkpoint_for(cond, seed)
+            out = checkpoint_for(cond, seed, args.layer_index)
             label = f"{cond}{seed}"
             log_path = log_for(cond, seed)
             cmd = [
@@ -378,7 +414,7 @@ def main() -> int:
     )
     specs = []
     for cond, seed in RUN_ORDER:
-        p = checkpoint_for(cond, seed)
+        p = checkpoint_for(cond, seed, args.layer_index)
         if p.exists():
             specs += ["--checkpoint", f"{cond}{seed}={p}"]
         else:

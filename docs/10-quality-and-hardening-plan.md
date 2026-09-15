@@ -862,6 +862,47 @@ scratch reproduces that split; it does not resolve it.
 | 3 | full-partition scoring | `--score-only` | gap 3 | ~1 h |
 | 4 | S44, S45, S46 | as S42 | widen the floor | ~7.5 h |
 
+**Correction — 2026-09-15: run 2 could not actually be run as written, and the
+"no code change" claim in the table above was wrong.**
+
+`checkpoint_for(cond, seed)` keyed the output path on (condition, seed) only, so
+`--layer-index 5` targeted the *same* four files as the layer-12 run. Two
+consequences, the second destructive:
+
+1. **`--layer-index 5` silently trained nothing.** All four checkpoints already
+   existed, so the "resume, never overwrite" check skipped every run and the
+   command exited reporting "all four runs already have checkpoints". The
+   headline experiment would have appeared to run and produced no model.
+2. **Forcing it would have destroyed the layer-12 result.** Clearing the
+   existing checkpoints to make the run proceed would have written the layer-5
+   output to `data/cm_scratch_S42.pt` — over the checkpoint the entire claim is
+   built on.
+
+Fixed in `scripts/run_from_scratch_experiment.py`: the layer index is now part
+of the checkpoint's identity. Default-12 runs keep their existing names, so
+nothing on disk moves and the committed results stay addressable; any other
+index gets a suffix. Run 2 is therefore:
+
+```
+python scripts/run_from_scratch_experiment.py --layer-index 5 --device cuda
+```
+
+That trains **S42 at layer 5** into `data/cm_scratch_S42_L5.pt` and then stops,
+as the pre-registered protocol requires (review the wall-time projection before
+committing to the rest). Adding `--continue-anyway` then runs B42/S43/B43 at
+layer 5 into the matching `_L5` names. Nothing can collide with the layer-12
+set. The orchestrator now also prints the active layer index, so "nothing to
+train" is never ambiguous about which layer it refers to.
+`tests/test_run_from_scratch_checkpoint_naming.py` pins both halves.
+
+Note the scope difference from the table above: run 2 as costed (~3 h) is the
+single S42 layer-5 run, which is what the two-step protocol delivers first. The
+full four-condition layer-5 set is ~10 h and is a superset, not a substitute.
+
+The correction to the table above is only to "no code change" — the run itself,
+its one-variable property, and its status as the headline candidate are
+unchanged.
+
 **Run 2 is the headline candidate, not run 4.** If from-scratch init at layer 5
 holds minDCF below 0.75 while keeping A28 near 12.9 %, that is the first model
 here that is both best on the cost metric and not regressed on the worst attack —
