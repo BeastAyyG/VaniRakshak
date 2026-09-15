@@ -36,9 +36,9 @@ figure — while its raw-LLR CLLR sits at ~1.27–1.69. Roughly seven tenths of 
 CLLR is the cost of **not calibrating**, and `ml/train_cm.py` fits no Platt
 scaler by design (`"calibration": "none (raw LLR)"` in every report).
 
-This is the first measurement of the criterion docs/10 §"minCLLR" pre-registered
-(`CLLR − minCLLR`) as the replacement yardstick for calibration work. It now has
-a value: **≈ 1.04**.
+This is the first measurement of the criterion docs/10 pre-registers as the
+replacement yardstick for calibration work (`CLLR − minCLLR`, the `minCLLR`
+checklist item). It now has a value: **≈ 1.04**.
 
 ## 2. Why this is *not* a path to G3 — and must not be sold as one
 
@@ -59,7 +59,9 @@ Consequences, stated plainly:
 The practical value is real but different: `actDCF` falling from 2.27 toward
 0.65 and `actDCF@τ_Bayes` from 7.92 toward 0.65 is the difference between a
 system whose operating point has to be re-tuned per deployment and one that can
-ship a fixed threshold. That matters for the fused tier (docs/10 step 8).
+ship a fixed threshold. That matters for the fused tier, where the tier gates
+were tuned against the *current* score distribution, so swapping the CM
+checkpoint is a re-baselining exercise rather than a code change.
 
 ## 3. Where the from-scratch system actually stands against G3
 
@@ -115,12 +117,12 @@ Not a hypothesis — the protocols say so:
 **Dev is entirely uncoded; eval is three-quarters coded. The attack sets are
 disjoint.** Dev is not a held-out sample of eval — it is a different condition
 set. That is the mechanism behind the threshold gap in §4 and behind the dev/eval
-metric disagreement in docs/10 §6.2.
+metric disagreement in §5.1.
 
 ### 5.1 Refinement of the "dev is systematically harder" claim
 
-docs/10 §6.2 says dev is systematically harder. That is **true for minDCF and
-only half-true for EER**:
+The run notes from the from-scratch experiment observed that dev looks harder
+than eval. That is **true for minDCF and only half-true for EER**:
 
 | model | dev EER | eval EER | dev worse? | dev minDCF | eval minDCF | dev worse? |
 |---|---|---|---|---|---|---|
