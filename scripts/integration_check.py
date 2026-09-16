@@ -122,12 +122,15 @@ def _free_port() -> int:
 
 def _client_factory(live: bool, base_url: str):
     """Return (client, base_url) for REST calls."""
+    api_key = os.environ.get("VR_API_KEY", "vr-client-dev-key")
+    auth_headers = {"Authorization": f"Bearer {api_key}"}
+
     if live:
         import httpx
 
         class LiveClient:
             def __init__(self, base: str) -> None:
-                self._c = httpx.Client(base_url=base, timeout=60.0)
+                self._c = httpx.Client(base_url=base, timeout=60.0, headers=auth_headers)
 
             def get(self, url: str, **kw):
                 return self._c.get(url, **kw)
@@ -155,7 +158,7 @@ def _client_factory(live: bool, base_url: str):
 
     from vanirakshak.server.app import app  # type: ignore
 
-    return TestClient(app), ""
+    return TestClient(app, headers=auth_headers), ""
 
 
 def check_health(client, checks: Checks) -> bool:
@@ -322,7 +325,8 @@ def check_verify_speaker(client, checks: Checks) -> None:
 
 def check_audit(client, checks: Checks) -> None:
     print("\n  GET /api/v1/audit (DPDP hash chain)")
-    r = client.get("/api/v1/audit?n=10")
+    admin_hdr = {"Authorization": f"Bearer {os.environ.get('VR_ADMIN_KEY', 'vr-admin-dev-key')}"}
+    r = client.get("/api/v1/audit?n=10", headers=admin_hdr)
     if r.status_code != 200:
         checks.record("audit endpoint", False, f"HTTP {r.status_code}")
         return
@@ -331,6 +335,35 @@ def check_audit(client, checks: Checks) -> None:
         "audit chain verifies",
         bool(body.get("chain_valid")),
         f"events={len(body.get('events', []))}",
+    )
+
+
+def check_auth_boundaries(live: bool, base_url: str, checks: Checks) -> None:
+    """Verify unauthenticated requests return 401 and privilege separation holds."""
+    print("\n  Authentication & Authorization boundaries (G5)")
+    if live:
+        import httpx
+
+        raw_client = httpx.Client(base_url=base_url, timeout=10.0)
+    else:
+        from fastapi.testclient import TestClient
+        from vanirakshak.server.app import app
+
+        raw_client = TestClient(app)
+
+    r_unauth = raw_client.get("/api/v1/health")
+    checks.record(
+        "unauthenticated GET /api/v1/health -> 401",
+        r_unauth.status_code == 401,
+        f"HTTP {r_unauth.status_code}",
+    )
+
+    api_key = os.environ.get("VR_API_KEY", "vr-client-dev-key")
+    r_audit_forbidden = raw_client.get("/api/v1/audit", headers={"Authorization": f"Bearer {api_key}"})
+    checks.record(
+        "client key on GET /api/v1/audit -> 403 Forbidden",
+        r_audit_forbidden.status_code == 403,
+        f"HTTP {r_audit_forbidden.status_code}",
     )
 
 
@@ -390,6 +423,7 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
 
         verdicts: List[Dict[str, Any]] = []
         ack: Dict[str, Any] = {}
+        api_key = os.environ.get("VR_API_KEY", "vr-client-dev-key")
         with connect(url, open_timeout=10) as ws:
             ws.send(
                 json.dumps(
@@ -401,6 +435,7 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
                         "transaction_value_inr": 0,
                         "origin_country": "IN",
                         "prior_fraud_score": 0,
+                        "auth_token": api_key,
                     }
                 )
             )
@@ -558,6 +593,7 @@ def main() -> int:
     print("=" * 78)
 
     checks = Checks()
+    check_auth_boundaries(args.live, args.base_url, checks)
     client, base = _client_factory(args.live, args.base_url)
 
     check_health(client, checks)

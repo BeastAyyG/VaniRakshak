@@ -21,7 +21,8 @@ The client must therefore send this *before* starting the microphone:
   "claimed_identity": "",
   "transaction_value_inr": 0,
   "origin_country": "IN",
-  "prior_fraud_score": 0
+  "prior_fraud_score": 0,
+  "auth_token": "vr-client-dev-key"
 }
 ```
 
@@ -315,6 +316,11 @@ alert payload it already received.
 | `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker` |
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
+| `VR_AUTH_ENABLED` | `true` | Master toggle for API key authentication and rate limiting on REST and WS |
+| `VR_API_KEY` | `vr-client-dev-key` | Standard client credential for streaming, analysis, and session management |
+| `VR_ADMIN_KEY` | `vr-admin-dev-key` | Administrative credential required for speaker enrolment and audit access |
+| `VR_RATE_LIMIT_ANALYZE` | `60` | Request cap per minute for `/analyze` endpoints |
+| `VR_RATE_LIMIT_ENROLL` | `10` | Request cap per minute for `/enroll` endpoints |
 
 ## 9. Conformance test
 

@@ -1,5 +1,22 @@
 # VaniRakshak — API Specification
 
+## Authentication & Authorization (G5)
+
+When `VR_AUTH_ENABLED=true` (default), all API endpoints require authentication:
+- **Headers**: `Authorization: Bearer <key>` or `X-API-Key: <key>`
+- **WebSocket**: Handshake field `"auth_token": "<key>"` or query parameter `?token=<key>`
+
+### Role Scopes
+| Role | Permitted Endpoints | Credentials |
+|---|---|---|
+| **Client** | `GET /v1/health`, `GET /v1/enroll`, `POST /v1/analyze`, `POST /v1/verify-speaker`, `POST /v1/sessions`, `WS /ws/stream` | `VR_API_KEY` |
+| **Admin** | All endpoints, including `POST /v1/enroll` (identity registration) and `GET /v1/audit` (audit logs) | `VR_ADMIN_KEY` |
+
+### Error Responses
+- **`401 Unauthorized`**: Missing or unrecognized API key credentials.
+- **`403 Forbidden`**: Client credential supplied for admin-restricted endpoints (`POST /v1/enroll`, `GET /v1/audit`).
+- **`429 Too Many Requests`**: Rate limit exceeded (configurable via `VR_RATE_LIMIT_ANALYZE` and `VR_RATE_LIMIT_ENROLL`). Carries `Retry-After: 60`.
+
 ## WebSocket API
 
 ### `WS /ws/stream` (alias `/v1/stream`, `/api/v1/stream`)

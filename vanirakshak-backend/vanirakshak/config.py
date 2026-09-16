@@ -30,6 +30,13 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    val = os.environ.get(name)
+    if val is None or val == "":
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class AudioConfig:
     sample_rate: int = _env_int("VR_SAMPLE_RATE", 16000)
@@ -163,12 +170,22 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class AuthConfig:
+    enabled: bool = _env_bool("VR_AUTH_ENABLED", True)
+    api_key: str = _env("VR_API_KEY", "vr-client-dev-key")
+    admin_key: str = _env("VR_ADMIN_KEY", "vr-admin-dev-key")
+    rate_limit_analyze: int = _env_int("VR_RATE_LIMIT_ANALYZE", 60)
+    rate_limit_enroll: int = _env_int("VR_RATE_LIMIT_ENROLL", 10)
+
+
+@dataclass(frozen=True)
 class Settings:
     audio: AudioConfig = field(default_factory=AudioConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     fusion: FusionConfig = field(default_factory=FusionConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")

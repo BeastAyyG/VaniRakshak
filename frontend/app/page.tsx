@@ -19,6 +19,8 @@ import EnrolledSpeakersPanel from "./components/EnrolledSpeakersPanel";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000/ws/stream";
+const BACKEND_API_KEY = process.env.NEXT_PUBLIC_API_KEY || "vr-client-dev-key";
+const BACKEND_ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "vr-admin-dev-key";
 
 // Used only if /api/v1/health has not reported an enrolled anchor yet (or the
 // backend is unreachable). Prefer the health response so the client never
@@ -177,7 +179,9 @@ export default function Home() {
   useEffect(() => {
     async function checkHealth() {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/v1/health`);
+        const res = await fetch(`${BACKEND_URL}/api/v1/health`, {
+          headers: { Authorization: `Bearer ${BACKEND_API_KEY}` },
+        });
         if (res.ok) {
           const data = await res.json();
           setBackendOnline(true);
@@ -194,7 +198,9 @@ export default function Home() {
 
           // Verify the SHA-256 append-only audit chain (flowchart node Q).
           try {
-            const ar = await fetch(`${BACKEND_URL}/api/v1/audit?n=1`);
+            const ar = await fetch(`${BACKEND_URL}/api/v1/audit?n=1`, {
+              headers: { Authorization: `Bearer ${BACKEND_ADMIN_KEY}` },
+            });
             if (ar.ok) {
               const ad = await ar.json();
               setChainValid(Boolean(ad.chain_valid));
@@ -245,6 +251,7 @@ export default function Home() {
 
       const res = await fetch(`${BACKEND_URL}/api/v1/analyze/audio`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${BACKEND_API_KEY}` },
         body: formData,
       });
 
@@ -362,6 +369,7 @@ export default function Home() {
               transaction_value_inr: 0,
               origin_country: "IN",
               prior_fraud_score: 0,
+              auth_token: BACKEND_API_KEY,
             })
           );
 
@@ -701,7 +709,10 @@ export default function Home() {
           `${BACKEND_URL}/api/v1/sessions/${sessionIdRef.current}/challenge`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${BACKEND_API_KEY}`,
+            },
             body: JSON.stringify({ response_text: text, response_latency_ms: latencyMs }),
           }
         );
@@ -921,6 +932,8 @@ export default function Home() {
               backendUrl={BACKEND_URL}
               claimedIdentity={claimedIdentity}
               disabled={micLive}
+              apiKey={BACKEND_API_KEY}
+              adminKey={BACKEND_ADMIN_KEY}
               onSelectIdentity={(id) => {
                 claimedIdentityRef.current = id;
                 setClaimedIdentity(id);

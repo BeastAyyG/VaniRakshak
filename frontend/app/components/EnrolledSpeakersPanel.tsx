@@ -9,6 +9,8 @@ interface EnrolledSpeakersPanelProps {
   onSelectIdentity: (userId: string) => void;
   onEvent?: (message: string, severity: "info" | "warning" | "critical") => void;
   disabled?: boolean;
+  apiKey?: string;
+  adminKey?: string;
 }
 
 /**
@@ -29,6 +31,8 @@ export default function EnrolledSpeakersPanel({
   onSelectIdentity,
   onEvent,
   disabled,
+  apiKey = process.env.NEXT_PUBLIC_API_KEY || "vr-client-dev-key",
+  adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY || "vr-admin-dev-key",
 }: EnrolledSpeakersPanelProps) {
   const [enrolled, setEnrolled] = useState<string[]>([]);
   const [asvBackend, setAsvBackend] = useState<string>("");
@@ -39,7 +43,9 @@ export default function EnrolledSpeakersPanel({
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch(`${backendUrl}/api/v1/enroll`);
+      const res = await fetch(`${backendUrl}/api/v1/enroll`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
       if (!res.ok) return;
       const data = await res.json();
       setEnrolled(Array.isArray(data.enrolled) ? data.enrolled : []);
@@ -47,7 +53,7 @@ export default function EnrolledSpeakersPanel({
     } catch {
       // Backend offline — the rest of the dashboard already surfaces that.
     }
-  }, [backendUrl]);
+  }, [backendUrl, apiKey]);
 
   // Not `refresh()` directly: calling it synchronously in the effect body
   // trips react-hooks' cascading-render rule, and it also had a real (if
@@ -57,7 +63,9 @@ export default function EnrolledSpeakersPanel({
     let ignore = false;
     (async () => {
       try {
-        const res = await fetch(`${backendUrl}/api/v1/enroll`);
+        const res = await fetch(`${backendUrl}/api/v1/enroll`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
         if (!res.ok || ignore) return;
         const data = await res.json();
         if (ignore) return;
@@ -70,7 +78,7 @@ export default function EnrolledSpeakersPanel({
     return () => {
       ignore = true;
     };
-  }, [backendUrl]);
+  }, [backendUrl, apiKey]);
 
   const handleEnroll = async () => {
     const userId = newLabel.trim().toLowerCase().replace(/\s+/g, "_");
@@ -80,7 +88,11 @@ export default function EnrolledSpeakersPanel({
       const formData = new FormData();
       formData.append("user_id", userId);
       formData.append("audio", newFile, newFile.name);
-      const res = await fetch(`${backendUrl}/api/v1/enroll`, { method: "POST", body: formData });
+      const res = await fetch(`${backendUrl}/api/v1/enroll`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey}` },
+        body: formData,
+      });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`API error (${res.status}): ${text}`);

@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -37,6 +37,7 @@ from ..detectors.pipeline import DetectionPipeline
 from ..detectors.voice import vad_stats, zcr_variance
 from ..anchor import load_anchor
 from ..semantic import SEMANTIC_SIGNAL
+from .auth import check_rate_limit, verify_admin_auth, verify_client_auth, verify_ws_token
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +228,8 @@ class ChallengeGradeRequest(BaseModel):
 
 @app.get("/v1/health")
 @app.get("/api/v1/health")
-def health() -> dict:
+def health(request: Request) -> dict:
+    verify_client_auth(request)
     return {
         "ok": True,
         "status": "healthy",
@@ -259,9 +261,10 @@ def health() -> dict:
 
 @app.get("/v1/enroll", response_model=EnrolledSpeakersResponse)
 @app.get("/api/v1/enroll", response_model=EnrolledSpeakersResponse)
-def list_enrolled() -> EnrolledSpeakersResponse:
+def list_enrolled(request: Request) -> EnrolledSpeakersResponse:
     """Enrolled user_ids (family members / anchors) — lets the dashboard offer
     a claimed-identity picker instead of a single hardcoded anchor."""
+    verify_client_auth(request)
     return EnrolledSpeakersResponse(
         enrolled=PIPELINE.asv.enrolled_user_ids(),
         asv_backend=PIPELINE.asv.name,
@@ -270,7 +273,9 @@ def list_enrolled() -> EnrolledSpeakersResponse:
 
 @app.post("/v1/enroll", response_model=EnrollResponse)
 @app.post("/api/v1/enroll", response_model=EnrollResponse)
-async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> EnrollResponse:
+async def enroll(request: Request, user_id: str = Form(...), audio: UploadFile = File(...)) -> EnrollResponse:
+    verify_admin_auth(request)
+    check_rate_limit(request, "enroll", settings.auth.rate_limit_enroll)
     data = await audio.read()
     x, sr = _read_wav_bytes(data)
     if x.size < int(0.5 * sr):
@@ -294,11 +299,14 @@ async def enroll(user_id: str = Form(...), audio: UploadFile = File(...)) -> Enr
 @app.post("/v1/analyze/audio", response_model=AnalyzeResponse)
 @app.post("/api/v1/analyze/audio", response_model=AnalyzeResponse)
 async def analyze(
+    request: Request,
     audio: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
     caller_id: str = Form("+91-0000000000"),
     claimed_identity: str = Form(""),
 ) -> AnalyzeResponse:
+    verify_client_auth(request)
+    check_rate_limit(request, "analyze", settings.auth.rate_limit_analyze)
     upload = audio or file
     if upload is None:
         raise HTTPException(400, "Audio payload required in form field 'audio' or 'file'")
@@ -571,6 +579,7 @@ class VerifySpeakerResponse(BaseModel):
 @app.post("/v1/verify-speaker", response_model=VerifySpeakerResponse)
 @app.post("/api/v1/verify-speaker", response_model=VerifySpeakerResponse)
 async def verify_speaker(
+    request: Request,
     audio: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
 ) -> VerifySpeakerResponse:
@@ -580,6 +589,7 @@ async def verify_speaker(
     NOT "is this a synthetic/clone voice". It was trained on one target speaker
     vs one non-target speaker and has never seen cloned audio.
     """
+    verify_client_auth(request)
     from ..ml_bridge import VERIFIER
 
     upload = audio or file
@@ -617,7 +627,8 @@ async def verify_speaker(
 
 @app.post("/v1/sessions")
 @app.post("/api/v1/sessions")
-def start_session(req: SessionStartRequest) -> dict:
+def start_session(request: Request, req: SessionStartRequest) -> dict:
+    verify_client_auth(request)
     sid = f"call-{uuid.uuid4().hex[:10]}"
     SESSIONS[sid] = CallSession(
         sid,
@@ -636,7 +647,8 @@ def start_session(req: SessionStartRequest) -> dict:
 
 @app.post("/v1/sessions/{sid}/challenge")
 @app.post("/api/v1/sessions/{sid}/challenge")
-def grade_challenge(sid: str, req: ChallengeGradeRequest) -> dict:
+def grade_challenge(request: Request, sid: str, req: ChallengeGradeRequest) -> dict:
+    verify_client_auth(request)
     sess = SESSIONS.get(sid)
     if sess is None:
         raise HTTPException(404, "session not found")
@@ -645,7 +657,8 @@ def grade_challenge(sid: str, req: ChallengeGradeRequest) -> dict:
 
 @app.get("/v1/audit")
 @app.get("/api/v1/audit")
-def tail_audit(n: int = 50) -> dict:
+def tail_audit(request: Request, n: int = 50) -> dict:
+    verify_admin_auth(request)
     events = AUDIT.tail(n)
     return {
         "chain_valid": AUDIT.verify_chain(),
@@ -658,6 +671,14 @@ def tail_audit(n: int = 50) -> dict:
 @app.websocket("/ws/stream")
 async def stream_endpoint(ws: WebSocket) -> None:
     await ws.accept()
+    token = ws.query_params.get("token") or ws.query_params.get("api_key")
+    if not token and "authorization" in ws.headers:
+        auth_val = ws.headers["authorization"]
+        parts = auth_val.strip().split()
+        token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else parts[0]
+    if not token and "x-api-key" in ws.headers:
+        token = ws.headers["x-api-key"]
+
     # first message: JSON handshake
     try:
         handshake_raw = await ws.receive_text()
@@ -665,6 +686,13 @@ async def stream_endpoint(ws: WebSocket) -> None:
         handshake = json.loads(handshake_raw)
     except Exception:
         await ws.close(code=1003)
+        return
+
+    if not token and isinstance(handshake, dict):
+        token = handshake.get("auth_token") or handshake.get("api_key") or handshake.get("token")
+
+    if not verify_ws_token(token):
+        await ws.close(code=1008, reason="Policy Violation: missing or invalid auth credentials")
         return
 
     sid = handshake.get("session_id") or f"ws-{uuid.uuid4().hex[:8]}"

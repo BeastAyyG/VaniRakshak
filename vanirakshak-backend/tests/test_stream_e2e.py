@@ -20,6 +20,7 @@ if _PARENT not in sys.path:
 
 from fastapi.testclient import TestClient
 
+from vanirakshak.config import settings
 from vanirakshak.server.app import app
 
 SAMPLE_RATE = 16000
@@ -58,6 +59,7 @@ def test_websocket_stream_e2e() -> None:
         "transaction_value_inr": 0,
         "origin_country": "IN",
         "prior_fraud_score": 0,
+        "auth_token": settings.auth.api_key,
     }
 
     with client.websocket_connect("/ws/stream") as ws:
@@ -124,7 +126,8 @@ def make_wav_bytes(seconds: float = 5.0, freq: float = 440.0) -> bytes:
 
 def test_rest_health_endpoint() -> None:
     client = TestClient(app)
-    res = client.get("/api/v1/health")
+    headers = {"Authorization": f"Bearer {settings.auth.api_key}"}
+    res = client.get("/api/v1/health", headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data.get("ok") is True
@@ -135,11 +138,13 @@ def test_rest_health_endpoint() -> None:
 
 def test_rest_analyze_endpoint() -> None:
     client = TestClient(app)
+    headers = {"Authorization": f"Bearer {settings.auth.api_key}"}
     wav = make_wav_bytes(5.0)
 
     # 1. Test POST /api/v1/analyze/audio with "file" form field (Next.js dashboard contract)
     res = client.post(
         "/api/v1/analyze/audio",
+        headers=headers,
         files={"file": ("test.wav", wav, "audio/wav")},
     )
     assert res.status_code == 200, f"Analysis failed: {res.text}"
@@ -156,6 +161,7 @@ def test_rest_analyze_endpoint() -> None:
     # 2. Test POST /v1/analyze with "audio" form field (backward compatibility)
     res2 = client.post(
         "/v1/analyze",
+        headers=headers,
         files={"audio": ("test2.wav", wav, "audio/wav")},
     )
     assert res2.status_code == 200, f"Legacy analysis failed: {res2.text}"

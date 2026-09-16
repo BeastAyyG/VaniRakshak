@@ -201,27 +201,29 @@ def test_route_aliases() -> None:
     print("[test] /v1/... and /api/v1/... route aliases succeed")
     from fastapi.testclient import TestClient
     from vanirakshak.server.app import app
+    import json
+    admin_hdr = {"Authorization": f"Bearer {settings.auth.admin_key}"}
     client = TestClient(app)
-    r1 = client.get("/v1/health")
-    r2 = client.get("/api/v1/health")
+    r1 = client.get("/v1/health", headers=admin_hdr)
+    r2 = client.get("/api/v1/health", headers=admin_hdr)
     assert_(r1.status_code == 200, f"/v1/health status {r1.status_code}")
     assert_(r2.status_code == 200, f"/api/v1/health status {r2.status_code}")
     assert_(r1.json() == r2.json(), "/v1/health and /api/v1/health payloads match")
 
-    r3 = client.get("/v1/audit")
-    r4 = client.get("/api/v1/audit")
+    r3 = client.get("/v1/audit", headers=admin_hdr)
+    r4 = client.get("/api/v1/audit", headers=admin_hdr)
     assert_(r3.status_code == 200, f"/v1/audit status {r3.status_code}")
     assert_(r4.status_code == 200, f"/api/v1/audit status {r4.status_code}")
     assert_(r3.json()["chain_valid"] == r4.json()["chain_valid"], "/v1/audit and /api/v1/audit chain_valid match")
 
-    r5 = client.post("/v1/sessions", json={"caller_id": "smoke-test", "claimed_identity": "alice"})
-    r6 = client.post("/api/v1/sessions", json={"caller_id": "smoke-test", "claimed_identity": "alice"})
+    r5 = client.post("/v1/sessions", headers=admin_hdr, json={"caller_id": "smoke-test", "claimed_identity": "alice"})
+    r6 = client.post("/api/v1/sessions", headers=admin_hdr, json={"caller_id": "smoke-test", "claimed_identity": "alice"})
     assert_(r5.status_code == 200, f"/v1/sessions status {r5.status_code}")
     assert_(r6.status_code == 200, f"/api/v1/sessions status {r6.status_code}")
     assert_("session_id" in r5.json() and "session_id" in r6.json(), "session endpoints returned session_id")
 
     with client.websocket_connect("/api/v1/stream") as ws:
-        ws.send_text('{"session_id":"alias-test","sample_rate":16000}')
+        ws.send_text(json.dumps({"session_id": "alias-test", "sample_rate": 16000, "auth_token": settings.auth.api_key}))
     assert_(True, "/api/v1/stream websocket handshake succeeds")
 
 
@@ -249,8 +251,10 @@ def test_audit_receives_events_after_analyze() -> None:
         wf.writeframes(struct.pack(f"<{n_samples}h", *([1000] * n_samples)))
     buf.seek(0)
 
+    admin_hdr = {"Authorization": f"Bearer {settings.auth.admin_key}"}
     r = client.post(
         "/api/v1/analyze/audio",
+        headers=admin_hdr,
         files={"file": ("test.wav", buf, "audio/wav")},
     )
     assert_(r.status_code == 200, f"/api/v1/analyze/audio status {r.status_code}")
@@ -260,7 +264,7 @@ def test_audit_receives_events_after_analyze() -> None:
     assert_(after_count > initial_count, f"AUDIT grew from {initial_count} to {after_count}")
 
     # And GET /v1/audit should return them
-    r2 = client.get("/v1/audit?n=5")
+    r2 = client.get("/v1/audit?n=5", headers=admin_hdr)
     assert_(r2.status_code == 200, "/v1/audit status ok")
     events = r2.json().get("events", [])
     assert_(len(events) > 0, f"/v1/audit returned {len(events)} events (expected > 0)")
@@ -326,14 +330,15 @@ def test_analyze_pooling() -> None:
     wav_bytes = buf.getvalue()
 
     # Test last
+    client_hdr = {"Authorization": f"Bearer {settings.auth.api_key}"}
     object.__setattr__(settings.risk, "analyze_pooling", "last")
-    r1 = client.post("/api/v1/analyze/audio", files={"file": ("test.wav", wav_bytes, "audio/wav")})
+    r1 = client.post("/api/v1/analyze/audio", headers=client_hdr, files={"file": ("test.wav", wav_bytes, "audio/wav")})
     assert_(r1.status_code == 200, "analyze last mode returned 200")
     assert_("overall_risk_score" in r1.json(), "overall_risk_score in response")
 
     # Test max
     object.__setattr__(settings.risk, "analyze_pooling", "max")
-    r2 = client.post("/api/v1/analyze/audio", files={"file": ("test.wav", wav_bytes, "audio/wav")})
+    r2 = client.post("/api/v1/analyze/audio", headers=client_hdr, files={"file": ("test.wav", wav_bytes, "audio/wav")})
     assert_(r2.status_code == 200, "analyze max mode returned 200")
     assert_("overall_risk_score" in r2.json(), "overall_risk_score in response")
 

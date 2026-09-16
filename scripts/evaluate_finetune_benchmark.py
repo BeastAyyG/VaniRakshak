@@ -120,7 +120,7 @@ def score_checkpoint(ckpt_path: Path, records, device: str):
 
 
 def main():
-    paths = [Path(p) for p in sys.argv[1:]]
+    paths = [Path(p).resolve() for p in sys.argv[1:]]
     if not paths:
         print(__doc__)
         sys.exit(2)
