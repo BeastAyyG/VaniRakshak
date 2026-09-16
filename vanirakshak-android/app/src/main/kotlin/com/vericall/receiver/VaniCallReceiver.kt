@@ -29,11 +29,21 @@ class VaniCallReceiver : BroadcastReceiver() {
         val number = incomingNumber ?: CallStateStore.recall(context)
 
         when (intent.getStringExtra(TelephonyManager.EXTRA_STATE)) {
-            TelephonyManager.EXTRA_STATE_RINGING -> VaniCallRouter.onRinging(context, number)
-            TelephonyManager.EXTRA_STATE_OFFHOOK -> VaniCallRouter.onAnswered(context, number)
+            TelephonyManager.EXTRA_STATE_RINGING -> {
+                if (!com.vericall.calling.VaniCallManager.hasActiveTelecomCall()) {
+                    VaniCallRouter.onRinging(context, number)
+                }
+            }
+            TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                if (!com.vericall.calling.VaniCallManager.hasActiveTelecomCall()) {
+                    VaniCallRouter.onAnswered(context, number)
+                }
+            }
             TelephonyManager.EXTRA_STATE_IDLE -> {
-                VaniCallRouter.onEnded(context)
-                CallStateStore.clear(context)
+                if (!com.vericall.calling.VaniCallManager.hasActiveTelecomCall()) {
+                    VaniCallRouter.onEnded(context)
+                    CallStateStore.clear(context)
+                }
             }
         }
     }

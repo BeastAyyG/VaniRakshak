@@ -12,6 +12,8 @@ import logging
 from typing import Dict, List, Optional
 from pathlib import Path
 import numpy as np
+import re
+import wave
 from dotenv import load_dotenv
 
 # Ensure UTF-8 output
@@ -63,9 +65,16 @@ def get_local_whisper_model():
     if _local_whisper is None:
         try:
             from faster_whisper import WhisperModel
-            logger.info("Loading local Faster-Whisper model (tiny) for instant on-device ASR...")
-            _local_whisper = WhisperModel("tiny", device="cpu", compute_type="int8")
-            logger.info("Local Faster-Whisper model ready.")
+            for candidate in ["small", "base", "tiny"]:
+                try:
+                    logger.info(f"Loading local Faster-Whisper model ({candidate}) for multilingual Indian ASR...")
+                    _local_whisper = WhisperModel(candidate, device="cpu", compute_type="int8")
+                    logger.info(f"Local Faster-Whisper model ({candidate}) ready.")
+                    break
+                except Exception as ex_cand:
+                    logger.warning(f"Could not load Faster-Whisper ({candidate}): {ex_cand}")
+            if _local_whisper is None:
+                _local_whisper = "unavailable"
         except Exception as exc:
             logger.warning(f"Could not initialize local Faster-Whisper model: {exc}")
             _local_whisper = "unavailable"
@@ -86,7 +95,7 @@ def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000, channels: int
         return b""
     if (audio_bytes.startswith(b"RIFF") or 
         audio_bytes.startswith(b"ID3") or 
-        audio_bytes.startswith(b"\xff\xfb") or 
+        audio_bytes.startswith(b"\xff") or 
         audio_bytes.startswith(b"OggS") or 
         audio_bytes.startswith(b"fLaC")):
         return audio_bytes
@@ -161,57 +170,102 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
                         with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
                             pcm_raw = wf.readframes(wf.getnframes())
                             if pcm_raw:
+                                if len(pcm_raw) % 2 != 0:
+                                    pcm_raw = pcm_raw[:-1]
                                 audio_float = np.frombuffer(pcm_raw, dtype=np.int16).astype(np.float32) / 32768.0
                     except Exception:
-                        audio_float = np.frombuffer(audio_bytes[44:], dtype=np.int16).astype(np.float32) / 32768.0
-                elif not (audio_bytes.startswith(b"ID3") or audio_bytes.startswith(b"\xff\xfb") or audio_bytes.startswith(b"OggS")):
-                    # Raw 16-bit 16kHz mono PCM
-                    audio_float = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-
-                # Check energy
-                if audio_float is not None and len(audio_float) > 0:
-                    max_amp = float(np.max(np.abs(audio_float)))
-                    if max_amp < (300.0 / 32768.0):
-                        # Digital silence
-                        return {
-                            "engine": "Local Faster-Whisper (tiny)",
-                            "model": "whisper-tiny",
-                            "transcript": "",
-                            "hindi_text": "",
-                            "hinglish_text": "",
-                            "segments": [],
-                            "language_code": "en",
-                            "language": "English / Indic",
-                            "language_probability": 1.0,
-                            "duration": round(len(audio_float) / 16000.0, 2),
-                            "inference_sec": 0.001
-                        }
-                    transcribe_input = audio_float
-                else:
+                        raw = audio_bytes[44:]
+                        if len(raw) % 2 != 0:
+                            raw = raw[:-1]
+                        audio_float = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                elif audio_bytes.startswith(b"ID3") or audio_bytes.startswith(b"OggS") or audio_bytes.startswith(b"fLaC") or audio_bytes.startswith(b"\x1a\x45\xdf\xa3"):
+                    # Compressed container (MP3/OGG/FLAC/WebM)
                     import tempfile
-                    ext = ".wav" if audio_bytes.startswith(b"RIFF") else ".mp3"
+                    ext = ".ogg" if audio_bytes.startswith(b"OggS") else ".webm" if audio_bytes.startswith(b"\x1a\x45\xdf\xa3") else ".mp3"
                     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
                         tf.write(audio_bytes)
                         tf.flush()
                         temp_path = tf.name
                     transcribe_input = temp_path
+                else:
+                    # Raw 16-bit 16kHz mono PCM
+                    raw_pcm = audio_bytes if len(audio_bytes) % 2 == 0 else audio_bytes[:-1]
+                    audio_float = np.frombuffer(raw_pcm, dtype=np.int16).astype(np.float32) / 32768.0
 
-                # Do NOT use vad_filter=True as Silero VAD aggressively strips short streaming/phone audio chunks
+                # Check energy
+                if audio_float is not None:
+                    if len(audio_float) == 0:
+                        return {
+                            "engine": "Local Faster-Whisper",
+                            "model": "whisper-small",
+                            "transcript": "",
+                            "hindi_text": "",
+                            "hinglish_text": "",
+                            "segments": [],
+                            "language_code": "hi",
+                            "language": "Hindi / Indic",
+                            "language_probability": 1.0,
+                            "duration": 0.0,
+                            "inference_sec": 0.001
+                        }
+                    max_amp = float(np.max(np.abs(audio_float)))
+                    if max_amp < (200.0 / 32768.0):
+                        # Digital silence
+                        return {
+                            "engine": "Local Faster-Whisper",
+                            "model": "whisper-small",
+                            "transcript": "",
+                            "hindi_text": "",
+                            "hinglish_text": "",
+                            "segments": [],
+                            "language_code": "hi",
+                            "language": "Hindi / Indic",
+                            "language_probability": 1.0,
+                            "duration": round(len(audio_float) / 16000.0, 2),
+                            "inference_sec": 0.001
+                        }
+                    transcribe_input = audio_float
+
+                # Bilingual Indian context prompt prevents Whisper from translating Hindi into broken English
+                hindi_indic_prompt = (
+                    "नमस्ते, यह एक भारतीय फोन कॉल है जिसमें हिंदी, हिंग्लिश और अंग्रेजी में बातचीत हो रही है। "
+                    "बैंक खाता, ओटीपी, आधार, केवाईसी, बिजली बिल, पुलिस, सीबीआई।"
+                )
                 segs, info = local_whisper.transcribe(
                     transcribe_input,
-                    beam_size=1,
-                    vad_filter=False,
+                    task="transcribe",
+                    beam_size=3,
+                    best_of=3,
+                    temperature=0.0,
+                    vad_filter=True,
                     condition_on_previous_text=False,
-                    initial_prompt="VaniRakshak Indian phone conversation in Hindi, Hinglish, or English"
+                    initial_prompt=None
                 )
-                detected_lang = getattr(info, "language", "en") or "en"
+                detected_lang = getattr(info, "language", "hi") or "hi"
                 duration = float(getattr(info, "duration", 0.0) or 0.0)
+
+                # Filter out foreign language hallucinations on ambient noise (e.g. ja, zh, cy)
+                allowed_indic_langs = {"hi", "en", "mr", "bn", "ta", "te", "gu", "pa", "ur", "kn", "ml", "sa"}
+                if detected_lang not in allowed_indic_langs:
+                    return {
+                        "engine": "Local Faster-Whisper",
+                        "model": "whisper-small",
+                        "transcript": "",
+                        "hindi_text": "",
+                        "hinglish_text": "",
+                        "segments": [],
+                        "language_code": "hi",
+                        "language": "Hindi / Indic",
+                        "language_probability": 0.0,
+                        "duration": duration,
+                        "inference_sec": round(time.time() - t0, 3)
+                    }
                 
                 hallucinations = {
                     "you", "you.", "you you", "thank you", "thank you.", "thank you very much.",
                     "thank you very much", "bye", "bye.", "bye bye", "subtitles by",
                     "subtitle by", "translated by", "amara.org", "thanks for watching",
-                    "watching", "please subscribe", "subscribe"
+                    "watching", "please subscribe", "subscribe", "नहीं है।", "नहीं है"
                 }
 
                 parts = []
@@ -224,7 +278,18 @@ def transcribe_with_indic_conformer(audio_bytes: bytes) -> Dict:
                             "end": round(float(s.end), 1),
                             "text": clean_t
                         })
-                transcript = " ".join(parts).strip()
+
+                # Deduplicate repeated identical phrases (Whisper loop hallucination mitigation)
+                deduped_parts = []
+                for p in parts:
+                    sub_tokens = [tok.strip() for tok in re.split(r'[,।.\s]+', p) if tok.strip()]
+                    # If more than 3 words and <= 2 unique words, it is a degenerate repetition loop
+                    if len(sub_tokens) >= 3 and len(set(sub_tokens)) <= 2:
+                        continue
+                    if not deduped_parts or deduped_parts[-1].strip().lower() != p.strip().lower():
+                        deduped_parts.append(p)
+
+                transcript = " ".join(deduped_parts).strip()
                 inference_sec = time.time() - t0
                 used_engine = "Local Faster-Whisper (CTranslate2 INT8)"
             except Exception as e:

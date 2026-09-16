@@ -25,6 +25,7 @@ object VaniRiskBus {
         },
         val pSpoof: Float = synthetic / 100f,
         val transcript: String = "",
+        val utterances: List<com.vericall.model.TranscriptUtterance> = emptyList(),
         val scamType: String = "",
         val threatScore: Int = 0,
         val redFlags: List<String> = emptyList(),
@@ -37,7 +38,10 @@ object VaniRiskBus {
         val snrDb: Float = 18.0f,
         val vocoderFlatness: Float = 0.0f,
         val microTremor: Float = 0.0f,
-        val phaseJumps: Int = 0
+        val phaseJumps: Int = 0,
+        val crawlerStatus: String = "",
+        val sources: List<com.vericall.model.WebSourceItem> = emptyList(),
+        val factChecks: List<com.vericall.model.FactCheckItem> = emptyList()
     )
 
     private val listeners = LinkedHashSet<(Snapshot) -> Unit>()

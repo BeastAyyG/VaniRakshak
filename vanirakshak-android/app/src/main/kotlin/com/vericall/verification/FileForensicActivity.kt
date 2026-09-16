@@ -77,6 +77,11 @@ class FileForensicActivity : AppCompatActivity() {
             if (file.exists()) {
                 handleLocalFile(file)
             }
+        } else if (intent.action == Intent.ACTION_SEND) {
+            val audioUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: intent.data
+            if (audioUri != null) {
+                handleSelectedAudio(audioUri)
+            }
         }
     }
 

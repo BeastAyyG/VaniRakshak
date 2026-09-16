@@ -14,10 +14,10 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
-    <!-- Required from Android 14: an undeclared foreground service type makes
-         startForeground() throw MissingForegroundServiceTypeException. -->
+    <!-- Required from Android 14: foreground service types for call handling and mic -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
 
     <!-- Scam-Shield Coercion Defense: warning overlay over banking apps & usage polling -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -26,9 +26,20 @@
     <!-- Lets the incoming-call alert surface over the lock screen. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Required to reach the VaniRakshak backend over `adb reverse tcp:8000 tcp:8000`
-         (the app POSTs voice chunks to http://127.0.0.1:8000/v1/verify-speaker). -->
+    <!-- Required for Gemini API (claim verification, post-call analysis) and optional
+         remote VaniRakshak backend. Core transcription uses Android SpeechRecognizer
+         and works on-device; internet is needed only for enhanced cloud features. -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Required from Android 11+ (API 30+) for SpeechRecognizer to discover recognition engines -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.tts" />
+        <package android:name="com.google.android.as" />
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -128,10 +139,16 @@
             android:name=".verification.ScamResultActivity"
             android:exported="true" />
 
-        <!-- One-Shot Audio Forensic File Inspector -->
+        <!-- One-Shot Audio Forensic File Inspector (Supports Direct Share from WhatsApp/Files) -->
         <activity
             android:name=".verification.FileForensicActivity"
-            android:exported="true" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+        </activity>
 
         <!-- Production Contacts Roster Activity -->
         <activity
@@ -188,7 +205,7 @@
         <service
             android:name=".service.VaniCallGuardService"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone|phoneCall" />
 
         <!-- Scam-Shield OTP Interceptor: suppresses heads-up banking OTPs during high risk calls -->
         <service

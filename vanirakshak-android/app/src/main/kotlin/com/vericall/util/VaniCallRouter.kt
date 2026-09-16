@@ -172,6 +172,24 @@ object VaniCallRouter {
         dispatchCallIntent(context, cleanNumber)
     }
 
+    /**
+     * Workaround 2: Starts a VaniRakshak-Controlled VoIP call session.
+     * Uses MODE_IN_COMMUNICATION with 100% digital two-way forensic capture.
+     */
+    fun startVoipCall(context: Context, rawNumber: String, customName: String? = null, isSimulatedTest: Boolean = false) {
+        val caller = resolve(context, rawNumber)
+        val name = customName ?: caller.name
+        val intent = Intent(context, com.vericall.calling.VaniActiveCallActivity::class.java).apply {
+            putExtra(com.vericall.calling.VaniActiveCallActivity.EXTRA_CALL_NUMBER, rawNumber)
+            putExtra(com.vericall.calling.VaniActiveCallActivity.EXTRA_CALL_NAME, name)
+            putExtra(com.vericall.calling.VaniActiveCallActivity.EXTRA_IS_OUTGOING, true)
+            putExtra(com.vericall.calling.VaniActiveCallActivity.EXTRA_IS_VOIP_CALL, true)
+            putExtra(com.vericall.calling.VaniActiveCallActivity.EXTRA_IS_SIMULATED_VOIP, isSimulatedTest)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        context.startActivity(intent)
+    }
+
     private fun dispatchCallIntent(context: Context, cleanNumber: String) {
         val uri = Uri.parse("tel:${Uri.encode(cleanNumber)}")
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {

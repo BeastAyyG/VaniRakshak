@@ -7,9 +7,12 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.content.ContextCompat
+import com.vericall.config.VaniConfig
+import com.vericall.audio.VaniContinuousAudioEngine
 import com.vericall.audio.VaniKeywordTrigger
 import com.vericall.audio.VaniLiveVoiceAnalyzer
 import com.vericall.audio.VaniSpeakerVerifier
+import com.vericall.audio.VaniStreamingOrchestrator
 import com.vericall.model.RiskLevel
 import com.vericall.model.VaniContact
 import com.vericall.shield.VaniCoercionOverlay
@@ -19,23 +22,29 @@ import com.vericall.util.VaniNotificationHelper
 import com.vericall.util.VaniRiskBus
 
 /**
- * Sole owner of the microphone during a call.
+ * Sole owner of the microphone during a call (via VaniContinuousAudioEngine).
  *
- * Anything that wants live results - the ongoing notification, the guard screen -
- * subscribes to [VaniRiskBus]. Opening a second AudioRecord from the activity
- * would starve this one, so the activity must never do it.
+ * ARCHITECTURE (v2):
+ *   Creates a single [VaniContinuousAudioEngine] instance that:
+ *   - Opens AudioRecord ONCE at call start
+ *   - Distributes PCM to STT, acoustic analysis, streaming, and WAV recording
+ *   - Closes AudioRecord ONCE at call end
+ *
+ *   No more dual mic ownership. No more mic churn.
+ *
+ * Anything that wants live results subscribes to [VaniRiskBus].
  */
 class VaniCallGuardService : Service() {
 
-    private var analyzer: VaniLiveVoiceAnalyzer? = null
+    /** The single continuous audio engine — sole mic owner for the entire call */
+    private var audioEngine: VaniContinuousAudioEngine? = null
     private var foregroundWatcher: VaniForegroundWatcher? = null
     private var callerName: String = "Caller"
     private var activePhone: String? = null
     private var activeCallId: String? = null
     private var keywordTrigger: VaniKeywordTrigger? = null
 
-    /** Sent by the UI "Verify Speaker" button (or a keyword trigger) to ask the
-     *  backend model: "is this the enrolled target voice (Modi ji)?" */
+    /** Sent by the UI "Verify Speaker" button (or a keyword trigger) */
     companion object {
         const val ACTION_VERIFY_SPEAKER = "com.vericall.action.VERIFY_SPEAKER"
         const val EXTRA_KEYWORD_TRIGGER = "extra_keyword_trigger"
@@ -68,29 +77,54 @@ class VaniCallGuardService : Service() {
             foregroundWatcher = VaniForegroundWatcher(this).apply { start() }
         }
 
-        // Avoid stopping and restarting capture if already actively recording this ongoing call
-        if (analyzer != null && (activePhone == phone || activeCallId == incomingCallId)) {
+        // Avoid restarting if already actively capturing this call
+        if (audioEngine?.isEngineRunning == true && (activePhone == phone || activeCallId == incomingCallId)) {
+            android.util.Log.d("VaniCallGuardService", "Audio engine already active for $phone ($incomingCallId), skipping restart.")
             return START_NOT_STICKY
         }
 
         VaniNotificationHelper.createChannels(this)
         val notif = VaniNotificationHelper.buildAnalyzingNotification(this, name, phone, enrolled)
+
+        // Robust FGS start: handles Android 14+ background restriction exemptions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                VaniNotificationHelper.ID_LIVE,
-                notif,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
+            try {
+                startForeground(
+                    VaniNotificationHelper.ID_LIVE,
+                    notif,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                )
+            } catch (e: SecurityException) {
+                android.util.Log.w("VaniCallGuardService", "Microphone FGS restricted, attempting phoneCall FGS: ${e.message}")
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        startForeground(
+                            VaniNotificationHelper.ID_LIVE,
+                            notif,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                        )
+                    } else {
+                        startForeground(VaniNotificationHelper.ID_LIVE, notif)
+                    }
+                } catch (e2: Exception) {
+                    android.util.Log.e("VaniCallGuardService", "Fallback FGS start failed: ${e2.message}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VaniCallGuardService", "FGS start failed: ${e.message}")
+                runCatching { startForeground(VaniNotificationHelper.ID_LIVE, notif) }
+            }
         } else {
             startForeground(VaniNotificationHelper.ID_LIVE, notif)
         }
 
-        analyzer?.stopListening()
+        // Stop any existing engine before starting fresh
+        audioEngine?.stop()
+        audioEngine = null
         activePhone = phone
         activeCallId = incomingCallId
         VaniRiskBus.activeCallId = incomingCallId
 
-        // Listen for the manual "Verify Speaker" broadcast (fired by the UI button).
+        // Listen for the manual "Verify Speaker" broadcast
         registerReceiver(
             verifyReceiver,
             android.content.IntentFilter(ACTION_VERIFY_SPEAKER),
@@ -122,7 +156,17 @@ class VaniCallGuardService : Service() {
             isVoiceEnrolled = enrolled
         )
 
-        analyzer = VaniLiveVoiceAnalyzer(this).apply {
+        // ═══════════════════════════════════════════════════════════════════
+        // NEW v2 ARCHITECTURE:
+        // Single VaniContinuousAudioEngine owns the mic for the ENTIRE call.
+        // It distributes PCM to: STT, acoustic analysis, streaming, WAV.
+        // ═══════════════════════════════════════════════════════════════════
+
+        val engine = VaniContinuousAudioEngine(this@VaniCallGuardService)
+
+        // Set up acoustic analyzer as a consumer (no mic ownership)
+        val analyzer = VaniLiveVoiceAnalyzer(this@VaniCallGuardService).apply {
+            startAnalysis(contact)
             onRiskUpdated = { risk, synthetic, speakerMatch, level, message ->
                 val prev = VaniRiskBus.last
                 val snapshot = prev?.copy(
@@ -145,38 +189,60 @@ class VaniCallGuardService : Service() {
                     risk, synthetic, speakerMatch, level, message, enrolled
                 )
             }
-            onAmplitudeUpdated = { VaniRiskBus.publishAmplitude(it) }
-            startListening(contact, incomingCallId)
+        }
+        engine.acousticAnalyzer = analyzer
+
+        // Set up remote streaming orchestrator (no-op if no backend configured)
+        if (VaniConfig.hasRemoteBackend(this)) {
+            engine.streamingOrchestrator = VaniStreamingOrchestrator(this@VaniCallGuardService)
         }
 
-        // OPT-IN keyword trigger. SpeechRecognizer also uses the mic, so only enable when the
-        // live analyzer is paused; left off by default to keep the manual verify path reliable.
-        if (intent?.getBooleanExtra(EXTRA_KEYWORD_TRIGGER, false) == true) {
-            startKeywordTrigger()
+        // Set up transcript callback: feed utterances directly to VaniRiskBus so UI updates immediately
+        engine.onTranscriptUpdated = { utterances ->
+            val prev = VaniRiskBus.last
+            val fullText = utterances.joinToString(" ") { it.text }
+            val baseSnapshot = prev ?: VaniRiskBus.Snapshot(
+                risk = 0, synthetic = 0, speakerMatch = 50,
+                level = RiskLevel.SAFE, message = "🛡 Protection Active"
+            )
+            VaniRiskBus.publish(
+                baseSnapshot.copy(
+                    transcript = fullText,
+                    utterances = utterances
+                )
+            )
         }
+
+        // Set up scam alert callback
+        engine.onScamAlert = { detection ->
+            val prev = VaniRiskBus.last
+            val alertLevel = when {
+                detection.threatScore >= 70 -> RiskLevel.DANGER
+                detection.threatScore >= 35 -> RiskLevel.WARNING
+                else -> RiskLevel.SAFE
+            }
+            VaniNotificationHelper.showLiveRiskNotification(
+                this@VaniCallGuardService, name, phone,
+                detection.threatScore, prev?.synthetic ?: 0, prev?.speakerMatch ?: 50,
+                alertLevel, "⚠️ ${detection.redFlags.firstOrNull() ?: "Suspicious pattern"}", enrolled
+            )
+        }
+
+        // Start the continuous engine (opens mic ONCE)
+        engine.start(incomingCallId, callerName = name, callerPhone = phone)
+        audioEngine = engine
+
+        android.util.Log.i("VaniCallGuardService",
+            "═══ v2 Architecture: VaniContinuousAudioEngine is sole mic owner ═══")
 
         return START_NOT_STICKY
     }
 
     /**
-     * Best-effort: listen for banking/transaction keywords, then auto-verify the speaker.
-     * Because it shares the mic with the analyzer, callers should pause the analyzer first.
-     */
-    private fun startKeywordTrigger() {
-        if (keywordTrigger != null) return
-        keywordTrigger = VaniKeywordTrigger(this, TRIGGER_KEYWORDS) { _ ->
-            triggerSpeakerVerify()
-        }
-        keywordTrigger?.start()
-    }
-
-    /**
-     * Grab the last ~2s of call audio, ask the backend model "is this the enrolled
-     * target voice (Modi ji)?", and publish the verdict on the same risk bus the UI
-     * already renders. This is an IDENTITY check — never a "synthetic/clone" claim.
+     * Grab the last ~2s of call audio for speaker verification.
      */
     private fun triggerSpeakerVerify() {
-        val pcm = analyzer?.getRecentPcm(2.0f) ?: ShortArray(0)
+        val pcm = audioEngine?.getRecentPcm(2.0f) ?: ShortArray(0)
         if (pcm.isEmpty()) {
             VaniRiskBus.publish(
                 VaniRiskBus.Snapshot(
@@ -208,8 +274,50 @@ class VaniCallGuardService : Service() {
     }
 
     override fun onDestroy() {
-        analyzer?.stopListening()
-        analyzer = null
+        val lastUtterances = audioEngine?.getTranscript() ?: emptyList()
+        val lastSnapshot = VaniRiskBus.last
+        val callId = activeCallId ?: VaniRiskBus.activeCallId
+
+        // Stop the continuous audio engine (closes mic ONCE)
+        audioEngine?.stop()
+        audioEngine = null
+
+        // Safety fallback: ensure any captured speech is preserved in call history
+        if (!callId.isNullOrBlank()) {
+            val existing = com.vericall.data.VaniCallHistoryRepository.getCallById(this, callId)
+            val utterances = when {
+                lastUtterances.isNotEmpty() -> lastUtterances
+                !lastSnapshot?.utterances.isNullOrEmpty() -> lastSnapshot.utterances
+                !lastSnapshot?.transcript.isNullOrBlank() -> listOf(
+                    com.vericall.model.TranscriptUtterance(speaker = "You", text = lastSnapshot.transcript)
+                )
+                else -> emptyList()
+            }
+            if (existing != null && !existing.hasTranscript && utterances.isNotEmpty()) {
+                val updated = existing.copy(
+                    hasTranscript = true,
+                    transcript = utterances
+                )
+                com.vericall.data.VaniCallHistoryRepository.saveCallRecord(this, updated)
+            } else if (existing == null && utterances.isNotEmpty()) {
+                val newRecord = com.vericall.model.VaniCallRecord(
+                    id = callId,
+                    number = activePhone ?: "",
+                    callerName = callerName,
+                    direction = com.vericall.model.CallDirection.INCOMING,
+                    timestamp = System.currentTimeMillis(),
+                    durationSec = 0,
+                    hasTranscript = true,
+                    transcript = utterances,
+                    riskScore = lastSnapshot?.risk ?: 0,
+                    riskLevel = lastSnapshot?.level?.name ?: "SAFE",
+                    isVoiceVerified = false,
+                    isProtected = (lastSnapshot?.risk ?: 0) >= 50
+                )
+                com.vericall.data.VaniCallHistoryRepository.saveCallRecord(this, newRecord)
+            }
+        }
+
         activePhone = null
         keywordTrigger?.stop()
         keywordTrigger = null
@@ -219,7 +327,6 @@ class VaniCallGuardService : Service() {
         foregroundWatcher = null
         VaniCoercionOverlay.hide(this)
 
-        val lastSnapshot = VaniRiskBus.last
         VaniScamShieldController.onCallEnded(this, lastSnapshot)
 
         lastSnapshot?.let { snapshot ->

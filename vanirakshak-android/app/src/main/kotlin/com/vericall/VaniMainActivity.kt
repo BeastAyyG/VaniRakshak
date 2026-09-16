@@ -102,6 +102,11 @@ class VaniMainActivity : AppCompatActivity() {
         VaniNotificationHelper.createChannels(this)
         requestPermissionsIfMissing()
 
+        // Audit device telephony audio capabilities in background
+        Thread({
+            com.vericall.audio.VaniCallAudioCapability.getCapabilities(this@VaniMainActivity)
+        }, "VaniAudioCapProbe").start()
+
         // Shield Status Pill in Header switches to Shield Tab; long-press opens IP config
         binding.pillHeaderShield.setOnClickListener {
             switchTab(Tab.SHIELD)
@@ -411,6 +416,31 @@ class VaniMainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Enter a phone number to dial", Toast.LENGTH_SHORT).show()
             }
         }
+
+        binding.btnKeypadCall.setOnLongClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            val number = keypadBuffer.toString().trim()
+            showCallModeSelectionDialog(number.ifBlank { "+91 98765 43210" })
+            true
+        }
+    }
+
+    private fun showCallModeSelectionDialog(number: String) {
+        val options = arrayOf(
+            "🌐 Vani Secure VoIP Call (Workaround 2 — 100% Digital Two-Way Stream)",
+            "🧪 VoIP Fraud Simulation (Cyber Arrest Test)",
+            "📱 Cellular Phone Call (Standard SIM)"
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Select Call Mode")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> VaniCallRouter.startVoipCall(this, number, isSimulatedTest = false)
+                    1 -> VaniCallRouter.startVoipCall(this, number, isSimulatedTest = true)
+                    2 -> VaniCallRouter.makeProperPhoneCall(this, number)
+                }
+            }
+            .show()
     }
 
     private fun appendKeypadDigit(char: Char) {

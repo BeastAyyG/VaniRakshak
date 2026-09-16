@@ -87,6 +87,25 @@ class VaniContactDetailActivity : AppCompatActivity() {
             VaniCallRouter.makeProperPhoneCall(this, contact.phone)
         }
 
+        binding.btnContactCall.setOnLongClickListener {
+            val options = arrayOf(
+                "🌐 Vani Secure VoIP Call (Workaround 2 — 100% Digital Two-Way Stream)",
+                "🧪 VoIP Fraud Simulation (Cyber Arrest Test)",
+                "📱 Cellular Phone Call (Standard SIM)"
+            )
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Select Call Mode")
+                .setItems(options) { _, which ->
+                    when (which) {
+                        0 -> VaniCallRouter.startVoipCall(this, contact.phone, contact.name, isSimulatedTest = false)
+                        1 -> VaniCallRouter.startVoipCall(this, contact.phone, contact.name, isSimulatedTest = true)
+                        2 -> VaniCallRouter.makeProperPhoneCall(this, contact.phone)
+                    }
+                }
+                .show()
+            true
+        }
+
         binding.btnContactMessage.setOnClickListener {
             val smsIntent = Intent(Intent.ACTION_VIEW).apply {
                 data = Uri.parse("sms:${contact.phone}")

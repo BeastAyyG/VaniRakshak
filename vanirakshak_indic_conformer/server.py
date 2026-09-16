@@ -10,6 +10,7 @@ import sys
 import re
 import time
 import json
+import asyncio
 import logging
 import urllib.parse
 from typing import List, Optional
@@ -243,9 +244,15 @@ Return ONLY valid JSON matching this schema:
             
     # Heuristic Threat Matrix for English, Hindi, and Hinglish speech
     lower_t = transcript.lower()
+    try:
+        from backend.services.asr.transliteration import HinglishTransliterationService
+        hinglish = HinglishTransliterationService().to_hinglish(transcript).lower()
+        lower_t = f"{lower_t} {hinglish}"
+    except Exception:
+        pass
     
     # 1. Digital Arrest / Law Enforcement Impersonation
-    if any(k in lower_t for k in ["police", "cbi", "arrest", "customs", "fedex", "narcotics", "parcel", "illegal", "drugs", "surveillance", "mumbai airport"]):
+    if any(k in lower_t for k in ["police", "cbi", "arrest", "customs", "fedex", "narcotics", "parcel", "illegal", "drugs", "surveillance", "mumbai airport", "पुलिस", "सीबीआई", "गिरफ्तारी", "कस्टम", "पार्सल", "नशीली", "अवैध"]):
         return {
             "is_scam": True,
             "threat_level": "CRITICAL_SCAM",
@@ -261,7 +268,7 @@ Return ONLY valid JSON matching this schema:
         }
 
     # 2. Electricity / Utility Disconnection Phishing
-    if any(k in lower_t for k in ["electricity", "bijli", "bajali", "disconnection", "aaj raat", "nobhaji", "9 baje", "bill bakaya", "power cut", "cut off"]):
+    if any(k in lower_t for k in ["electricity", "bijli", "bajali", "disconnection", "aaj raat", "nobhaji", "9 baje", "bill bakaya", "power cut", "cut off", "बिजली", "बिल", "बकाया", "काट दी जाएगी", "रात 9 बजे", "कट जाएगी"]):
         return {
             "is_scam": True,
             "threat_level": "CRITICAL_SCAM",
@@ -277,7 +284,7 @@ Return ONLY valid JSON matching this schema:
         }
 
     # 3. Bank Account / KYC / Card Expiry Scam
-    if any(k in lower_t for k in ["kyc", "expire", "expired", "block", "blocked", "freeze", "sbi", "rbi", "debit card", "credit card", "hdfc", "icici", "pnb"]):
+    if any(k in lower_t for k in ["kyc", "expire", "expired", "block", "blocked", "freeze", "sbi", "rbi", "debit card", "credit card", "hdfc", "icici", "pnb", "केवाईसी", "खाता", "अकाउंट", "अकाुन्ट", "बंद हो जाएगा", "ब्लॉक", "एक्सपायर", "फ्रीज"]):
         return {
             "is_scam": True,
             "threat_level": "CRITICAL_SCAM",
@@ -293,7 +300,7 @@ Return ONLY valid JSON matching this schema:
         }
 
     # 4. Sensitive Credential / Remote Access Solicitation
-    if any(k in lower_t for k in ["otp", "pin", "cvv", "password", "anydesk", "teamviewer", "quicksupport", "share screen", "apk"]):
+    if any(k in lower_t for k in ["otp", "pin", "cvv", "password", "anydesk", "teamviewer", "quicksupport", "share screen", "apk", "ओटीपी", "पिन", "पासवर्ड", "सीवीवी", "स्क्रीन शेयर"]):
         return {
             "is_scam": True,
             "threat_level": "CRITICAL_SCAM",
@@ -309,7 +316,7 @@ Return ONLY valid JSON matching this schema:
         }
 
     # 5. SIM / TRAI Disconnection Scam
-    if any(k in lower_t for k in ["trai", "sim card", "mobile number block", "dot", "telecom"]):
+    if any(k in lower_t for k in ["trai", "sim card", "mobile number block", "dot", "telecom", "सिम", "मोबाइल नंबर ब्लॉक"]):
         return {
             "is_scam": True,
             "threat_level": "CRITICAL_SCAM",
@@ -730,6 +737,28 @@ class LiveCallSession:
         self.red_flags = []
         self.is_completed = False
 
+        # Continuous Crawl4AI WebScraping State
+        self.sources: list[dict] = []
+        self.fact_checks: list[dict] = []
+        self.crawled_queries: set[str] = set()
+        self.crawler_active: bool = False
+        self.crawler_pending: bool = False
+        self.crawler_status: str = "Idle"
+        self.websockets: set[WebSocket] = set()
+
+    def get_clean_sources(self) -> list[dict]:
+        """Returns compact web sources without massive raw markdown for low-latency JSON delivery."""
+        return [
+            {
+                "url": s.get("url", ""),
+                "title": s.get("title", "Web Evidence"),
+                "status": s.get("status", 200),
+                "scraped_chars": s.get("scraped_chars", 0),
+                "snippet": s.get("snippet", "")
+            }
+            for s in self.sources
+        ]
+
     def to_dict(self):
         return {
             "call_id": self.call_id,
@@ -741,10 +770,123 @@ class LiveCallSession:
             "scam_type": self.scam_type,
             "action_advice": self.action_advice,
             "red_flags": self.red_flags,
-            "is_completed": self.is_completed
+            "is_completed": self.is_completed,
+            "crawler_status": self.crawler_status,
+            "sources": self.get_clean_sources(),
+            "fact_checks": self.fact_checks
         }
 
 active_call_sessions: dict[str, LiveCallSession] = {}
+
+
+async def broadcast_session_update(session: LiveCallSession, event_name: str = "stream_update", extra: Optional[dict] = None):
+    payload = {
+        "event": event_name,
+        "call_id": session.call_id,
+        **session.to_dict()
+    }
+    if extra:
+        payload.update(extra)
+
+    dead_sockets = set()
+    for ws in list(session.websockets):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead_sockets.add(ws)
+    session.websockets.difference_update(dead_sockets)
+
+
+async def run_continuous_crawl(session: LiveCallSession, client: Optional[genai.Client]):
+    """
+    Non-blocking continuous Crawl4AI webscraping worker for live phone calls.
+    Fires in the background on PC as statements and claims accumulate from the phone.
+    """
+    if session.crawler_active:
+        session.crawler_pending = True
+        return
+
+    session.crawler_active = True
+    try:
+        while True:
+            text = session.full_transcript.strip()
+            if len(text) < 10 or session.is_completed:
+                break
+
+            is_scam = (session.threat_score >= 40)
+            query = build_search_query(text, is_scam=is_scam, scam_type=session.scam_type)
+            if not query or query.lower() in session.crawled_queries:
+                # Try falling back to the last segment if the full transcript query was already crawled
+                last_seg = session.transcript_segments[-1] if session.transcript_segments else ""
+                seg_query = build_search_query(last_seg, is_scam=is_scam, scam_type=session.scam_type)
+                if not seg_query or seg_query.lower() in session.crawled_queries:
+                    break
+                query = seg_query
+
+            session.crawled_queries.add(query.lower())
+            session.crawler_status = f"🔍 Crawl4AI searching: '{query[:35]}'..."
+            logger.info(f"[Crawl4AI Gateway] Starting continuous live scrape for call {session.call_id}: '{query}'")
+            await broadcast_session_update(session, event_name="crawler_progress")
+
+            try:
+                # Crawl live web evidence asynchronously using Crawl4AI (headless Chromium)
+                scraped = await discover_and_crawl_sources(
+                    query_text=text,
+                    is_scam=is_scam,
+                    scam_type=session.scam_type
+                )
+
+                if scraped:
+                    existing_urls = {s.get("url") for s in session.sources}
+                    new_sources = [s for s in scraped if s.get("url") not in existing_urls]
+                    session.sources.extend(new_sources)
+
+                    # Run grounding evaluation
+                    fact_res = evaluate_fact_with_gemini(text, session.sources, client)
+                    verdict = fact_res.get("verdict", "UNVERIFIABLE")
+                    confidence = fact_res.get("confidence", 75)
+                    summary = fact_res.get("summary", "")
+                    reasoning = fact_res.get("reasoning", "")
+
+                    fact_item = {
+                        "claim": text[-140:] if len(text) > 140 else text,
+                        "verdict": verdict,
+                        "confidence": confidence,
+                        "summary": summary,
+                        "reasoning": reasoning,
+                        "evidence": scraped[0].get("snippet", "") if scraped else "",
+                        "source": scraped[0].get("title", scraped[0].get("url", "")) if scraped else "",
+                        "timestamp": time.time()
+                    }
+                    session.fact_checks.append(fact_item)
+
+                    # Escalate threat score if live web evidence confirms a known fraud/contradiction
+                    if verdict in ["FRAUDULENT_CLAIM", "CONTRADICTED", "SCAM"]:
+                        session.threat_score = max(session.threat_score, 88)
+                        session.threat_level = "CRITICAL_SCAM" if session.threat_score >= 80 else "SUSPICIOUS"
+                        if not session.scam_type or session.scam_type == "Normal Conversation":
+                            session.scam_type = "Debunked Fraud Scheme (Crawl4AI Verified)"
+                        if summary:
+                            session.action_advice = f"🚨 CRAWL4AI ALERT: {summary}"
+
+                    session.crawler_status = f"✓ Scraped {len(session.sources)} live web sources"
+                    logger.info(f"[Crawl4AI Gateway] ✓ Evidence updated for call {session.call_id}: {len(session.sources)} sources, verdict={verdict}")
+
+                    # Broadcast evidence_update frame to phone and UI
+                    await broadcast_session_update(session, event_name="evidence_update")
+                else:
+                    session.crawler_status = "No authoritative web sources found for query"
+                    await broadcast_session_update(session, event_name="crawler_progress")
+
+            except Exception as crawl_err:
+                logger.warning(f"[Crawl4AI Gateway] Error in background crawl: {crawl_err}")
+                session.crawler_status = f"Crawl error: {str(crawl_err)[:40]}"
+
+            if not session.crawler_pending or session.is_completed:
+                break
+            session.crawler_pending = False
+    finally:
+        session.crawler_active = False
 
 
 @app.get("/api/stream/calls")
@@ -756,21 +898,27 @@ async def list_active_calls():
 
 
 @app.websocket("/ws/live-call-stream")
-async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Query(None)):
+async def websocket_call_stream(
+    websocket: WebSocket,
+    call_id: Optional[str] = Query(None),
+    caller: Optional[str] = Query("Unknown")
+):
     """
     Bidirectional Real-Time Audio Streaming for Mobile/VoIP Main App.
     Accepts raw binary PCM/WebM chunks or JSON control events.
     Pushes instantaneous threat scores, transcripts, and emergency directives.
+    Concurrently executes continuous Crawl4AI webscraping on the PC in the background.
     """
     await websocket.accept()
     if not call_id:
         call_id = f"call_{int(time.time())}"
 
     if call_id not in active_call_sessions:
-        active_call_sessions[call_id] = LiveCallSession(call_id=call_id)
+        active_call_sessions[call_id] = LiveCallSession(call_id=call_id, caller=caller or "Unknown")
     session = active_call_sessions[call_id]
+    session.websockets.add(websocket)
 
-    logger.info(f"[LiveStream] WebSocket connected for call_id: {call_id}")
+    logger.info(f"[LiveStream Gateway] Client connected to live call stream: {call_id} (caller: {session.caller})")
     client = get_gemini_client()
 
     try:
@@ -783,7 +931,14 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
         })
 
         while True:
-            message = await websocket.receive()
+            try:
+                message = await websocket.receive()
+            except (WebSocketDisconnect, RuntimeError):
+                break
+
+            if message.get("type") == "websocket.disconnect":
+                break
+
             session.last_activity = time.time()
 
             # A) Binary audio chunk streamed from mobile app
@@ -792,36 +947,34 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
                 session.audio_buffer.extend(raw_chunk)
                 session.full_audio_bytes.extend(raw_chunk)
 
-                # Evaluate buffer periodically (every ~64KB ~ 2.0s audio with 0.5s overlap)
-                if len(session.audio_buffer) >= 64000:
+                # Evaluate buffer periodically (every ~32KB ~ 1.0s audio with ~0.25s overlap for snappy live ASR)
+                if len(session.audio_buffer) >= 32000:
                     chunk_to_process = bytes(session.audio_buffer)
-                    # Retain 0.5s (16,000 bytes) overlap so words across chunk boundaries aren't severed
-                    session.audio_buffer = bytearray(session.audio_buffer[-16000:])
+                    # Retain ~0.25s (8,000 bytes) overlap so words across chunk boundaries aren't severed
+                    session.audio_buffer = bytearray(session.audio_buffer[-8000:])
                     try:
                         res = transcribe_with_indic_conformer(chunk_to_process)
                         new_text = (res.get("transcript") or "").strip()
                         if new_text and len(new_text) >= 2:
+                            logger.info(f"[LiveStream Gateway] Transcribed chunk for {session.call_id}: '{new_text}'")
                             # Deduplicate if this exact text was just added
                             if not session.transcript_segments or session.transcript_segments[-1].lower() != new_text.lower():
                                 session.transcript_segments.append(new_text)
                                 session.full_transcript = " ".join(session.transcript_segments)
 
-                                # Re-evaluate threat matrix
-                                threat = evaluate_threat_and_scam(session.full_transcript, client)
-                                session.threat_score = threat.get("risk_score", 0)
-                                session.threat_level = threat.get("threat_level", "SAFE")
-                                session.scam_type = threat.get("scam_type", "Normal Conversation")
-                                session.action_advice = threat.get("action_advice", "")
-                                session.red_flags = threat.get("red_flags", [])
+                                # Fast offline threat scoring (heuristic only, zero blocking network calls)
+                                threat = evaluate_threat_and_scam(session.full_transcript, None)
+                                session.threat_score = max(session.threat_score, threat.get("risk_score", 0))
+                                session.threat_level = threat.get("threat_level", session.threat_level)
+                                if threat.get("scam_type") and threat.get("scam_type") != "Normal Conversation":
+                                    session.scam_type = threat.get("scam_type")
+                                if threat.get("action_advice"):
+                                    session.action_advice = threat.get("action_advice")
+                                session.red_flags = threat.get("red_flags", session.red_flags)
 
-                                await websocket.send_json({
-                                    "event": "stream_update",
-                                    "call_id": call_id,
-                                    "incremental_text": new_text,
-                                    **session.to_dict()
-                                })
+                                await broadcast_session_update(session, event_name="stream_update", extra={"incremental_text": new_text})
                     except Exception as e:
-                        logger.warning(f"[LiveStream] Buffer transcription warning: {e}")
+                        logger.warning(f"[LiveStream Gateway] Buffer transcription warning: {e}")
 
             # B) Text / JSON control frames
             elif "text" in message and message["text"]:
@@ -837,18 +990,21 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
                             session.full_transcript = " ".join(session.transcript_segments)
 
                             threat = evaluate_threat_and_scam(session.full_transcript, client)
-                            session.threat_score = threat.get("risk_score", 0)
-                            session.threat_level = threat.get("threat_level", "SAFE")
-                            session.scam_type = threat.get("scam_type", "Normal Conversation")
-                            session.action_advice = threat.get("action_advice", "")
-                            session.red_flags = threat.get("red_flags", [])
+                            session.threat_score = max(session.threat_score, threat.get("risk_score", 0))
+                            session.threat_level = threat.get("threat_level", session.threat_level)
+                            if threat.get("scam_type") and threat.get("scam_type") != "Normal Conversation":
+                                session.scam_type = threat.get("scam_type")
+                            if threat.get("action_advice"):
+                                session.action_advice = threat.get("action_advice")
+                            session.red_flags = threat.get("red_flags", session.red_flags)
 
-                            await websocket.send_json({
-                                "event": "stream_update",
-                                "call_id": call_id,
-                                "incremental_text": chunk_text,
-                                **session.to_dict()
-                            })
+                            await broadcast_session_update(session, event_name="stream_update", extra={"incremental_text": chunk_text})
+
+                            # Disabled Crawl4AI per user mandate: focus exclusively on live transcription
+                            pass
+
+                    elif event_type == "trigger_crawl":
+                        pass
 
                     elif event_type == "end_call":
                         # Final pass over full accumulated audio if needed
@@ -860,20 +1016,18 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
                                     session.full_transcript = cand
                                     session.transcript_segments = [cand]
                                     threat = evaluate_threat_and_scam(session.full_transcript, client)
-                                    session.threat_score = threat.get("risk_score", 0)
-                                    session.threat_level = threat.get("threat_level", "SAFE")
-                                    session.scam_type = threat.get("scam_type", "Normal Conversation")
-                                    session.action_advice = threat.get("action_advice", "")
-                                    session.red_flags = threat.get("red_flags", [])
+                                    session.threat_score = max(session.threat_score, threat.get("risk_score", 0))
+                                    session.threat_level = threat.get("threat_level", session.threat_level)
+                                    if threat.get("scam_type"):
+                                        session.scam_type = threat.get("scam_type")
+                                    if threat.get("action_advice"):
+                                        session.action_advice = threat.get("action_advice")
+                                    session.red_flags = threat.get("red_flags", session.red_flags)
                             except Exception as fe:
-                                logger.warning(f"[LiveStream] End-call fallback transcription warning: {fe}")
+                                logger.warning(f"[LiveStream Gateway] End-call fallback transcription warning: {fe}")
 
                         session.is_completed = True
-                        await websocket.send_json({
-                            "event": "call_completed",
-                            "call_id": call_id,
-                            **session.to_dict()
-                        })
+                        await broadcast_session_update(session, event_name="call_completed")
                         break
 
                     elif event_type == "ping":
@@ -883,25 +1037,11 @@ async def websocket_call_stream(websocket: WebSocket, call_id: Optional[str] = Q
                     pass
 
     except WebSocketDisconnect:
-        logger.info(f"[LiveStream] Client disconnected from call: {call_id}")
+        logger.info(f"[LiveStream Gateway] Client disconnected from call: {call_id}")
     except Exception as exc:
-        logger.error(f"[LiveStream] Error in WebSocket stream: {exc}", exc_info=True)
+        logger.error(f"[LiveStream Gateway] Error in WebSocket stream: {exc}", exc_info=True)
     finally:
-        if (not session.full_transcript or len(session.full_transcript) < 5) and len(session.full_audio_bytes) >= 16000:
-            try:
-                final_res = transcribe_with_indic_conformer(bytes(session.full_audio_bytes))
-                cand = (final_res.get("transcript") or "").strip()
-                if cand:
-                    session.full_transcript = cand
-                    session.transcript_segments = [cand]
-                    threat = evaluate_threat_and_scam(session.full_transcript, client)
-                    session.threat_score = threat.get("risk_score", 0)
-                    session.threat_level = threat.get("threat_level", "SAFE")
-                    session.scam_type = threat.get("scam_type", "Normal Conversation")
-                    session.action_advice = threat.get("action_advice", "")
-                    session.red_flags = threat.get("red_flags", [])
-            except Exception:
-                pass
+        session.websockets.discard(websocket)
         session.is_completed = True
 
 
@@ -932,11 +1072,15 @@ async def ingest_call_chunk(
             session.full_transcript = " ".join(session.transcript_segments)
 
             threat = evaluate_threat_and_scam(session.full_transcript, client)
-            session.threat_score = threat.get("risk_score", 0)
-            session.threat_level = threat.get("threat_level", "SAFE")
-            session.scam_type = threat.get("scam_type", "Normal Conversation")
-            session.action_advice = threat.get("action_advice", "")
-            session.red_flags = threat.get("red_flags", [])
+            session.threat_score = max(session.threat_score, threat.get("risk_score", 0))
+            session.threat_level = threat.get("threat_level", session.threat_level)
+            if threat.get("scam_type") and threat.get("scam_type") != "Normal Conversation":
+                session.scam_type = threat.get("scam_type")
+            if threat.get("action_advice"):
+                session.action_advice = threat.get("action_advice")
+            session.red_flags = threat.get("red_flags", session.red_flags)
+
+            asyncio.create_task(run_continuous_crawl(session, client))
 
         if is_final:
             session.is_completed = True
@@ -1010,10 +1154,10 @@ async def finalize_call(
         scam_type = threat_data.get("scam_type", "")
         red_flags = threat_data.get("red_flags", [])
 
-        # Fact checking with Crawl4AI
+        # Fact checking with Crawl4AI (disabled per user mandate for fast performance)
         fact_checks = []
         sources = []
-        if verify_fact and final_text and len(final_text) >= 10:
+        if False and verify_fact and final_text and len(final_text) >= 10:
             sources = await discover_and_crawl_sources(
                 query_text=final_text,
                 user_urls=None,

@@ -197,9 +197,20 @@ class VaniCallDetailActivity : AppCompatActivity() {
             binding.recyclerDetailTranscript.adapter = adapter
             binding.recyclerDetailTranscript.visibility = View.VISIBLE
         } else {
-            binding.tvDetailStatusTag.text = "Not Monitored"
-            binding.tvDetailStatusTag.setTextColor(ContextCompat.getColor(this, R.color.text_tertiary))
-            binding.tvDetailSummaryText.visibility = View.GONE
+            val isMonitored = record.durationSec > 0 && (!record.audioFilePath.isNullOrBlank() || record.riskScore > 0 || record.isProtected)
+            binding.tvDetailStatusTag.text = if (isMonitored) "Monitored • No Speech" else "Not Monitored"
+            binding.tvDetailStatusTag.setTextColor(
+                ContextCompat.getColor(
+                    this,
+                    if (isMonitored) R.color.brand_primary else R.color.text_tertiary
+                )
+            )
+            binding.tvDetailSummaryText.text = if (isMonitored) {
+                "VaniRakshak active guard was engaged during this call, but no audible speech was detected."
+            } else {
+                "No transcript recorded for this call."
+            }
+            binding.tvDetailSummaryText.visibility = View.VISIBLE
             binding.recyclerDetailTranscript.visibility = View.GONE
             binding.tvDetailEmptyTranscript.visibility = View.VISIBLE
         }
