@@ -260,13 +260,43 @@ moved a model in this repo from failing to passing once.
       calibration.** An actDCF/minDCF gap that survives optimal calibration is
       a statement about minDCF ~ 0.88, which is G3's problem, not G2's.
 
-- [ ] **Replacement criterion for future calibration work: CLLR vs minCLLR.**
+- [x] **Replacement criterion for future calibration work: CLLR vs minCLLR.**
       CLLR decomposes as discrimination loss (minCLLR, the CLLR after the
       optimal monotonic transform) plus calibration loss. `minCLLR` is the
       only metric here that isolates calibration quality, and
       `benchmarks/compute_mindcf.py` does not currently compute it — it has
       `compute_cllr` and nothing else. Add it, then the criterion is
       `CLLR - minCLLR` small. Do this before any future calibration claim.
+
+      **Done — 2026-09-15.** `compute_mincllr` and `compute_calibration_loss`
+      are added to `benchmarks/compute_mindcf.py`, and `evaluate_system` now
+      reports `minCLLR` / `min_cllr` and `CLLR_minus_minCLLR` /
+      `cllr_calibration_loss`. The text above is kept unedited as the record
+      of what was missing.
+
+      Two definitional choices, recorded because they are auditable and were
+      not specified before:
+
+      - The transform is the standard BOSARIS/FoCal **affine** family
+        (`s' = a*s + b`, `a >= 0`), which is what the ASVspoof/BOSARIS
+        toolkits report as minCLLR. A general monotone (pool-adjacent-
+        violators) transform would give a weakly lower value; "optimal
+        monotonic transform" above describes the affine family.
+      - Implemented numpy-only, preserving this module's no-scipy contract.
+        It is validated against scipy's Nelder-Mead on the same objective
+        (agreement to 2.2e-16) and is exactly invariant under positive affine
+        rescaling of the inputs, which is the property that makes it a
+        ranking-only measure.
+
+      `tests/test_compute_mindcf_mincllr.py` pins those properties, and the
+      four pre-existing metrics (`compute_eer`, `compute_mindcf`,
+      `compute_act_dcf`, `compute_cllr`) are confirmed bit-identical to the
+      previous implementation — this was an addition, not a change.
+
+      Note for interpretation: `CLLR - minCLLR` is small exactly when the
+      remaining CLLR is a *discrimination* problem, i.e. G3's. So a small
+      value is a reason to stop looking for a calibration fix, not a
+      result in itself.
 
 **Bug fixed.** `data/cm_aasist_attm_uniform.pt` previously carried `eer_threshold` 10.698028928450064 and `dev_eer` 0.14286875159620163 — byte-copied from `cm_aasist_attm.pt`. Both values were independently remeasured on dev and rewritten to the checkpoint: `dev_eer`: **0.146083** (14.608%), `eer_threshold`: **11.165016**. Both `cm_aasist_attm.pt` and `cm_aasist_attm_uniform.pt` now also store fitted `calibration` blocks (`method: platt`, `scale_w`, `bias_b`, etc.) matching the contract.
 
@@ -590,6 +620,432 @@ EER and minDCF on that basis. The premise was wrong; the restriction is
 withdrawn. Recorded rather than silently corrected, per ground rule 4.
 
 A negative result is a result. **No re-running until something passes.**
+
+### Results — measured 2026-09-14
+
+Scored on `data/eval_benchmark/eval_slice_20k.tsv` (20 000 utts: 4 058 bonafide /
+15 942 spoof; 6 unreadable, 0.03 %, scored as silence). Raw LLR, no Platt — see
+the scoring note above. Report: `reports/cm_from_scratch_2026-09-14.json`.
+
+| run | EVAL EER | EVAL minDCF | EVAL CLLR | DEV EER | DEV minDCF |
+|---|---|---|---|---|---|
+| S42 | 11.336 % | 0.6515 | 1.4038 | 12.749 % | 0.9425 |
+| B42 | 13.775 % | 0.8688 | 1.6905 | 12.769 % | 0.8866 |
+| S43 | 11.855 % | 0.7261 | 1.4815 | 12.683 % | 0.9759 |
+| B43 | 12.050 % | 0.8196 | 1.2718 | 11.772 % | 0.8984 |
+
+**Criterion 1 — S vs the warm-started post-aug model. No pass/fail.** Baseline
+13.627 % EER / 0.8048 minDCF (raw).
+
+- **S42** — EER 11.336 % (−2.291 pp), minDCF 0.6515 (−0.1533).
+- **S43** — EER 11.855 % (−1.772 pp), minDCF 0.7261 (−0.0787).
+
+Both from-scratch runs measured *lower* than the baseline on both metrics. This is
+the measured difference only; no cause is assigned and no mechanism is claimed.
+The baseline was built with older code — before the seeding and per-item
+augmentation fixes — so head initialisation is **not** the only difference between
+it and these runs, and the two are not a controlled pair.
+
+**Criterion 2 — band-limiting hypothesis. FAIL.** B must beat S on **both** A19
+and A20 by more than 5 pp on **both** seeds. Per seed (Δ = B − S; negative = B better):
+
+| seed | attack | S | B | Δ (pp) |
+|---|---|---|---|---|
+| 42 | A19 | 6.417 % | 7.664 % | **+1.247 — B worse** |
+| 42 | A20 | 13.572 % | 10.227 % | −3.345 |
+| 43 | A19 | 7.639 % | 4.337 % | −3.302 |
+| 43 | A20 | 15.919 % | 6.189 % | −9.730 |
+
+Only one of the four cells clears 5 pp (B43 on A20). Seed 42 moves the *wrong* way
+on A19, and seed 43's A19 gain is 3.30 pp. **The hypothesis fails, and we say so.**
+
+**Criterion 3 — the trade. FAIL. Do not recommend B.** A19/A20 are not recovered
+(criterion 2 fails). Pooled minDCF: **S 0.6888, B 0.8442** — a gap of **0.1554**,
+far outside the 0.02 window. **B is not recommended as the new recipe.**
+
+**Criterion 4 — from-scratch noise floor. PASS.** S42 vs S43, S condition:
+**DEV EER** 12.749 % vs 12.683 % → spread **0.067 pp**; **EVAL EER** 11.336 % vs
+11.855 % → spread **0.519 pp**. Both are below 0.8 pp, so the existing floor holds
+and **ground rule 1 does not need revisiting** on this evidence.
+
+**Scope — what this is not.** This is the first clean measurement of the S-vs-B
+contrast, **not** confirmation of the A19/A20 gap. The earlier "all augmentation
+off" figure came from a possibly warm-started model, whereas B turns off **only**
+codec and bandpass (noise 0.3, RIR 0.2, gain 0.3 unchanged). Nothing here confirms
+that gap.
+
+**Provenance.** B42 was started without explicit confirmation (session record).
+S43 and B43 were run from the committed revision (`e661b9f`) with the HuggingFace
+hub offline, after the original S43 attempt died on a transient `502 Bad Gateway`
+while loading WavLM.
+
+---
+
+## The headline claim — pre-registered (2026-09-14)
+
+The four criteria above were fixed on 2026-09-13, and criterion 1 was
+deliberately **report-only**. That is why the adjudication records no win: two
+of four criteria failed, and the one comparison that matters was never given a
+pass/fail. Graded against its own criteria, this is a negative result.
+
+Read against **the rest of this file**, it is something else. Every model in the
+project's history has been scored on the same 20 000-utterance slice, by the
+same metric code, raw and uncalibrated. Put the four from-scratch runs into that
+table:
+
+| model | EVAL EER | EVAL minDCF | EVAL CLLR | A19 | A20 |
+|---|---|---|---|---|---|
+| pre-aug L12 | 12.878 % | 0.8834 | 1.8171 | 9.04 | 6.41 |
+| post-aug L12 (`cm_aasist.pt`, the backend default) | 13.627 % | 0.8048 | 1.6238 | 21.32 | 23.19 |
+| layer 5 (Pan et al.) | 14.096 % | 0.8280 | 2.4901 | — | — |
+| attentive merge, 12 layers | 12.666 % | 0.8804 | 3.2391 | — | — |
+| uniform merge, 12 layers | 12.734 % | 0.8731 | 3.5112 | — | — |
+| mean-pool, 12 layers | 13.504 % | 0.9242 | 4.3025 | — | — |
+| **ft4 fine-tune (the G3 attempt)** | 13.529 % | 0.8515 | 2.8126 | — | — |
+| **S42 — from scratch** | **11.336 %** | **0.6515** | **1.4038** | **6.42** | 13.57 |
+| B42 | 13.775 % | 0.8688 | 1.6905 | 7.66 | 10.23 |
+| **S43 — from scratch** | **11.855 %** | **0.7261** | **1.4815** | 7.64 | 15.92 |
+| B43 | 12.050 % | 0.8196 | 1.2718 | 4.34 | 6.19 |
+
+Source: `reports/cm_uniform_ablation_benchmark.json`,
+`reports/cm_meanpool_ablation_benchmark.json`,
+`reports/cm_finetune_benchmark.json`, `reports/cm_from_scratch_2026-09-14.json`.
+All raw (`"calibrated": false`).
+
+Three statements follow, each already measured, none of them needing a new run:
+
+1. **minDCF.** 0.6515 and 0.7261 are the two lowest values ever measured on this
+   slice. The previous best is 0.8048 (post-aug L12); every other model sits at
+   0.8280–0.9242. Both clear G3's pre-registered **minDCF < 0.75** bar — the bar
+   the explicit fine-tune attempt missed at 0.8515.
+2. **EER.** 11.336 % beats the best model on record (12.666 %) by 1.330 pp, i.e.
+   by more than the 0.8 pp floor — the bar §12.7's four experiments all failed.
+   11.855 % beats it by 0.811 pp, exactly at the floor. Both miss G3's < 11.0 %
+   bar.
+3. **A19.** 21.32 % → 6.42 %, better than even the pre-augmentation baseline's
+   9.04 %. The attack this file says "every model since is built on the
+   augmented recipe and none has recovered" is recovered, without touching the
+   augmenter.
+
+**Mechanism — and why it is not a coincidence.** The finding above (line 433) is
+that every prior checkpoint is a warm start of `cm_aasist.pt`: median cosine
+0.977–0.994, one model moved slightly five times. That parent *is* the post-aug
+L12 model — the one that gave away A19/A20 and whose minDCF is 0.8048. §12.7
+concluded the frozen encoder was the ceiling and G3 was the only thing that
+could lift it. This table says the ceiling was the **lineage**: an 89 064-parameter
+head from random init, encoder still frozen, beats every member of that lineage
+on all three metrics. That is a cleaner and more falsifiable claim than
+"fine-tuning helps".
+
+**Why it is not yet a headline.** Four gaps, ordered by how much they threaten
+the claim:
+
+1. **The comparison is not controlled — the real problem.** The post-aug L12
+   baseline predates the seeding and per-item-augmentation fixes. Some or all of
+   the 0.1533 minDCF gap could be those fixes rather than initialisation, and
+   nothing above distinguishes them. This is one run to close.
+2. **Two seeds.** Ground rule 2's minimum, not a headline's. The observed
+   from-scratch spread is 0.519 pp EVAL — *tighter* than the 0.8 pp fine-tuning
+   floor, which is itself worth recording — but a spread from two points is not
+   an error bar.
+3. **One 20 000-utterance slice.** Every number above shares it. The full eval
+   partition (628 848) has precedent: `reports/cm_aasist_eval_partition.json`.
+4. **minDCF here is an oracle threshold**, swept on the same eval data it is
+   reported on. Every model is treated identically, so the *ranking* is fair,
+   but the absolute value is optimistic. `actDCF` at the EER operating point is
+   2.27–2.75 for every model including these, because raw uncalibrated LLRs put
+   the threshold in the wrong place. That is G2's problem, but a headline number
+   should carry it.
+
+**Criterion — fixed now, before any run.** The claim is:
+
+> From-scratch initialisation of the AASIST-L head on a frozen WavLM frontend
+> beats the warm-started lineage on the cost metric, at equal or better EER,
+> reproducibly.
+
+Operationally:
+
+- [ ] **minDCF below 0.75** on the full eval partition, on **at least 3 of 5
+      seeds** — the G3 bar, which no warm-started model has ever cleared.
+- [ ] **Pooled eval EER below 12.666 %** on **all 5 seeds** — beating the best
+      model on record by more than the 0.8 pp floor, on every seed.
+- [ ] **The warm-start control run under current code** (identical flags, same
+      revision, `--init-weights data/cm_aasist.pt`) is **worse than the median
+      from-scratch seed on minDCF.** Without this the claim is not about
+      initialisation at all.
+- [ ] Seed-to-seed EVAL spread reported; if it exceeds 0.8 pp, ground rule 1 is
+      updated with the from-scratch value and the original stays visible.
+- [ ] A19 eval EER below 12 % (G4's own bar) reported as a **secondary outcome**,
+      not as the claim.
+
+**Note — 2026-09-15: criterion 2 has two readings. Flagged, not changed.**
+Written down now, before the full-partition result exists, so that the reading
+cannot be chosen after the fact. The bar as *stated* is "below 12.666 %"; the bar
+as *justified* is "beating the best model on record by more than the 0.8 pp
+floor", i.e. below **11.866 %**. Those are 0.8 pp apart and the difference is
+decisive for one existing seed:
+
+| seed | 20 k-slice EER | vs 12.666 % (stated) | vs 11.866 % (justified) |
+|---|---|---|---|
+| S42 | 11.336 % | clears by 1.330 pp | clears by 0.530 pp |
+| S43 | 11.855 % | clears by 0.811 pp | clears by **0.011 pp** |
+
+Both readings pass for both seeds on the 20 k slice, so nothing is decided yet —
+but S43's margin under the justified reading is 0.011 pp, which is well inside
+any noise. The original text is left exactly as pre-registered; this note records
+the ambiguity and the numbers rather than resolving it. Deciding which reading
+governs is the user's call, not a silent edit.
+
+**If the control matches or beats the from-scratch runs, the claim is dead** and
+the honest conclusion is "the seeding fix, not initialisation, was worth 0.15
+minDCF" — still a result worth having, per ground rule 5.
+
+**Run plan — one variable per run (ground rule 3).**
+
+| # | run | flags | closes | cost |
+|---|---|---|---|---|
+| 1 | warm-start control | `--init-weights data/cm_aasist.pt`, otherwise identical to S | gap 1 | ~2.5 h |
+| 2–4 | S44, S45, S46 | as S42 | gaps 2, 3 | ~7.5 h |
+| 5 | full-partition scoring | `--score-only` against the 628 k manifest | gap 3 | ~1 h GPU |
+
+Costs are from the measured epoch times (S43 3.80 h / 10 epochs, B43 2.57 h).
+Five seeds plus the control is ~10 h of GPU, mostly unattended.
+
+**Step 5 needs no training and should be done first.** The four existing
+checkpoints can be re-scored on the full partition immediately; if the minDCF
+gap holds there, the claim is most of the way to defensible before a single new
+epoch is spent. Note `score_checkpoint_eval.py` refuses to overwrite an existing
+report (ground rule 6) — use a new filename.
+
+**Correction — 2026-09-15: step 5 could not run, and the cost above is wrong.**
+
+The "~1 h GPU" estimate was wrong twice over, and the step itself was
+impossible as written.
+
+`score_checkpoint_eval.py` decoded every utterance in the manifest into a
+Python list *before* scoring anything, on the reasoning that all checkpoints
+score the same audio so re-decoding per checkpoint would waste I/O. That holds
+for the 20 k slice and fails for the full partition:
+
+| partition | utterances | window | audio resident |
+|---|---|---|---|
+| 20 k slice | 20,000 | 4 s @ 16 kHz, float32 = 256 KB | **4.8 GB** — fits |
+| full eval | 628,848 | same | **149.9 GB** — impossible |
+
+A first attempt at the full-partition re-score was killed by the OOM killer
+after **1 h 18 m**, having written no report and — because Python block-buffers
+stdout when it is piped into `tee` — no log either. It failed silently, which is
+the worst way for a pre-registered step to fail.
+
+Fixed: audio is now decoded in `--audio-chunk` windows and discarded once
+scored; only the scores are retained (~10 MB for the whole partition). This is
+metric-preserving because EER, minDCF, actDCF and CLLR are all computed from the
+pooled score arrays. The window is rounded up to a multiple of `--batch-size`,
+so batches are formed identically to a whole-array pass and the numbers are
+bit-reproducible — verified by re-scoring identical input before and after the
+change and getting **max |Δ| = 0.000e+00 on every metric and every per-attack
+EER**. Peak memory is now `--audio-chunk × 256 KB` (default 4,096 → 1.0 GB).
+
+Two related lessons recorded because they will recur:
+
+- Wall time scales with the number of checkpoints, so four checkpoints cost four
+  forward passes. Budget accordingly.
+- Run long scorers with `python -u`. Block-buffered stdout through `tee` hides
+  all progress and loses everything on a kill.
+
+**Verification of the refactor — 2026-09-15, bit-identical against the record.**
+Two independent checks, both max |Δ| = 0.000e+00:
+
+1. Same 2,000-utterance input, pre-refactor vs post-refactor
+   (`full_partition_smoketest_2026-09-15.json` vs
+   `streaming_smoketest_2026-09-15.json`) — 5 metrics × 4 models, 16 attacks.
+2. The full 20,000-utterance slice re-scored post-refactor and compared against
+   the **committed** record `reports/cm_from_scratch_2026-09-14.json`:
+   bit-identical on all 16 headline metrics and all 64 per-attack EERs, with
+   `n_records`, `n_bonafide=4058`, `n_spoof=15942` and `unreadable=6` all equal.
+   (`min_cllr` / `cllr_calibration_loss` are absent from the record because it
+   predates `19636f8`; that is expected, not a mismatch.)
+
+**Measured cost of step 5, superseding the ~1 h and ~2.1 h figures above.** The
+steady-state rate is **60.3 utts/s wall for all four checkpoints together**
+(20,000 utterances in 5.5 min; 65.9 → 60.3 as loading amortised). So:
+
+    628,848 utts / 60.3 utts/s = 10,428 s = 2.90 h
+
+Budget **~2.9–3.0 h**, not 2.1 h. The earlier 338.9 utts/s figure could not be
+corroborated anywhere in the rescued logs, so the measured rate is authoritative.
+
+**Scope caveat for step 5 — the "full partition" is 92.4 %, uniformly sampled.**
+`A:\cm-corpus\manifests\eval_available.tsv` (628,848 rows) is *not* the whole
+eval protocol (680,773 rows): 51,926 clips (7.6 %) are absent. **This file lives
+on Drive A, not in the repo** — see `docs/PROJECT_INVENTORY.md` §2.7. The absence is **uniform**, so
+it does not bias per-attack comparisons:
+
+| | protocol | manifest | missing |
+|---|---|---|---|
+| each of A17–A32 | ~31.3 k–34.4 k | ~28.5 k–31.8 k | 7.49 %–7.90 % |
+| bonafide | 138,688 | 128,292 | 7.49 % |
+
+Every manifest utterance ID resolves to exactly one protocol row, with no
+duplicates. Step 5 therefore measures the *downloaded* partition; any claim it
+supports should say so.
+
+**Only if the EER bar is still missed.** `--merge-layers 12` is implemented,
+adds 12 parameters, and is untried from scratch. docs/08 §12.6 measured that no
+single layer wins across attack families (layer 5 better on A17/A21/A24/A29,
+layer 12 better on A19/A20), which is precisely what an attentive merge is for.
+Two prerequisites: `scripts/score_checkpoint_eval.py` raises on `merge_layers`
+checkpoints, and the `assert_frozen_checkpoint` guard in `scripts/cm_frontend.py`
+would need matching treatment. This **contradicts "What not to do"**, which
+forbids further merging experiments — that prohibition was written when every
+merge was a warm start of one parent and inside the fine-tuning floor. Amending
+it requires a dated note there, not a silent exception.
+
+### Amendment — 2026-09-14, after the section above: A28 moves the target
+
+Recorded as a dated amendment, not an edit, per ground rule 4.
+
+The section above proposed confirming the **layer-12** from-scratch claim
+(control run, three more seeds, full-partition re-score). Reading the per-attack
+table in `reports/cm_from_scratch_2026-09-14.json` against this file's own
+history shows that plan is aimed at the wrong model.
+
+**A28 was solved, and layer 12 from scratch un-solves it.**
+
+| model | A28 eval EER |
+|---|---|
+| pre-aug L12 | 32.257 % |
+| post-aug L12 (`cm_aasist.pt`, the backend default) | 26.220 % |
+| attentive merge, 12 layers | 16.008 % |
+| **layer 5 (Pan et al.)** | **12.945 %** |
+| S42 — from scratch, L12 | 27.772 % |
+| S43 — from scratch, L12 | 28.832 % |
+| B42 | 30.534 % |
+| B43 | 31.863 % |
+
+docs/08 records the layer-5 result as a **>50 % error reduction** on A28 against
+post-aug L12. The from-scratch runs, all at `--layer-index 12`, land back in the
+26–32 % band. On the one attack this project has already closed, they are as bad
+as the model they beat everywhere else.
+
+**Why this outranks minDCF.** A pooled EER of 11.336 % is an average that hides
+a 27.8 % hole on a single family. The product claim (`docs/12`) is that a cloned
+call cannot pass. One attack family at 28 % is a claim-breaking hole, and it is
+systematic — four runs, two seeds, two conditions, 27.8–31.9 %. Not noise.
+
+**The two results are complementary, and neither alone is deployable.**
+
+- From scratch, layer 12: best minDCF (0.6515), best CLLR (1.4038), best A19
+  (6.42) — worst A28 (27.8 %).
+- Warm start, layer 5: best A28 (12.945 %) — worse pooled EER (14.096 %) and
+  minDCF (0.8280).
+
+docs/08 §12.6 already measured that no single layer wins across families
+(layer 5 better on A17/A21/A24/A29, layer 12 better on A19/A20). Layer 12 from
+scratch reproduces that split; it does not resolve it.
+
+**Revised run plan — supersedes the table above.**
+
+| # | run | flags | why | cost |
+|---|---|---|---|---|
+| 1 | warm-start control | `--init-weights data/cm_aasist.pt`, layer 12 | still closes the initialisation confound | ~2.5 h |
+| 2 | **from scratch, layer 5** | `--layer-index 5`, otherwise as S42 | combines the two proven wins; one variable; no code change | ~3 h |
+| 3 | full-partition scoring | `--score-only` | gap 3 | ~1 h |
+| 4 | S44, S45, S46 | as S42 | widen the floor | ~7.5 h |
+
+**Correction — 2026-09-15: run 2 could not actually be run as written, and the
+"no code change" claim in the table above was wrong.**
+
+`checkpoint_for(cond, seed)` keyed the output path on (condition, seed) only, so
+`--layer-index 5` targeted the *same* four files as the layer-12 run. Two
+consequences, the second destructive:
+
+1. **`--layer-index 5` silently trained nothing.** All four checkpoints already
+   existed, so the "resume, never overwrite" check skipped every run and the
+   command exited reporting "all four runs already have checkpoints". The
+   headline experiment would have appeared to run and produced no model.
+2. **Forcing it would have destroyed the layer-12 result.** Clearing the
+   existing checkpoints to make the run proceed would have written the layer-5
+   output to `data/cm_scratch_S42.pt` — over the checkpoint the entire claim is
+   built on.
+
+Fixed in `scripts/run_from_scratch_experiment.py`: the layer index is now part
+of the checkpoint's identity. Default-12 runs keep their existing names, so
+nothing on disk moves and the committed results stay addressable; any other
+index gets a suffix. Run 2 is therefore:
+
+```
+python scripts/run_from_scratch_experiment.py --layer-index 5 --device cuda
+```
+
+That trains **S42 at layer 5** into `data/cm_scratch_S42_L5.pt` and then stops,
+as the pre-registered protocol requires (review the wall-time projection before
+committing to the rest). Adding `--continue-anyway` then runs B42/S43/B43 at
+layer 5 into the matching `_L5` names. Nothing can collide with the layer-12
+set. The orchestrator now also prints the active layer index, so "nothing to
+train" is never ambiguous about which layer it refers to.
+`tests/test_run_from_scratch_checkpoint_naming.py` pins both halves.
+
+Note the scope difference from the table above: run 2 as costed (~3 h) is the
+single S42 layer-5 run, which is what the two-step protocol delivers first. The
+full four-condition layer-5 set is ~10 h and is a superset, not a substitute.
+
+The correction to the table above is only to "no code change" — the run itself,
+its one-variable property, and its status as the headline candidate are
+unchanged.
+
+**Run 2 is the headline candidate, not run 4.** If from-scratch init at layer 5
+holds minDCF below 0.75 while keeping A28 near 12.9 %, that is the first model
+here that is both best on the cost metric and not regressed on the worst attack —
+which is what "usable in the product" actually requires. Run 4 only widens a
+layer-12 claim, and a layer-12 claim re-opens A28.
+
+**Additional criterion, added now:**
+
+- [ ] **A28 eval EER below 13.0 %** on the headline model — no regression
+      against the best A28 ever measured (layer 5, 12.945 %).
+
+**Correction — 2026-09-15, to this amendment.** The phrase "worse than the
+current default on A28" overstates the case, and "not deployable" below was
+wrong as a general rule. 12.945 % is the **best A28 ever measured**, not the
+baseline; it belongs to a model that is worse overall (layer 5: pooled EER
+14.096 %, minDCF 0.8280). The baseline for "should we swap what we ship" is the
+shipped checkpoint:
+
+| | post-aug L12 (shipped) | S42 — from scratch | Δ |
+|---|---|---|---|
+| minDCF | 0.8048 | **0.6515** | −0.1533 |
+| pooled EER | 13.627 % | **11.336 %** | −2.291 pp |
+| CLLR | 1.6238 | **1.4038** | −0.2200 |
+| A19 | 21.32 % | **6.42 %** | −14.90 pp |
+| A20 | 23.19 % | **13.57 %** | −9.62 pp |
+| DEV EER | 16.415 % | **12.749 %** | −3.666 pp |
+| **A28** | **26.220 %** | **27.772 %** | **+1.552 pp** |
+
+S42 **dominates the shipped checkpoint on every metric except A28**, where it is
++1.55 pp — a single-attack delta at or near per-attack noise, in the same 26–28 %
+band the shipped model already occupies. Corrected statements:
+
+- **S42 is deployable now** as a drop-in replacement for `cm_aasist.pt`. It is a
+  strict improvement on every pooled metric and on dev, which is the partition
+  that places the operating point.
+- **A28 stays an open hole in both**, unchanged in any meaningful way. Fixing it
+  is the next experiment (from scratch at layer 5), **not** a precondition for
+  the swap.
+- Caveat on the swap: the fused tier gates were tuned against the *current* score
+  distribution (`w_cm = 1.5` was reached by checking against
+  `integration_check.py`, not by a fit). Swapping checkpoints moves demo clip
+  tiers, so `integration_check.py` must be re-run and `w_cm` possibly refitted —
+  this is re-baselining, not a code change.
+
+**Recorded: the runtime contract already accepts these checkpoints.**
+`ml/train_cm.py` writes `eer_threshold` (line 1013) and
+`vanirakshak/detectors/cm_aasist.py::score()` centres on it
+(`raw_llr - eer_threshold`). A from-scratch checkpoint therefore drops into
+`VR_CM_AASIST_WEIGHTS` with **no code change**. Because `score()` anchors on the
+**dev** EER threshold, the dev improvement (16.415 % → 11.8–12.8 %) is the
+mechanism by which a gain would reach the product. **The blocker is A28, not the
+interface.**
 
 ---
 

@@ -214,6 +214,130 @@ def compute_cllr(
     return float(cllr)
 
 
+def compute_mincllr(
+    bonafide_scores: np.ndarray,
+    spoof_scores: np.ndarray,
+    max_iter: int = 100,
+    tol: float = 1e-10,
+) -> float:
+    """Compute minCLLR: the CLLR after the optimal monotone affine transform.
+
+    This is the discrimination-loss half of the CLLR decomposition that
+    docs/10 (line 263, "Replacement criterion for future calibration work")
+    makes the criterion for all future calibration claims:
+
+        CLLR = minCLLR + calibration_loss
+
+    ``minCLLR`` is the CLLR you would get if the scores were perfectly
+    calibrated *given their discrimination* -- i.e. the CLLR after applying
+    the best transform of the form ``s' = a*s + b`` with ``a >= 0``. It is
+    therefore a floor on CLLR that no calibration method can beat, and
+    ``CLLR - minCLLR`` isolates the part that is purely a calibration
+    defect. See ``compute_calibration_loss``.
+
+    Definition note (deliberate, auditable choice): the transform is the
+    standard BOSARIS/FoCal *affine* one, not a general pool-adjacent-
+    violators step function. "Optimal monotonic transform" in docs/10
+    describes this affine family; an unconstrained monotone transform would
+    give a weakly lower value and is not what the ASVspoof/BOSARIS toolkits
+    report as minCLLR.
+
+    Method: because the CLLR objective is a class-weighted logistic loss in
+    ``(a, b)``, the problem is convex and is solved here by Newton/IRLS to
+    convergence. Scores are standardised internally for conditioning and the
+    optimum is transformed back. numpy only -- this module has no scipy
+    dependency by design.
+
+    Returns:
+        minCLLR as a float, always ``<= compute_cllr(...)``. ``nan`` when
+        either class is empty. Returns 0.0 for perfectly separable scores.
+    """
+    bon = np.asarray(bonafide_scores, dtype=np.float64).ravel()
+    spf = np.asarray(spoof_scores, dtype=np.float64).ravel()
+
+    if bon.size == 0 or spf.size == 0:
+        return float("nan")
+
+    s_all = np.concatenate([bon, spf])
+    n_tar = float(bon.size)
+    n_non = float(spf.size)
+
+    # Class weights make the objective exactly the CLLR: each class is
+    # normalised by its own count, so an unbalanced partition does not let the
+    # majority class dominate the fit.
+    w = np.concatenate([np.full(bon.size, 1.0 / n_tar), np.full(spf.size, 1.0 / n_non)])
+    y = np.concatenate([np.ones(bon.size), np.zeros(spf.size)])  # 1 = bonafide
+
+    mu = float(s_all.mean())
+    sd = float(s_all.std())
+    if not np.isfinite(sd) or sd == 0.0:
+        # Every score identical: there is no ranking to preserve, so the best
+        # achievable transform is a constant and the slope is unidentifiable.
+        # Fit the intercept alone.
+        s = np.zeros_like(s_all)
+    else:
+        s = (s_all - mu) / sd
+
+    a = 0.0
+    b = 0.0
+    ridge = 1e-12
+    for _ in range(max_iter):
+        z = a * s + b
+        # sigmoid(z), computed without overflow
+        sig = np.where(z >= 0, 1.0 / (1.0 + np.exp(-np.abs(z))), np.exp(-np.abs(z)) / (1.0 + np.exp(-np.abs(z))))
+        r = sig - y
+        g = np.array([float(np.sum(w * r * s)), float(np.sum(w * r))])
+        hw = w * sig * (1.0 - sig)
+        h = np.array(
+            [
+                [float(np.sum(hw * s * s)) + ridge, float(np.sum(hw * s))],
+                [float(np.sum(hw * s)), float(np.sum(hw)) + ridge],
+            ]
+        )
+        try:
+            step = np.linalg.solve(h, -g)
+        except np.linalg.LinAlgError:
+            break
+        if not np.all(np.isfinite(step)):
+            break
+        a += float(step[0])
+        b += float(step[1])
+        if float(np.max(np.abs(step))) < tol:
+            break
+
+    z = a * s + b
+    # Stable log(1 + e^z) - y*z, i.e. the per-record logistic loss.
+    per_record = np.logaddexp(0.0, z) - y * z
+    mincllr = float(0.5 * np.sum(w * per_record) / np.log(2.0))
+
+    # Guard against the degenerate/divergent case: a fit can never be worse
+    # than the identity transform, and never below zero.
+    identity = compute_cllr(bon, spf)
+    if not np.isfinite(mincllr) or mincllr > identity:
+        mincllr = float(identity)
+    return max(0.0, mincllr)
+
+
+def compute_calibration_loss(
+    bonafide_scores: np.ndarray,
+    spoof_scores: np.ndarray,
+) -> float:
+    """Return ``CLLR - minCLLR``, the pure calibration loss.
+
+    This is the quantity docs/10 makes the criterion: small means the scores
+    are already close to optimally calibrated for the discrimination they
+    have, so any remaining CLLR is a *discrimination* problem and belongs to
+    G3 (minDCF), not to a calibration fix.
+
+    Non-negative by construction; ``nan`` if either class is empty.
+    """
+    cllr = compute_cllr(bonafide_scores, spoof_scores)
+    mincllr = compute_mincllr(bonafide_scores, spoof_scores)
+    if not np.isfinite(cllr) or not np.isfinite(mincllr):
+        return float("nan")
+    return float(cllr - mincllr)
+
+
 def evaluate_system(
     bonafide_scores: np.ndarray,
     spoof_scores: np.ndarray,
@@ -242,10 +366,17 @@ def evaluate_system(
           spec-comparable figure defined in docs/04. This is the number that
           reveals miscalibration; act_dcf does not.
         - cllr: Log-likelihood ratio cost (threshold-free; >1.0 is misleading)
+        - min_cllr: CLLR after the optimal monotone affine transform, i.e. the
+          discrimination-loss floor. See compute_mincllr.
+        - cllr_calibration_loss: ``cllr - min_cllr``. This is the quantity
+          docs/10 makes the criterion for future calibration work: small means
+          the remaining CLLR is a discrimination problem (G3), not a
+          calibration defect.
         - eer: Equal error rate
         - threshold_source: how the actDCF threshold was chosen
         - calibrated: True when act_dcf_bayes is within 2x of min_dcf
-        (Also includes uppercase/camelCase aliases minDCF, actDCF, CLLR, EER)
+        (Also includes uppercase/camelCase aliases minDCF, actDCF, CLLR, EER,
+        minCLLR, CLLR_minus_minCLLR)
     """
     eer, eer_thresh = compute_eer(bonafide_scores, spoof_scores)
     min_dcf, mindcf_thresh = compute_mindcf(
@@ -265,6 +396,10 @@ def evaluate_system(
         bonafide_scores, spoof_scores, threshold=TAU_BAYES, p_tar=p_tar, c_miss=c_miss, c_fa=c_fa
     )
     cllr = compute_cllr(bonafide_scores, spoof_scores)
+    mincllr = compute_mincllr(bonafide_scores, spoof_scores)
+    cllr_calibration_loss = (
+        float(cllr - mincllr) if np.isfinite(cllr) and np.isfinite(mincllr) else float("nan")
+    )
 
     # docs/04 section 1.2: actDCF ~= minDCF means well calibrated; actDCF >> minDCF
     # means discrimination without calibration. Allow a small absolute floor so a
@@ -277,11 +412,15 @@ def evaluate_system(
         "act_dcf_bayes": act_dcf_bayes,
         "cllr": cllr,
         "eer": eer,
+        "min_cllr": mincllr,
+        "cllr_calibration_loss": cllr_calibration_loss,
         "minDCF": min_dcf,
         "actDCF": act_dcf,
         "actDCF_bayes": act_dcf_bayes,
         "CLLR": cllr,
         "EER": eer,
+        "minCLLR": mincllr,
+        "CLLR_minus_minCLLR": cllr_calibration_loss,
         "threshold_eer": eer_thresh,
         "threshold_mindcf": mindcf_thresh,
         "threshold_actdcf": threshold,

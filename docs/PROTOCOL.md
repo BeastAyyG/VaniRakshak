@@ -343,7 +343,7 @@ alert payload it already received.
 | `VR_HOP_SECONDS` | `1.0` | Sliding-window step between verdicts |
 | `VR_ALLOW_THRESHOLD` | `35.0` | Upper `risk_score` bound for the `ALLOW` tier |
 | `VR_CHALLENGE_THRESHOLD` | `70.0` | Upper `risk_score` bound for `CHALLENGE`; `risk_score` at or above this is `BLOCK` |
-| `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker` |
+| `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker`. **Not present in a fresh clone** — `*.pt` is gitignored, so this path only exists after `ml/train.py` has run; `ml_bridge.py` degrades to "identity check unavailable" without it. |
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
 
