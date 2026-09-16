@@ -28,11 +28,15 @@ ml/
 ├── evaluate.py           # Comprehensive ASVspoof-5 and telephony benchmark runner
 ├── extract_features.py   # Batch 40-dim MFCC extraction; single-file WavLM (768) / ECAPA (192) mode
 ├── checkpoints/          # Model weights & calibrated thresholds.json
+│   ├── thresholds.json               # metrics (task-tagged) — THE ONLY FILE HERE IN GIT
 │   ├── best_model.pt                 # identity: "is this the enrolled speaker?" (loaded by ml_bridge.py)
 │   ├── model_epoch_50.pt/.pth        # byte-identical to best_model.pt (same training run's
 │   │                                 # intermediate + final checkpoint) — not separately consumed
-│   ├── thresholds.json               # metrics for the above (task-tagged)
 │   └── countermeasure_asvspoof.pt    # spoof/clone CM — only exists after an ASVspoof run
+│
+│   NOTE: every *.pt above is gitignored and absent on a fresh clone. They are
+│   produced by `ml/train.py` (identity) and `ml/train_cm.py` (countermeasure).
+│   Only thresholds.json is committed. See docs/PROJECT_INVENTORY.md §2.7.
 └── requirements.txt      # PyTorch, NumPy, SciPy dependencies
 ```
 

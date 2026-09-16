@@ -107,7 +107,27 @@ PATH_IGNORE_PATTERNS = [
     re.compile(r"\*"),
     re.compile(r"^\."),  # relative dotfiles/dot-paths read case-by-case, not worth the false-positive rate
     re.compile(r"^node_modules/"),
+    # Absolute Windows drive paths (A:\cm-corpus\..., C:\VaniRakshak\...).
+    # These are deliberately NOT repo-relative: the whole point of citing them
+    # is that the thing lives outside the checkout (corpus on Drive A, sibling
+    # working copies). Resolving them against REPO_ROOT would be meaningless.
+    re.compile(r"^[A-Za-z]:[\\/]"),
 ]
+
+
+# `docs/NN` shorthand -- this repo's numbered design documents are cited by
+# number ("see docs/10", "per docs/13") rather than by full filename. The
+# convention predates the NN-<slug>.md rename and is used ~30 times across the
+# docs, so it is real vocabulary, not a typo. Resolve it instead of flagging it.
+DOCS_SHORTHAND = re.compile(r"^docs/(\d{1,3})/?$")
+
+
+def _resolve_docs_shorthand(candidate: str) -> bool:
+    """True if `candidate` is `docs/NN` and a file named NN-*.md exists."""
+    m = DOCS_SHORTHAND.match(candidate)
+    if not m:
+        return False
+    return any(p.name.startswith(f"{int(m.group(1)):02d}-") for p in (REPO_ROOT / "docs").glob("*.md"))
 
 # A path candidate must contain at least one of these to look like a repo
 # reference rather than a stray identifier or math expression.
@@ -246,6 +266,8 @@ def check_paths(docs: List[Path], findings: Findings, verbose: bool) -> None:
                 continue  # already covered by PATH_LIKE above
             if any((base / candidate).exists() for base in (REPO_ROOT, doc.parent, BACKEND_ROOT, FRONTEND_ROOT)):
                 continue
+            if _resolve_docs_shorthand(candidate):
+                continue  # `docs/10` -> `docs/10-quality-and-hardening-plan.md`
             findings.warn_msg(
                 f"{rel_doc}: references `{candidate}` -- not found at repo root or relative to this doc (dir/loosely-typed path, WARN only)"
             )

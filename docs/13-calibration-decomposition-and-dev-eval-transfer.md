@@ -197,8 +197,9 @@ question rather than guessed at. It is not blocking anything.
 
 ## 8. The eval manifest is a uniform 92.4 % subsample
 
-`manifests/eval_available.tsv` has 628,848 rows against the protocol's 680,773 —
-51,926 clips (7.6 %) are absent. The absence is **uniform**, so per-attack
+`A:\cm-corpus\manifests\eval_available.tsv` has 628,848 rows against the
+protocol's 680,773 — 51,926 clips (7.6 %) are absent. **It is on Drive A, not in
+the repo** — see `docs/PROJECT_INVENTORY.md` §2.7. The absence is **uniform**, so per-attack
 comparisons are unbiased:
 
 | | protocol | manifest | missing |

@@ -876,8 +876,9 @@ Budget **~2.9–3.0 h**, not 2.1 h. The earlier 338.9 utts/s figure could not be
 corroborated anywhere in the rescued logs, so the measured rate is authoritative.
 
 **Scope caveat for step 5 — the "full partition" is 92.4 %, uniformly sampled.**
-`manifests/eval_available.tsv` (628,848 rows) is *not* the whole eval protocol
-(680,773 rows): 51,926 clips (7.6 %) are absent. The absence is **uniform**, so
+`A:\cm-corpus\manifests\eval_available.tsv` (628,848 rows) is *not* the whole
+eval protocol (680,773 rows): 51,926 clips (7.6 %) are absent. **This file lives
+on Drive A, not in the repo** — see `docs/PROJECT_INVENTORY.md` §2.7. The absence is **uniform**, so
 it does not bias per-attack comparisons:
 
 | | protocol | manifest | missing |
