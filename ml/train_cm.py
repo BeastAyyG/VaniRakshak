@@ -552,7 +552,8 @@ def evaluate_demo_clips(
             std = float(np.std(audio))
             if std > 1e-6:
                 audio = (audio - float(np.mean(audio))) / std
-            inp = torch.from_numpy(audio).unsqueeze(0).half().to(dev)
+            w_dtype = next(self.w.parameters()).dtype
+            inp = torch.from_numpy(audio).unsqueeze(0).to(dtype=w_dtype, device=dev)
 
             with torch.no_grad():
                 w_out = self.w(inp, output_hidden_states=True)
@@ -611,6 +612,8 @@ def train_recipe_a(
     freeze_merge: bool = False,
     streaming_dev: bool = False,
     seed: int = 42,
+    unfreeze_top_n: int = 0,
+    encoder_lr: float = 1e-5,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
     # Seed RNGs for reproducibility
@@ -681,11 +684,31 @@ def train_recipe_a(
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     logger.info("Class weights: spoof=%.4f, bonafide=1.0000", spoof_weight)
 
-    # 4. Load Frozen WavLM Frontend
-    logger.info("Loading frozen WavLM frontend: microsoft/wavlm-base-plus...")
-    wavlm = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").half().to(dev).eval()
+    # 4. Load WavLM Frontend (bfloat16 on CUDA to prevent fp16 divergence during fine-tuning)
+    logger.info("Loading WavLM frontend: microsoft/wavlm-base-plus (unfreeze_top_n=%d)...", unfreeze_top_n)
+    if dev.type == "cuda":
+        wavlm = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(dtype=torch.bfloat16, device=dev)
+    else:
+        wavlm = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(dev)
+
     for p in wavlm.parameters():
         p.requires_grad = False
+
+    if unfreeze_top_n > 0:
+        wavlm.train()
+        wavlm.gradient_checkpointing_enable()
+        # Unfreeze only top N transformer layers
+        for layer in wavlm.encoder.layers[-unfreeze_top_n:]:
+            for p in layer.parameters():
+                p.requires_grad = True
+        n_wavlm_trainable = sum(p.numel() for p in wavlm.parameters() if p.requires_grad)
+        logger.info(
+            "Unfroze top %d WavLM layers (%d trainable parameters, grad_checkpointing=True)",
+            unfreeze_top_n,
+            n_wavlm_trainable,
+        )
+    else:
+        wavlm.eval()
 
     # 5. Initialize AASIST-L Head
     model = AASISTLHead(in_dim=768, merge_layers=merge_layers,
@@ -700,10 +723,22 @@ def train_recipe_a(
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("AASIST-L Head initialized with %d trainable parameters", n_params)
 
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # Discriminative learning rates: encoder vs head
+    if unfreeze_top_n > 0:
+        encoder_params = [p for p in wavlm.parameters() if p.requires_grad]
+        param_groups = [
+            {"params": encoder_params, "lr": encoder_lr},
+            {"params": model.parameters(), "lr": lr},
+        ]
+        logger.info("Discriminative optimizer: encoder_lr=%.2e (%d params), head_lr=%.2e (%d params)",
+                    encoder_lr, sum(p.numel() for p in encoder_params), lr, n_params)
+        optimizer = AdamW(param_groups, weight_decay=weight_decay)
+    else:
+        optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
     use_amp = (dev.type == "cuda")
+    amp_dtype = torch.bfloat16 if dev.type == "cuda" else torch.float32
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     best_dev_mindcf = float("inf")
@@ -729,22 +764,26 @@ def train_recipe_a(
         n_batches = 0
 
         for audio_batch, labels in train_loader:
-            audio_batch = audio_batch.to(dev, dtype=torch.float16, non_blocking=True)
+            audio_batch = audio_batch.to(dev, dtype=amp_dtype, non_blocking=True)
             labels = labels.to(dev, non_blocking=True)
 
-            # Frozen WavLM forward pass on GPU
-            with torch.no_grad():
-                w_out = wavlm(audio_batch, output_hidden_states=True)
-                feats = select_wavlm_features(w_out, layer_index, merge_layers)
-
             optimizer.zero_grad()
-            with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+            with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
+                if unfreeze_top_n > 0:
+                    w_out = wavlm(audio_batch, output_hidden_states=True)
+                else:
+                    with torch.no_grad():
+                        w_out = wavlm(audio_batch, output_hidden_states=True)
+                feats = select_wavlm_features(w_out, layer_index, merge_layers)
                 _, logits = model(feats)
                 loss = criterion(logits, labels)
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            trainable_params = [p for p in model.parameters() if p.requires_grad]
+            if unfreeze_top_n > 0:
+                trainable_params.extend([p for p in wavlm.parameters() if p.requires_grad])
+            nn.utils.clip_grad_norm_(trainable_params, max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
 
@@ -774,6 +813,8 @@ def train_recipe_a(
         logger.info("Evaluating epoch %d on dev set (%d records)...", epoch, len(dev_set))
         t_val0 = time.perf_counter()
         model.eval()
+        if unfreeze_top_n > 0:
+            wavlm.eval()
         bon_scores = []
         spf_scores = []
 
@@ -782,12 +823,12 @@ def train_recipe_a(
                 for audio_batch, labels, _ in dev_loader:
                     audio_batch = audio_batch.to(
                         dev,
-                        dtype=torch.float16 if dev.type == "cuda" else torch.float32,
+                        dtype=amp_dtype,
                         non_blocking=True,
                     )
                     w_out = wavlm(audio_batch, output_hidden_states=True)
                     feats = select_wavlm_features(w_out, layer_index, merge_layers)
-                    with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                    with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
                         _, logits = model(feats)
                     llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                     labels_np = labels.numpy()
@@ -797,7 +838,7 @@ def train_recipe_a(
             else:
                 for feats, labels, _ in dev_loader:
                     feats = feats.to(dev, non_blocking=True)
-                    with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                    with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
                         _, logits = model(feats)
                     llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                     labels_np = labels.numpy()
@@ -859,7 +900,14 @@ def train_recipe_a(
                 "merge_layers": int(merge_layers) if merge_layers else None,
                 "freeze_merge": bool(freeze_merge),
                 "seed": int(seed),
+                "unfreeze_top_n": int(unfreeze_top_n),
+                "encoder_lr": float(encoder_lr),
             }
+            if unfreeze_top_n > 0:
+                # Store frontend fine-tuned weights
+                checkpoint_payload["frontend_state_dict"] = {
+                    k: v.cpu() for k, v in wavlm.state_dict().items()
+                }
             torch.save(checkpoint_payload, str(output_checkpoint))
             _validate_checkpoint(checkpoint_payload, output_checkpoint)
             logger.info(
@@ -953,6 +1001,23 @@ def main() -> None:
             "merging helps' from 'averaging helps'."
         ),
     )
+    parser.add_argument(
+        "--unfreeze-top-n",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Unfreeze top N transformer layers of WavLM frontend in bf16 with "
+            "gradient checkpointing enabled (G3 encoder fine-tuning, docs/10). "
+            "Default 0 preserves frozen behavior."
+        ),
+    )
+    parser.add_argument(
+        "--encoder-lr",
+        type=float,
+        default=1e-5,
+        help="Learning rate for unfrozen WavLM encoder layers (default: 1e-5)",
+    )
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=5e-4)
@@ -986,6 +1051,8 @@ def main() -> None:
         freeze_merge=args.freeze_merge,
         streaming_dev=args.streaming_dev,
         seed=args.seed,
+        unfreeze_top_n=args.unfreeze_top_n,
+        encoder_lr=args.encoder_lr,
     )
 
 
