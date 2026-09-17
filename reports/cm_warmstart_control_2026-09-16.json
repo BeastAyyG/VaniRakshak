@@ -1,0 +1,69 @@
+{
+  "manifest": "A:\\cm-corpus\\manifests\\eval_available.tsv",
+  "n_records": 628848,
+  "n_bonafide": 128292,
+  "n_spoof": 500556,
+  "unreadable": 130,
+  "device": "cuda",
+  "calibration": "none (raw LLR; ml/train_cm.py fits no Platt scaler)",
+  "audio_chunk": 4096,
+  "models": {
+    "W42": {
+      "checkpoint": "C:\\vr-work\\repo\\data\\cm_warmstart_S42_L12.pt",
+      "layer_index": 12,
+      "init_weights": "C:\\vr-work\\repo\\data\\cm_aasist.pt",
+      "seed": 42,
+      "augmentation": {
+        "p_codec": 0.5,
+        "p_noise": 0.3,
+        "p_bandpass": 0.3,
+        "p_rir": 0.2,
+        "p_gain": 0.3
+      },
+      "dev_eer": 0.1583630225140363,
+      "dev_min_dcf": 0.9967052375795966,
+      "metrics": {
+        "min_dcf": 0.8050333461797347,
+        "act_dcf": 2.5692645828722376,
+        "act_dcf_bayes": 9.333195347964718,
+        "cllr": 1.9456590885451466,
+        "eer": 0.12846475228385246,
+        "min_cllr": 0.4299317552924215,
+        "cllr_calibration_loss": 1.515727333252725,
+        "minDCF": 0.8050333461797347,
+        "actDCF": 2.5692645828722376,
+        "actDCF_bayes": 9.333195347964718,
+        "CLLR": 1.9456590885451466,
+        "EER": 0.12846475228385246,
+        "minCLLR": 0.4299317552924215,
+        "CLLR_minus_minCLLR": 1.515727333252725,
+        "threshold_eer": 7.743262193901213,
+        "threshold_mindcf": 14.479313850402832,
+        "threshold_actdcf": 7.743262193901213,
+        "threshold_bayes": -0.6444820085786643,
+        "threshold_source": "eer_operating_point",
+        "calibrated": false,
+        "stored_threshold": 9.456412097971965,
+        "act_dcf_at_stored_threshold": 1.7057147006826414
+      },
+      "per_attack_eer": {
+        "A17": 2.617,
+        "A18": 3.995,
+        "A19": 16.035,
+        "A20": 25.747,
+        "A21": 7.675,
+        "A22": 11.042,
+        "A23": 6.299,
+        "A24": 17.737,
+        "A25": 9.969,
+        "A26": 5.419,
+        "A27": 12.416,
+        "A28": 24.451,
+        "A29": 2.264,
+        "A30": 9.138,
+        "A31": 13.087,
+        "A32": 16.837
+      }
+    }
+  }
+}
