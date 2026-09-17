@@ -1086,14 +1086,35 @@ median minDCF **0.7234** · median EER **11.36 %** · actDCF 2.04–2.77
       minDCF (0.7482, only 0.0018 under its own bar).
 - [x] **Criterion 3 — MET.** The warm-start control (identical flags, same
       revision, `--init-weights data/cm_aasist.pt`, seed 42, layer 12) ran the
-      full ten epochs and finished at **best epoch 6: dev minDCF 0.9967, dev
-      EER 15.836 %**, against a from-scratch median of 0.7234. The control is
-      worse by 0.27 minDCF, so the gain is about initialisation and not the
-      seeding fix. Worth recording that the control's dev minDCF never left
-      0.9967–0.9999 across all ten epochs — it never found a usable cost
-      surface at all, which is a stronger statement than "slightly worse".
-      (It stopped on the 10-epoch cap, not on patience: best was epoch 6 and
-      patience had reached 4/5.)
+      full ten epochs and was then scored on the same full partition:
+      `reports/cm_warmstart_control_2026-09-16.json`, 628,848 utterances,
+      72.2 min.
+
+      | | control (W42) | from-scratch median | Δ |
+      |---|---|---|---|
+      | eval minDCF | **0.8050** | 0.7234 | +0.0816 (worse) |
+      | eval EER | **12.846 %** | 11.36 % | +1.49 pp (worse) |
+      | eval A28 | 24.451 % | 27.772 % (S42) | −3.32 pp (better) |
+      | dev minDCF | 0.9967 | — | — |
+
+      The control is worse on both pooled metrics, so the gain is about
+      initialisation and not the seeding fix. Two details are worth recording.
+      First, the control's full-partition minDCF of **0.8050** is almost
+      exactly the shipped post-aug L12 checkpoint's **0.8048** — a control that
+      reproduces the model it was initialised from is doing its job, and it
+      independently validates the scoring path against the committed record.
+      Second, its *dev* minDCF never left 0.9967–0.9999 across all ten epochs:
+      it never found a usable cost surface at all, which is a stronger
+      statement than "slightly worse". (It stopped on the 10-epoch cap, not on
+      patience — best was epoch 6 and patience had reached 4/5.)
+
+      **Correction, same day.** The first version of this entry compared the
+      control's *dev* minDCF (0.9967) with the from-scratch *eval* median
+      (0.7234) and reported the gap as 0.27. That is dev against eval and is
+      not a comparison; the control's scoring report did not exist yet when the
+      entry was written. The like-for-like eval-vs-eval gap is **0.0816**. The
+      criterion still passes, now on numbers that can be compared, and the
+      earlier wording is shown here rather than quietly dropped.
 - [x] **Criterion 4 — reported below, and it fires.**
 
 **The verdict does not depend on the reading of criterion 2.** §G3 flags two
