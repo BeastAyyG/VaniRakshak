@@ -16,13 +16,24 @@ reason they were not recognised as such at the time.
 These are not style preferences. Each was learned by getting it wrong in §12.7
 and having to retract a published conclusion.
 
-1. **The noise floor is ~0.8 pp pooled EER.** Measured directly: two
-   checkpoints computing the *identical* function at inference
-   (`cm_aasist_attm_uniform.pt` 12.734 %, `cm_aasist_meanpool.pt` 13.504 %)
-   differ by 0.770 pp purely from training-run variance. Any difference below
-   that between separately trained checkpoints **means nothing** and must not
-   be reported as a win, a regression, or a ranking. Do not quote three decimal
-   places of a quantity you cannot resolve to one.
+1. **The noise floor is ~0.8 pp pooled EER — for warm-started checkpoints.**
+   Measured directly: two checkpoints computing the *identical* function at
+   inference (`cm_aasist_attm_uniform.pt` 12.734 %, `cm_aasist_meanpool.pt`
+   13.504 %) differ by 0.770 pp purely from training-run variance. Any
+   difference below that between separately trained checkpoints **means nothing**
+   and must not be reported as a win, a regression, or a ranking. Do not quote
+   three decimal places of a quantity you cannot resolve to one.
+
+   **Amendment — 2026-09-17: this figure does not hold for from-scratch
+   initialisation.** The five pre-registered from-scratch seeds (S42–S46, full
+   eval partition) span **3.621 pp** pooled EER (10.221 %–13.842 %), and
+   **1.380 pp** with S44 excluded. Either way it is well above 0.770 pp, so the
+   warm-started floor was never a valid yardstick for these runs. **Use 1.4 pp
+   as the minimum working floor for from-scratch comparisons**, and treat the
+   full 3.6 pp span as the honest uncertainty until more seeds exist. The
+   original measurement and both checkpoints are left above, unedited, per
+   rule 4. The choice between 1.4 pp and 3.6 pp as "the" floor is the only
+   judgement here and is flagged rather than buried.
 2. **Two seeds minimum for any claim.** `--seed` exists now. A single run
    cannot distinguish an improvement from a lucky initialisation.
 3. **Change one thing per run.** The `--freeze-merge` experiment was read as
@@ -1046,6 +1057,99 @@ band the shipped model already occupies. Corrected statements:
 **dev** EER threshold, the dev improvement (16.415 % → 11.8–12.8 %) is the
 mechanism by which a gain would reach the product. **The blocker is A28, not the
 interface.**
+
+---
+
+### G3 result — 2026-09-17. Criterion 2 is NOT met.
+
+Run as pre-registered, no criteria moved. Report:
+`reports/cm_from_scratch_claim_5seed_2026-09-16.json` — 628,848 utterances
+(128,292 bonafide / 500,556 spoof, 130 unreadable), layer 12, full eval
+partition.
+
+| seed | minDCF | EER % | CLLR |
+|---|---|---|---|
+| S42 | 0.6933 | 11.044 | 1.401 |
+| S43 | 0.7307 | 11.601 | 1.469 |
+| S44 | 0.7482 | **13.842** | 1.054 |
+| S45 | **0.6832** | **10.221** | 1.213 |
+| S46 | 0.7234 | 11.357 | 1.398 |
+
+median minDCF **0.7234** · median EER **11.36 %** · actDCF 2.04–2.77
+(uncalibrated — `ml/train_cm.py` fits no Platt scaler).
+
+- [x] **Criterion 1 — MET, 5 of 5.** minDCF < 0.75 on at least 3 of 5 seeds.
+      Every seed clears it, by 0.0018–0.0668. No warm-started model has ever
+      cleared this bar.
+- [ ] **Criterion 2 — NOT MET, 4 of 5.** Pooled eval EER < 12.666 % on all five
+      seeds. S44 is 13.842 %, missing by **1.18 pp**, and is also the weakest
+      minDCF (0.7482, only 0.0018 under its own bar).
+- [x] **Criterion 3 — MET.** The warm-start control (identical flags, same
+      revision, `--init-weights data/cm_aasist.pt`, seed 42, layer 12) ran the
+      full ten epochs and finished at **best epoch 6: dev minDCF 0.9967, dev
+      EER 15.836 %**, against a from-scratch median of 0.7234. The control is
+      worse by 0.27 minDCF, so the gain is about initialisation and not the
+      seeding fix. Worth recording that the control's dev minDCF never left
+      0.9967–0.9999 across all ten epochs — it never found a usable cost
+      surface at all, which is a stronger statement than "slightly worse".
+      (It stopped on the 10-epoch cap, not on patience: best was epoch 6 and
+      patience had reached 4/5.)
+- [x] **Criterion 4 — reported below, and it fires.**
+
+**The verdict does not depend on the reading of criterion 2.** §G3 flags two
+readings of the EER bar, 12.666 % (as stated) and 11.866 % (as justified).
+Both give the same answer — 4 of 5 — because S44 fails either one. There is
+nothing for the user to decide here, which is why this is not escalated.
+
+**Per ground rule 5, this is the result and it is not being re-run.** All five
+pre-registered seeds ran and were scored. Training a sixth seed and dropping
+the outlier would not be a measurement, and the pre-registered set is already
+complete.
+
+#### Criterion 4 fires — and this is the more consequential finding
+
+Ground rule 1 set the noise floor at ~0.8 pp pooled EER, measured on two
+*warm-started* checkpoints. The five from-scratch seeds span **10.221 % to
+13.842 % = 3.621 pp**, four and a half times that floor. Excluding S44, the
+remaining four still span **1.380 pp**. Ground rule 1 has therefore been
+amended above with the original left visible, exactly as criterion 4 required.
+
+This does not change the verdict. It changes how much the verdict is worth. The
+claim was written as *"beating the best model on record by more than the 0.8 pp
+floor"* — and on the floor that from-scratch runs actually exhibit, that
+justification is substantially weaker than it reads. Recorded here rather than
+left standing.
+
+#### What this does and does not say
+
+- **It does not say the model is bad.** S42 still dominates the shipped
+  checkpoint on every pooled metric (§G3 correction: minDCF 0.8048 → 0.6515,
+  pooled EER 13.627 % → 11.336 %, CLLR 1.6238 → 1.4038, A19 21.32 % → 6.42 %,
+  A20 23.19 % → 13.57 %, dev EER 16.415 % → 12.749 %). The only regression is
+  A28 at +1.552 pp, inside per-attack noise in the same 26–28 % band the
+  shipped model already occupies.
+- **The claim and the ship decision were always different questions.** The
+  claim was about reproducibility across seeds. The ship decision was about
+  pooled metrics and dev. A failed claim is not a worse model, and the swap
+  proceeds on the evidence above.
+- **S44 is a characterised outlier with no identified mechanism.** It is not a
+  scoring bug — the report was written from the real checkpoint files, and the
+  same seed was already the outlier in the 20 k slice pattern.
+- **Layer 5 is not a rescue for this result.** It would be a new model needing
+  its own criteria pre-registered before it launches, and it cannot
+  retroactively change a completed five-seed result. It remains available and
+  unstarted.
+
+#### Carried forward
+
+- A28 is still an open hole in every model measured, and neither known lever
+  (layer 5, 12.945 %; unfreeze-top-4, 19.172 %) has been combined with
+  from-scratch initialisation.
+- `data/cm_scratch_S44/S45/S46.pt` were destroyed by a stray git operation at
+  01:32–01:34 on 2026-09-17. S45 was the best seed, so **the best weights have
+  no copy on disk**. The scores above are unaffected — the report was written
+  from the real files before the deletion — but S45 cannot be shipped without a
+  retrain. S42's weights survive, which is why S42 is the swap candidate.
 
 ---
 
