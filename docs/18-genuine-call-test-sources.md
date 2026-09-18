@@ -119,15 +119,61 @@ not uniformly good or bad; it is blind to specific generators.
 
 ---
 
+## The generalisation gap — the uncomfortable result
+
+Same checkpoint, same harness, two corpora, ~2 h into training:
+
+| Corpus | What it is | Pooled EER | minDCF |
+|---|---|---|---|
+| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | **10.38 %** | 0.7463 |
+| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | **36.51 %** | 0.9889 |
+| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | **42.22 %** | 0.9960 |
+
+**A 3.5× swing depending only on which corpus you score.** The 10.38 % number
+is the one that would end up in a benchmark table; the 36.51 % number is the
+one that describes what happens on audio a fraudster actually made.
+
+This is not a fluke of this checkpoint — it is the single most consistent
+finding in the literature. Speech DF Arena (docs/17 §0) reports exactly this
+pattern across 15 systems: near-perfect in-domain scores, EERs of 24–75 %
+out-of-domain, and *"not a single model consistently outperforms others
+across all datasets."* Its most damaging single observation is that
+**almost all open systems are trained on ASVspoof 2019 and then generalise
+poorly** — which is what we are reproducing here.
+
+Practical consequences:
+
+- **Never quote an ASVspoof number as a product accuracy figure.** If a buyer
+  asks "how accurate is it?", the only defensible answer comes from audio
+  resembling their traffic.
+- **Track ITW as a standing regression metric**, not a one-off. It is the
+  cheapest available proxy for "how blind are we to generators we did not
+  train on".
+- **This is the argument for IndicVoices and a real-call red-team.** ITW is at
+  least English studio-ish audio; Indian telephony is further out of domain
+  still, so assume today's real number is worse than 36.5 % until measured.
+
+The `full_call` column is the honest one for ITW — that corpus was never on a
+phone, so simulating the path is what makes it a *call* test.
+
+---
+
 ## Caveats — do not quote these numbers yet
 
-1. **This checkpoint is 30 % trained** (epoch 3 of 10). Treat as a pipeline
-   check, not a result.
+1. **This checkpoint is mid-training and is the best-so-far, not the final
+   model.** Epoch 3 is still the best at the time of writing (epoch 4 came in
+   worse: dev EER 14.04 % vs 13.32 %, minDCF 0.9644 vs 0.9467). Dev EER has
+   moved 17.87 → 15.88 → 13.32 → 14.04 across epochs. Treat every number here
+   as a pipeline check, not a result, and re-run when seed 42 finishes.
 2. **No control.** There is no `--merge-layers 12` / non-RawBoost checkpoint to
    compare against yet, so this run cannot tell you whether G4 *helped*. That
    control is required before any claim.
-3. **n = 1500**, not the full 20k slice.
-4. **Scoring convention is easy to get wrong — I hit it during this run.**
+3. **n = 1500** (ASVspoof 5) and **n = 2000** (ITW), not the full slices.
+4. **ITW is English, online-video audio** — out of domain on language *and*
+   channel *and* generator. It is a stress test, not a deployment
+   simulation. It tells you the gap exists; it does not tell you the size of
+   the gap on Indian telephony.
+5. **Scoring convention is easy to get wrong — I hit it during this run.**
    The contract, from `ml/train_cm.py:919-920`, is:
 
    ```python
