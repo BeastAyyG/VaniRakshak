@@ -123,15 +123,22 @@ not uniformly good or bad; it is blind to specific generators.
 
 Same checkpoint, same harness, two corpora, ~2 h into training:
 
-| Corpus | What it is | Pooled EER | minDCF |
-|---|---|---|---|
-| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | **10.38 %** | 0.7463 |
-| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | **36.51 %** | 0.9889 |
-| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | **42.22 %** | 0.9960 |
+Measured on the **full** In-the-Wild corpus (n = 31,779 — 19,963 bonafide /
+11,816 spoof), versus a 1,500-row ASVspoof 5 slice:
 
-**A 3.5× swing depending only on which corpus you score.** The 10.38 % number
-is the one that would end up in a benchmark table; the 36.51 % number is the
-one that describes what happens on audio a fraudster actually made.
+| Corpus | What it is | n | Pooled EER | minDCF |
+|---|---|---|---|---|
+| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 1,500 | **10.38 %** | 0.7463 |
+| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | 31,779 | **37.19 %** | 0.9989 |
+| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | 31,779 | **42.59 %** | 0.9981 |
+
+**A 3.6× swing depending only on which corpus you score.** The 10 % number is
+the one that would end up in a benchmark table; the ~37–43 % numbers describe
+what happens on audio a fraudster actually made.
+
+The 2,000-row ITW pilot earlier gave 36.51 % / 42.22 %, so the pilot was
+within 0.7 pp of the full corpus — small pilots are adequate for tracking this
+metric, which makes it cheap enough to run every time.
 
 This is not a fluke of this checkpoint — it is the single most consistent
 finding in the literature. Speech DF Arena (docs/17 §0) reports exactly this
@@ -158,6 +165,24 @@ phone, so simulating the path is what makes it a *call* test.
 
 ---
 
+## Queued: the G4 control run
+
+`scripts/g4_control_runner.py` is **waiting on the G4 sweep and will take the
+GPU automatically when it finishes.** It trains seeds 42 and 43 with
+`--g4-rawboost` omitted and nothing else changed: same `--merge-layers 12`,
+same `unfreeze_top_n=0`, same data, same init weights.
+
+This is required, not optional. Without it the G4 experiment cannot be read:
+any movement in A19/A20 could come from the augmentation or from the seed,
+and with a measured seed-to-seed spread of ~3.6 pp those two explanations are
+the same size. Ground rule 3 (one variable) is what makes the comparison mean
+anything.
+
+Status file: `C:\vr-save\g4-logs\control_status.json`. Kill the process to
+cancel; the G4 sweep is unaffected.
+
+---
+
 ## Caveats — do not quote these numbers yet
 
 1. **This checkpoint is mid-training and is the best-so-far, not the final
@@ -168,7 +193,8 @@ phone, so simulating the path is what makes it a *call* test.
 2. **No control.** There is no `--merge-layers 12` / non-RawBoost checkpoint to
    compare against yet, so this run cannot tell you whether G4 *helped*. That
    control is required before any claim.
-3. **n = 1500** (ASVspoof 5) and **n = 2000** (ITW), not the full slices.
+3. **ASVspoof 5 is still a 1,500-row slice** of the 20k eval set; ITW is now
+   the full 31,779. Re-run ASVspoof 5 at full width before quoting it.
 4. **ITW is English, online-video audio** — out of domain on language *and*
    channel *and* generator. It is a stress test, not a deployment
    simulation. It tells you the gap exists; it does not tell you the size of
