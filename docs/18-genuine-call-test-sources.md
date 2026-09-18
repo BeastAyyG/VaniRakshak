@@ -128,13 +128,20 @@ Measured on the **full** In-the-Wild corpus (n = 31,779 — 19,963 bonafide /
 
 | Corpus | What it is | n | Pooled EER | minDCF |
 |---|---|---|---|---|
-| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 1,500 | **10.38 %** | 0.7463 |
+| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 20,000 | **11.24 %** | 0.7071 |
 | **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | 31,779 | **37.19 %** | 0.9989 |
 | **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | 31,779 | **42.59 %** | 0.9981 |
 
-**A 3.6× swing depending only on which corpus you score.** The 10 % number is
+**A 3.3× swing depending only on which corpus you score.** The 11 % number is
 the one that would end up in a benchmark table; the ~37–43 % numbers describe
 what happens on audio a fraudster actually made.
+
+On the same 20k slice, the two attacks the G4 criterion is written against are
+**A19 13.70 %** and **A20 16.44 %** — both above the 12 % bar.
+
+> **Sample size changed the verdict once already.** At n = 1,500 this same
+> checkpoint read A19 **11.94 %** — apparently *under* the bar. At the full
+> 20k it is 13.70 %, over it. Do not adjudicate G4 on a slice.
 
 The 2,000-row ITW pilot earlier gave 36.51 % / 42.22 %, so the pilot was
 within 0.7 pp of the full corpus — small pilots are adequate for tracking this
@@ -183,6 +190,43 @@ cancel; the G4 sweep is unaffected.
 
 ---
 
+## Adjudication — `scripts/adjudicate_g4.py`
+
+Applies the pre-registered criterion mechanically so it is not re-litigated by
+hand each time. It **never edits or reinterprets the criterion**; where data
+conflicts with a pre-registered number it emits an OPEN ITEM instead of
+silently moving the threshold.
+
+Criterion (docs/10): *A19 and A20 eval EER both below 12 %, without pooled EER
+regressing beyond the noise floor.* The floor governing G3/G4 is **0.770 pp**
+(docs/10 line 168, Ground rule 1) — not the 5.95 pp from the 4k/2-epoch probe,
+which docs/10 explicitly warns against quoting.
+
+```bash
+python scripts/adjudicate_g4.py \
+    --g4 data/cm_g4_rawboost_s42.pt data/cm_g4_rawboost_s43.pt \
+    --control data/cm_g4_control_s42.pt data/cm_g4_control_s43.pt
+```
+
+A missing arm yields `UNRESOLVED`, never `PASS` — an absent control cannot be
+scored as a win.
+
+**Current reading** (G4 seed 42, epoch 3 of 10, full 20k):
+
+| Criterion | Value | Status |
+|---|---|---|
+| A19 EER < 12 % | 13.70 % | **FAIL** |
+| A20 EER < 12 % | 16.44 % | **FAIL** |
+| Pooled EER no regression | control not trained yet | UNRESOLVED |
+| **Overall** | | **FAIL** |
+
+Provisional — 30 %-trained checkpoint. But note it is failing on the *right*
+axis: A19 and A20 are the two attacks G4 exists to fix, and they are the two
+worst-performing of the 16 in the slice. That is the experiment working even
+when the result is negative.
+
+---
+
 ## Caveats — do not quote these numbers yet
 
 1. **This checkpoint is mid-training and is the best-so-far, not the final
@@ -193,8 +237,8 @@ cancel; the G4 sweep is unaffected.
 2. **No control.** There is no `--merge-layers 12` / non-RawBoost checkpoint to
    compare against yet, so this run cannot tell you whether G4 *helped*. That
    control is required before any claim.
-3. **ASVspoof 5 is still a 1,500-row slice** of the 20k eval set; ITW is now
-   the full 31,779. Re-run ASVspoof 5 at full width before quoting it.
+3. **Both corpora are now measured at full width** — ASVspoof 5 at 20,000
+   rows, ITW at 31,779. Only the checkpoint is still provisional.
 4. **ITW is English, online-video audio** — out of domain on language *and*
    channel *and* generator. It is a stress test, not a deployment
    simulation. It tells you the gap exists; it does not tell you the size of
