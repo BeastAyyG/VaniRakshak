@@ -274,6 +274,39 @@ never a modelling problem.
 
 ---
 
+**Measured 2026-09-19 — G2 applied to the G4 checkpoint.** Recorded result
+only; nothing above was added, removed or reinterpreted.
+
+`scripts/fit_cm_calibration.py` generalises `run_g2_calibration.py` to any
+checkpoint — it reads `merge_layers` / `layer_index` from the file rather than
+hardcoding 12, which the original did, so it cannot score a non-merge
+checkpoint. Platt fitted on **dev only** (12,000 rows); eval used strictly for
+reporting.
+
+| Metric | raw | calibrated |
+|---|---|---|
+| DEV CLLR | 2.3852 | **0.4686** |
+| EVAL CLLR | 2.6703 | **0.5097** |
+| EVAL actDCF (Bayes) | 11.9196 | **1.7143** |
+| EVAL EER / minDCF | 11.212 % / 0.7286 | unchanged — by design |
+
+Criterion 1 (calibrated CLLR < 1.0 on eval): **PASS** at 0.5097, in line with
+the AttM 0.5984 / Uniform 0.6041 precedents. So the G4 checkpoint's problem
+was the same as every previous one: the scores were badly *scaled*, not badly
+*discriminating*.
+
+The actDCF/minDCF gap reproduces the retracted criterion 2 almost exactly:
+actDCF fell ~7× (11.92 → 1.71) yet still sits ~135 % above minDCF (0.7286),
+against the 105–111 % recorded above. Per the analysis above that residual is
+**discrimination, not calibration** — G3's problem, not G2's.
+
+Runtime `score()` deliberately untouched, per item 3. Implemented with
+`scipy` (declared in requirements.txt, installed) rather than `sklearn`
+(declared nowhere, absent from this venv — `run_g2_calibration.py` cannot
+run here at all).
+
+---
+
 ## G3 — Fine-tune the WavLM encoder
 
 **The problem, stated plainly.** `ml/train_cm.py:686-688` loads WavLM in fp16
