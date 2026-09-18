@@ -24,6 +24,7 @@ from typing import Optional, Sequence, Union
 
 import numpy as np
 import torch
+from scipy.signal import lfilter
 
 # Ensure vanirakshak-backend is discoverable for primitive imports
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -220,6 +221,129 @@ class CodecTelephonyAugmenter:
             x = random_gain(x, low_db=-6.0, high_db=6.0, rng=local_rng)
 
         return x.astype(np.float32)
+
+
+def _signal_rms(x: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(np.square(x, dtype=np.float64)))) if x.size else 0.0
+
+
+def add_laplacian_impulsive_noise(
+    x: np.ndarray,
+    snr_db: float,
+    rng: np.random.Generator,
+    impulse_fraction: float = 0.02,
+) -> np.ndarray:
+    if x.size == 0:
+        return x.astype(np.float32, copy=True)
+    rms = _signal_rms(x)
+    if rms <= 0.0:
+        return x.astype(np.float32, copy=True)
+    target_noise_rms = rms * (10.0 ** (-snr_db / 20.0))
+    noise = rng.laplace(0.0, 1.0, size=x.shape).astype(np.float64)
+    n_imp = max(0, int(x.size * float(impulse_fraction)))
+    if n_imp > 0:
+        idx = rng.choice(x.size, size=n_imp, replace=False)
+        impulses = rng.uniform(-1.0, 1.0, size=n_imp)
+        noise[idx] += 10.0 * impulses
+    current_rms = float(np.sqrt(np.mean(np.square(noise))))
+    if current_rms > 0.0:
+        noise *= target_noise_rms / current_rms
+    return (x + noise.astype(np.float32)).astype(np.float32)
+
+
+def apply_convolutive_nonlinear_distortion(
+    x: np.ndarray,
+    sr: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    if x.size == 0:
+        return x.astype(np.float32, copy=True)
+    taps = int(rng.integers(3, 11))
+    coeffs = rng.uniform(-1.0, 1.0, size=taps).astype(np.float64)
+    coeffs[0] = 1.0
+    if taps > 1:
+        coeffs /= np.sum(np.abs(coeffs)) + 1e-8
+    filtered = lfilter(coeffs, [1.0], x).astype(np.float32, copy=False)
+    drive = float(rng.uniform(1.0, 3.0))
+    return np.tanh(drive * filtered).astype(np.float32)
+
+
+def _validate_probability(name: str, value: float) -> float:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a probability in [0, 1], got {value!r}") from None
+    if not np.isfinite(v) or v < 0.0 or v > 1.0:
+        raise ValueError(f"{name} must be a probability in [0, 1], got {value!r}")
+    return v
+
+
+def _validate_snr_range(name: str, value: Sequence[float]) -> tuple[float, float]:
+    try:
+        lo, hi = float(value[0]), float(value[1])
+    except (TypeError, ValueError, IndexError):
+        raise ValueError(
+            f"{name} must be a finite ordered (low, high) dB pair, got {value!r}"
+        ) from None
+    if not (np.isfinite(lo) and np.isfinite(hi) and lo < hi):
+        raise ValueError(
+            f"{name} must be a finite ordered (low, high) dB pair, got {value!r}"
+        )
+    return (lo, hi)
+
+
+def _validate_sr(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or int(value) <= 0:
+        raise ValueError(f"sr must be a positive integer, got {value!r}")
+    return int(value)
+
+
+class RawBoostAugmenter:
+    VERSION = "g4-rawboost-v1"
+
+    def __init__(
+        self,
+        sr: int = 16000,
+        p_impulsive: float = 0.4,
+        p_convolutive: float = 0.4,
+        impulsive_snr_range: tuple[float, float] = (10.0, 25.0),
+        seed: Optional[int] = None,
+    ) -> None:
+        self.sr = _validate_sr(sr)
+        self.p_impulsive = _validate_probability("p_impulsive", p_impulsive)
+        self.p_convolutive = _validate_probability("p_convolutive", p_convolutive)
+        self.impulsive_snr_range = _validate_snr_range(
+            "impulsive_snr_range", impulsive_snr_range
+        )
+        self.rng = np.random.default_rng(seed)
+
+    def __call__(
+        self,
+        audio: Union[np.ndarray, torch.Tensor],
+        rng: Optional[np.random.Generator] = None,
+    ) -> np.ndarray:
+        if isinstance(audio, torch.Tensor):
+            x = audio.detach().cpu().numpy().copy().astype(np.float32)
+        else:
+            x = np.asarray(audio, dtype=np.float32).copy()
+        if x.ndim != 1:
+            raise ValueError(f"audio must be 1-D mono, got ndim={x.ndim}")
+        if x.size == 0:
+            return x
+        if not np.isfinite(x).all():
+            raise ValueError("audio contains NaN or Inf samples")
+        local_rng = rng or self.rng
+
+        if local_rng.random() < self.p_impulsive:
+            snr = float(local_rng.uniform(*self.impulsive_snr_range))
+            x = add_laplacian_impulsive_noise(
+                x, snr_db=snr, rng=local_rng, impulse_fraction=0.02
+            )
+
+        if local_rng.random() < self.p_convolutive:
+            x = apply_convolutive_nonlinear_distortion(x, sr=self.sr, rng=local_rng)
+
+        return x.astype(np.float32, copy=False)
 
 
 def augment_audio(

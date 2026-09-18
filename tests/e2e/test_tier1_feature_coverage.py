@@ -38,7 +38,7 @@ from vanirakshak.detectors.cm_aasist import (
 )
 from vanirakshak.detectors.pipeline import DetectionPipeline, _default_cm
 from vanirakshak.server.app import app
-from benchmarks.compute_mindcf import compute_eer, compute_mindcf, compute_act_dcf as compute_actdcf, compute_cllr, TAU_BAYES
+from benchmarks.compute_mindcf import compute_eer, compute_mindcf, compute_act_dcf as compute_actdcf, compute_cllr, compute_min_cllr, evaluate_system, TAU_BAYES
 from ml.aasist_model import AASISTLHead
 
 
@@ -451,6 +451,68 @@ class TestF11_ComprehensiveForensicEvaluation:
         spoof = np.array([-3.0, -4.0, -5.0])
         cllr = compute_cllr(bonafide, spoof)
         assert cllr < 0.1, f"Separated scores should yield low CLLR, got {cllr}"
+
+    def test_f11_min_cllr_non_negative_and_bounded_by_cllr(self):
+        rng = np.random.default_rng(7)
+        bonafide = rng.normal(2.0, 1.0, size=512)
+        spoof = rng.normal(-2.0, 1.0, size=512)
+        cllr = compute_cllr(bonafide, spoof)
+        min_cllr = compute_min_cllr(bonafide, spoof)
+        assert min_cllr >= 0.0, f"minCLLR must be non-negative, got {min_cllr}"
+        assert min_cllr <= cllr + 1e-9, (
+            f"minCLLR {min_cllr} must not exceed CLLR {cllr}"
+        )
+
+    def test_f11_min_cllr_invariant_to_monotone_rescaling(self):
+        bonafide = np.array([3.0, 4.0, 5.0])
+        spoof = np.array([-3.0, -4.0, -5.0])
+        base = compute_min_cllr(bonafide, spoof)
+        scaled = compute_min_cllr(bonafide * 50.0, spoof * 50.0)
+        assert abs(base - scaled) < 1e-9, (
+            f"minCLLR must be invariant to monotone rescaling: {base} vs {scaled}"
+        )
+
+    def test_f11_min_cllr_is_one_for_useless_scores(self):
+        scores = np.zeros(8)
+        min_cllr = compute_min_cllr(scores, scores.copy())
+        assert abs(min_cllr - 1.0) < 1e-9, (
+            f"Undiscriminated scores must give minCLLR 1.0, got {min_cllr}"
+        )
+
+    @pytest.mark.parametrize(
+        ("bonafide", "spoof", "expected"),
+        [
+            ([-3.0, -2.0], [2.0, 3.0], 1.0),
+            ([0.0, 1.0], [-1.0, 0.0], 0.5),
+            ([0.0], [0.0, 0.0, 0.0], 1.0),
+            ([1.0], [-1.0, -1.0, -1.0], 0.0),
+            ([0.0, 2.0], [1.0], 0.75 * np.log2(3.0) - 0.5),
+            ([0.0, 2.0], [1.0, 1.0, 1.0], 0.75 * np.log2(3.0) - 0.5),
+        ],
+        ids=[
+            "reversed-ranking",
+            "mixed-class-tie",
+            "unequal-all-tied",
+            "unequal-separated",
+            "unequal-pooled-inversion",
+            "class-replication-invariant",
+        ],
+    )
+    def test_f11_min_cllr_exact_edge_cases(self, bonafide, spoof, expected):
+        bon = np.asarray(bonafide, dtype=np.float64)
+        spf = np.asarray(spoof, dtype=np.float64)
+        assert compute_min_cllr(bon, spf) == pytest.approx(expected, abs=1e-12)
+        assert compute_min_cllr(bon[::-1], spf[::-1]) == pytest.approx(expected, abs=1e-12)
+
+    def test_f11_evaluation_system_reports_min_cllr(self):
+        bonafide = np.array([3.0, 4.0, 5.0])
+        spoof = np.array([-3.0, -4.0, -5.0])
+        results = evaluate_system(bonafide, spoof)
+        assert "min_cllr" in results and "minCLLR" in results
+        assert "calibration_loss" in results
+        assert results["calibration_loss"] >= -1e-9, (
+            f"CLLR - minCLLR must be non-negative, got {results['calibration_loss']}"
+        )
 
     def test_f11_evaluation_report_json_schema(self, tmp_path):
         report = {

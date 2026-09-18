@@ -46,7 +46,7 @@ for p in [str(REPO_ROOT), str(BACKEND_DIR)]:
 
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
-from ml.augment import CodecTelephonyAugmenter, prepare_audio_window
+from ml.augment import CodecTelephonyAugmenter, RawBoostAugmenter, prepare_audio_window
 from vanirakshak.detectors.cm_aasist import _validate_checkpoint
 
 logging.basicConfig(
@@ -130,11 +130,13 @@ class FastAudioAugmentLoader:
         max_samples: Optional[int] = None,
         generator: Optional[torch.Generator] = None,
         seed: int = 42,
+        rawboost_augmenter: Optional[RawBoostAugmenter] = None,
     ) -> None:
         self.samples = dataset.samples
         if max_samples and max_samples < len(self.samples):
             self.samples = self.samples[:max_samples]
         self.augmenter = augmenter
+        self.rawboost_augmenter = rawboost_augmenter
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.drop_last = drop_last
@@ -170,6 +172,8 @@ class FastAudioAugmentLoader:
                 audio, sr=sr, target_duration=4.0, random_crop=True, rng=rng
             )
             w_aug = self.augmenter(w, rng=rng)
+            if self.rawboost_augmenter is not None:
+                w_aug = self.rawboost_augmenter(w_aug, rng=rng)
             return w_aug, label
         except Exception as e:
             logger.warning("Error loading %s: %s; using zero window", path, e)
@@ -613,8 +617,14 @@ def train_recipe_a(
     seed: int = 42,
     unfreeze_top_n: int = 0,
     encoder_lr: float = 1e-5,
+    g4_rawboost: bool = False,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation."""
+    output_checkpoint = Path(output_checkpoint)
+    if output_checkpoint.exists():
+        raise FileExistsError(
+            f"Refusing to overwrite existing checkpoint: {output_checkpoint}"
+        )
     # Seed RNGs for reproducibility
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -634,6 +644,16 @@ def train_recipe_a(
         p_gain=0.3,
         seed=seed,
     )
+    rawboost_augmenter = None
+    if g4_rawboost:
+        rawboost_augmenter = RawBoostAugmenter(seed=seed)
+        logger.info(
+            "G4 RawBoost augmentation ENABLED (recipe=%s, version=%s)",
+            RawBoostAugmenter.VERSION,
+            RawBoostAugmenter.VERSION,
+        )
+    else:
+        logger.info("G4 RawBoost augmentation disabled (baseline codec pipeline only)")
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
         augmenter=augmenter,
@@ -645,6 +665,7 @@ def train_recipe_a(
         max_samples=max_train_utts,
         generator=loader_generator,
         seed=seed,
+        rawboost_augmenter=rawboost_augmenter,
     )
 
     # 2. Setup Dev Set & DataLoader
@@ -970,6 +991,11 @@ def train_recipe_a(
                 "unfreeze_top_n": int(unfreeze_top_n),
                 "encoder_lr": float(encoder_lr) if unfreeze_top_n > 0 else None,
                 "frontend_dtype": str(frontend_dtype).replace("torch.", ""),
+                "g4_rawboost": {
+                    "enabled": bool(g4_rawboost),
+                    "recipe": RawBoostAugmenter.VERSION if g4_rawboost else None,
+                    "version": RawBoostAugmenter.VERSION if g4_rawboost else None,
+                },
             }
             if unfreeze_top_n > 0:
                 # Only the tuned layers, never the whole frontend: WavLM-base-plus
@@ -1096,6 +1122,13 @@ def main() -> None:
         help="Learning rate for unfrozen encoder layers (default 1e-5). "
              "Ignored when --unfreeze-top-n is 0.",
     )
+    parser.add_argument(
+        "--g4-rawboost", action="store_true", default=False,
+        help="Enable opt-in RawBoost-style augmentation (docs/10 G4): "
+             "signal-dependent impulsive noise + convolutive/nonlinear "
+             "distortion, chained after the codec/telephony pipeline. "
+             "Deterministic via the per-item (seed, epoch, index) RNG.",
+    )
     parser.add_argument("--workers", type=int, default=24)
     args = parser.parse_args()
 
@@ -1122,6 +1155,7 @@ def main() -> None:
         seed=args.seed,
         unfreeze_top_n=args.unfreeze_top_n,
         encoder_lr=args.encoder_lr,
+        g4_rawboost=args.g4_rawboost,
     )
 
 

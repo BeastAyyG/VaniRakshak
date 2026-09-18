@@ -214,6 +214,56 @@ def compute_cllr(
     return float(cllr)
 
 
+def compute_min_cllr(
+    bonafide_scores: np.ndarray,
+    spoof_scores: np.ndarray,
+) -> float:
+    bon = np.asarray(bonafide_scores, dtype=np.float64).ravel()
+    spf = np.asarray(spoof_scores, dtype=np.float64).ravel()
+    if bon.size == 0 or spf.size == 0:
+        return float("nan")
+    if not np.all(np.isfinite(bon)) or not np.all(np.isfinite(spf)):
+        raise ValueError("minCLLR requires finite scores")
+
+    scores = np.concatenate((bon, spf))
+    _, groups = np.unique(scores, return_inverse=True)
+    target = np.bincount(groups[:bon.size], minlength=groups.max() + 1) / bon.size
+    non_target = np.bincount(groups[bon.size:], minlength=target.size) / spf.size
+    blocks: list[tuple[float, float]] = []
+    for tar, non in zip(target, non_target):
+        blocks.append((float(tar), float(non)))
+    # Pool Adjacent Violators: a block whose effective LLR exceeds its right
+    # neighbour's cannot be mapped monotonically into an increasing LLR
+    # sequence, so the pair must pool. Violation iff l_t/l_n > r_t/r_n, i.e.
+    # l_t * r_n > r_t * l_n. After pooling, re-check the block to the left.
+    while True:
+        i = 0
+        merged = False
+        while i < len(blocks) - 1:
+            (l_t, l_n), (r_t, r_n) = blocks[i], blocks[i + 1]
+            viol = (l_t > 0.0 and r_n > 0.0 and l_t * r_n > r_t * l_n) or (
+                l_t > 0.0 and l_n == 0.0 and r_t == 0.0 and r_n > 0.0
+            )
+            if viol:
+                blocks[i : i + 2] = [(l_t + r_t, l_n + r_n)]
+                merged = True
+                if i > 0:
+                    i -= 1
+            else:
+                i += 1
+        if not merged:
+            break
+
+    cost = 0.0
+    for tar, non in blocks:
+        total = tar + non
+        if tar > 0.0:
+            cost += tar * np.log2(total / tar)
+        if non > 0.0:
+            cost += non * np.log2(total / non)
+    return float(0.5 * cost)
+
+
 def evaluate_system(
     bonafide_scores: np.ndarray,
     spoof_scores: np.ndarray,
@@ -265,6 +315,7 @@ def evaluate_system(
         bonafide_scores, spoof_scores, threshold=TAU_BAYES, p_tar=p_tar, c_miss=c_miss, c_fa=c_fa
     )
     cllr = compute_cllr(bonafide_scores, spoof_scores)
+    min_cllr = compute_min_cllr(bonafide_scores, spoof_scores)
 
     # docs/04 section 1.2: actDCF ~= minDCF means well calibrated; actDCF >> minDCF
     # means discrimination without calibration. Allow a small absolute floor so a
@@ -276,6 +327,9 @@ def evaluate_system(
         "act_dcf": act_dcf,
         "act_dcf_bayes": act_dcf_bayes,
         "cllr": cllr,
+        "min_cllr": min_cllr,
+        "calibration_loss": cllr - min_cllr,
+        "minCLLR": min_cllr,
         "eer": eer,
         "minDCF": min_dcf,
         "actDCF": act_dcf,
