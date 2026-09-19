@@ -431,12 +431,42 @@ control has not trained yet.
 
 1. **Pooled 11.212 % / minDCF 0.7286 is the best pooled result this repo has
    produced.** RawBoost helped the pooled score.
-2. **Dev-minDCF selection made A19/A20 worse.** Epoch 3 measured A19 13.701 /
-   A20 16.437; the checkpoint actually selected (epoch 7) measures 16.257 /
-   17.283. Pooled improved 11.237 → 11.212 while the two attacks the criterion
-   targets regressed ~2.6 pp and ~0.8 pp. Selection was fixed in advance on
-   dev minDCF, so epoch 7 is the correct checkpoint — but both numbers belong
-   in the record, not just the flattering one.
+2. **Dev-minDCF selection appears to have cost A19, but only A19.** Epoch 3
+   measured A19 13.701 / A20 16.437; the selected epoch 7 measures 16.257 /
+   17.283. Pooled improved 11.237 → 11.212. Selection was fixed in advance on
+   dev minDCF, so epoch 7 is the correct checkpoint — but read the size of
+   that movement against the noise before repeating it as fact.
+
+### How much of this is noise (bootstrapped, `scripts/eer_bootstrap_ci.py`)
+
+A19 and A20 have only **935 and 920** spoof utterances in the 20k slice, so a
+per-attack EER quoted to three decimals invites over-reading. 2,000-rep
+percentile bootstrap on the epoch-7 scores:
+
+| | n_spoof | EER | 95 % CI | ± |
+|---|---|---|---|---|
+| pooled | 15,936 | **11.212 %** | [10.718, 11.779] | 0.53 |
+| A19 | 935 | 16.264 % | [14.973, 17.792] | 1.36 |
+| A20 | 920 | 17.324 % | [15.943, 18.680] | 1.36 |
+| A28 | 1,012 | 16.996 % | [15.810, 18.577] | 1.36 |
+| A32 | 980 | 19.936 % | [18.776, 21.341] | 1.30 |
+
+**The FAIL is robust.** A19's CI floor is 14.97 % and A20's is 15.94 % — both
+above the 12 % bar at the optimistic end of the interval. The verdict does not
+depend on where in the interval the true value sits.
+
+**The pooled win is also robust.** 11.779 % ceiling vs the best prior pooled
+(AttM 12.682 %) — no overlap.
+
+**But the epoch-3 → epoch-7 movement is mostly not.** A20 moved 0.89 pp
+against a ±1.36 pp interval: that is noise, and I should not have written it
+as a regression. A19 moved 2.56 pp, which exceeds the individual interval, so
+it is probably real — but the epoch-3 checkpoint was overwritten, so a *paired*
+test is impossible and I am not claiming significance. Treat A19 as "probably
+regressed" and A20 as "unchanged within noise".
+
+(A20 counts 920 here and 921 in the adjudication: one utterance failed to
+decode. Immaterial at 0.04 pp.)
 
 **The gap this does not close.** The pre-augmentation model remains the only
 checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by

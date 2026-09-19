@@ -1,0 +1,53 @@
+{
+  "checkpoint": "data\\cm_g4_rawboost_s42.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 4058,
+  "pooled": {
+    "n_spoof": 15936,
+    "eer_pct": 11.212,
+    "ci95_pct": [
+      10.718,
+      11.779
+    ],
+    "half_width_pp": 0.528
+  },
+  "attacks": {
+    "A19": {
+      "n_spoof": 935,
+      "eer_pct": 16.264,
+      "ci95_pct": [
+        14.973,
+        17.792
+      ],
+      "half_width_pp": 1.361
+    },
+    "A20": {
+      "n_spoof": 920,
+      "eer_pct": 17.324,
+      "ci95_pct": [
+        15.943,
+        18.68
+      ],
+      "half_width_pp": 1.364
+    },
+    "A28": {
+      "n_spoof": 1012,
+      "eer_pct": 16.996,
+      "ci95_pct": [
+        15.81,
+        18.577
+      ],
+      "half_width_pp": 1.363
+    },
+    "A32": {
+      "n_spoof": 980,
+      "eer_pct": 19.936,
+      "ci95_pct": [
+        18.776,
+        21.341
+      ],
+      "half_width_pp": 1.302
+    }
+  }
+}
