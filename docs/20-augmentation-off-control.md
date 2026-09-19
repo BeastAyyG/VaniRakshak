@@ -252,13 +252,49 @@ and scores a real utterance:
 - live LLR **+7.036** on `test_audio/hindi_sample.wav` → decides genuine-ward
 - `calibration: present`
 
-**Still required before shipping:** re-fit the fusion weights `w_cm` /
-`w_asv`. They are fitted to the old head's LLR distribution, and calibration
-rescales the LLR, so the fused risk score is not yet trustworthy even though
-the detector itself is. Do not export `VR_FUSION_W_CM` / `VR_FUSION_W_ASV` to
-work around it — an explicit env var overrides the backend's real-backend
-preset and re-introduces the false-alarm behaviour the preset exists to
-remove.
+### Fusion weights — checked, no change warranted
+
+The one open item was that `w_cm` / `w_asv` are fitted to the old head's LLR
+distribution, and that calibration rescales the LLR. `fit_fusion_weights.py`
+was therefore re-run with arm B s42 wired in (real dev corpus for the CM
+axis, anchor enrolled). It fits only `(intercept, w_cm, w_asv)`;
+
+| L2 | `w_cm` | `w_asv` |
+|---|---|---|
+| 0.10 | 2.4469 | 6.3502 |
+| 0.25 | 1.5869 | 3.6372 |
+| 0.50 | 1.0249 | 2.1602 |
+| 1.00 | 0.6054 | 1.1902 |
+| 2.00 | 0.3339 | 0.6247 |
+| 5.00 | 0.1425 | 0.2568 |
+| 10.00 | 0.0729 | 0.1295 |
+
+**Read the spread, not any single row.** `w_cm` moves 33× and `w_asv` 49×
+across a plausible L2 range, so there is no identifiable "best" value — only
+a band. A single point estimate at the default `l2=1.0` (0.6054 / 1.1902)
+looks like it indicts the deployed preset (1.5 / 2.0) as over-weighting by
+~2.5×, but that is an artefact of an arbitrary default, not evidence.
+
+The deployed preset **sits inside the band**, at roughly L2 ≈ 0.28–0.55 —
+toward the conservative end, well below the aggressive l2=0.1 fit
+(2.4469 / 6.3502). Training accuracy at l2=1.0 is 90.0 %.
+
+**Conclusion: leave `w_cm=1.5` / `w_asv=2.0` alone.** There is no evidence
+they need changing for arm B, and changing them on a point estimate from 170
+samples would be fitting to noise. Recorded so this is not re-litigated.
+
+Two traps found while doing this, both now guarded in the script:
+
+- `load_anchor()` is not optional. Skip it and `asv_mismatch` is constant, so
+  `w_asv` silently fits to **0.0000** — which reads as "ASV doesn't matter"
+  when it is really a missing-data artefact. `fit_fusion_weights.py` now
+  calls it and warns.
+- Do not export `VR_FUSION_W_CM` / `VR_FUSION_W_ASV` to "fix" the fusion. An
+  explicit env var overrides the backend's real-backend preset and
+  re-introduces the false-alarm behaviour that preset exists to remove.
+
+`--sweep` was added to `fit_fusion_weights.py` so the band is one command
+away instead of an inline script.
 
 ## Shipping recommendation
 

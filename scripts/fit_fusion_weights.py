@@ -26,6 +26,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import sys
 from dataclasses import dataclass
@@ -244,7 +245,20 @@ def fit_weights(
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--l2", type=float, default=1.0,
+                    help="L2 strength for the single fit (default 1.0)")
+    ap.add_argument("--sweep", action="store_true",
+                    help="fit across a range of L2 and print the table. Use "
+                         "this: a single point estimate is not interpretable "
+                         "(see the note this script prints).")
+    args = ap.parse_args()
+
     pipe = DetectionPipeline()
+    # load_anchor() is not optional decoration -- without it asv_mismatch is a
+    # constant and w_asv silently fits to 0, which reads as "ASV doesn't
+    # matter" rather than as the missing-data artefact it is.
     anchor_state = load_anchor(pipe)
     if not anchor_state.get("enrolled"):
         print(f"WARNING: anchor not enrolled ({anchor_state.get('error')}) — "
@@ -255,10 +269,27 @@ def main() -> int:
     n_risky = sum(1 for s in samples if s.label == 1)
     print(f"Built {len(samples)} labelled samples ({n_genuine} genuine, {n_risky} spoof/impostor)")
 
+    if args.sweep:
+        print("\n  l2       w_cm     w_asv")
+        print("  " + "-" * 32)
+        for l2 in (0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0):
+            w = fit_weights(samples, settings.fusion.w_prosody,
+                            settings.fusion.w_channel, l2=l2)
+            print(f"  {l2:<7.2f} {w['w_cm']:7.4f}  {w['w_asv']:7.4f}")
+        print(
+            "\nRead the SPREAD, not any single row. The fitted weights move by "
+            "an order of magnitude\nacross a plausible L2 range, so there is no "
+            "identifiable 'best' value here -- only a band. Judge a candidate\n"
+            "preset by whether it sits inside that band, not by whether it "
+            "matches the --l2 default."
+        )
+        return 0
+
     weights = fit_weights(
         samples,
         fixed_w_prosody=settings.fusion.w_prosody,
         fixed_w_channel=settings.fusion.w_channel,
+        l2=args.l2,
     )
 
     print("\nRaw fitted weights (DO NOT deploy these numbers as-is — read below):")

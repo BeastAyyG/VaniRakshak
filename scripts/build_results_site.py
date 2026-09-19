@@ -336,14 +336,37 @@ def main() -> int:
       "in the request path and the stub is not deciding. Live LLR "
       "<b>+7.036</b> on <code>hindi_sample.wav</code> &rarr; genuine-ward. "
       "<code>calibration: present</code>.</div>")
-    A("<div class='callout warn'><strong>Still required before shipping:</strong> "
-      "re-fit the fusion weights <code>w_cm</code> / <code>w_asv</code>. They are "
-      "fitted to the old head's LLR distribution and calibration rescales the "
-      "LLR, so the fused risk score is not yet trustworthy even though the "
-      "detector itself is. Do not export <code>VR_FUSION_W_CM</code> / "
-      "<code>VR_FUSION_W_ASV</code> to work around it &mdash; an explicit env var "
-      "overrides the backend's real-backend preset and re-introduces the "
-      "false-alarm behaviour that preset exists to remove.</div>")
+    A("<h3>Fusion weights &mdash; checked, no change warranted</h3>")
+    A("<p>The open item was that <code>w_cm</code> / <code>w_asv</code> are fitted "
+      "to the old head's LLR distribution and calibration rescales the LLR. "
+      "<code>fit_fusion_weights.py</code> was re-run with arm B s42 wired in:</p>")
+    A("<table><thead><tr><th>L2</th><th>w_cm</th><th>w_asv</th></tr></thead><tbody>")
+    for l2, wc, wa in ((0.10, 2.4469, 6.3502), (0.25, 1.5869, 3.6372),
+                       (0.50, 1.0249, 2.1602), (1.00, 0.6054, 1.1902),
+                       (2.00, 0.3339, 0.6247), (5.00, 0.1425, 0.2568),
+                       (10.00, 0.0729, 0.1295)):
+        A(f"<tr><td class='num'>{l2:.2f}</td><td class='num'>{wc:.4f}</td>"
+          f"<td class='num'>{wa:.4f}</td></tr>")
+    A("</tbody></table>")
+    A("<div class='callout warn'><strong>Read the spread, not any single row.</strong> "
+      "<code>w_cm</code> moves 33&times; and <code>w_asv</code> 49&times; across a "
+      "plausible L2 range, so there is no identifiable &ldquo;best&rdquo; value &mdash; "
+      "only a band. The default <code>l2=1.0</code> row (0.6054 / 1.1902) looks like "
+      "it indicts the deployed preset (1.5 / 2.0) as over-weighting by ~2.5&times;, "
+      "but that is an artefact of an arbitrary default, not evidence.</div>")
+    A("<div class='callout good'><strong>Conclusion: leave "
+      "<code>w_cm=1.5</code> / <code>w_asv=2.0</code> alone.</strong> The preset "
+      "sits <em>inside</em> the band at roughly L2 &asymp; 0.28&ndash;0.55, toward the "
+      "conservative end and well below the aggressive <code>l2=0.1</code> fit "
+      "(2.4469 / 6.3502). Changing it on a point estimate from 170 samples would be "
+      "fitting to noise.</div>")
+    A("<p><strong>Trap found:</strong> <code>load_anchor()</code> is not optional. "
+      "Skip it and <code>asv_mismatch</code> is constant, so <code>w_asv</code> "
+      "silently fits to <b>0.0000</b> &mdash; which reads as &ldquo;ASV doesn't "
+      "matter&rdquo; when it is really a missing-data artefact. Also do not export "
+      "<code>VR_FUSION_W_CM</code> / <code>VR_FUSION_W_ASV</code> to &ldquo;fix&rdquo; "
+      "the fusion: an explicit env var overrides the backend's real-backend preset "
+      "and re-introduces the false-alarm behaviour that preset exists to remove.</p>")
 
     # ---- shipping ----
     A("<h2>Shipping recommendation</h2>")

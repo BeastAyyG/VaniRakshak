@@ -148,7 +148,20 @@ seed 43: 10.000 [8.91, 11.21] vs 21.168 [19.59, 22.83] gap +11.168 pp -&gt; disj
 </tbody></table>
 <p>EER and minDCF are unchanged by design &mdash; Platt is monotone in the LLR, so it fixes the threshold and the calibration, never the ranking.</p>
 <div class='callout good'><strong>Live load proof: PASS.</strong><br><code>scripts/wire_cm_into_backend.py --checkpoint data/cm_docs20_armb_s42_cal.pt --live</code> constructs the real backend detector and scores a real utterance.<br><br>Detector <code>aasist_l_wavlm_dev_eer_0.067</code> &mdash; <em>not</em> <code>aasist_missing_weights</code>, so the trained head is in the request path and the stub is not deciding. Live LLR <b>+7.036</b> on <code>hindi_sample.wav</code> &rarr; genuine-ward. <code>calibration: present</code>.</div>
-<div class='callout warn'><strong>Still required before shipping:</strong> re-fit the fusion weights <code>w_cm</code> / <code>w_asv</code>. They are fitted to the old head's LLR distribution and calibration rescales the LLR, so the fused risk score is not yet trustworthy even though the detector itself is. Do not export <code>VR_FUSION_W_CM</code> / <code>VR_FUSION_W_ASV</code> to work around it &mdash; an explicit env var overrides the backend's real-backend preset and re-introduces the false-alarm behaviour that preset exists to remove.</div>
+<h3>Fusion weights &mdash; checked, no change warranted</h3>
+<p>The open item was that <code>w_cm</code> / <code>w_asv</code> are fitted to the old head's LLR distribution and calibration rescales the LLR. <code>fit_fusion_weights.py</code> was re-run with arm B s42 wired in:</p>
+<table><thead><tr><th>L2</th><th>w_cm</th><th>w_asv</th></tr></thead><tbody>
+<tr><td class='num'>0.10</td><td class='num'>2.4469</td><td class='num'>6.3502</td></tr>
+<tr><td class='num'>0.25</td><td class='num'>1.5869</td><td class='num'>3.6372</td></tr>
+<tr><td class='num'>0.50</td><td class='num'>1.0249</td><td class='num'>2.1602</td></tr>
+<tr><td class='num'>1.00</td><td class='num'>0.6054</td><td class='num'>1.1902</td></tr>
+<tr><td class='num'>2.00</td><td class='num'>0.3339</td><td class='num'>0.6247</td></tr>
+<tr><td class='num'>5.00</td><td class='num'>0.1425</td><td class='num'>0.2568</td></tr>
+<tr><td class='num'>10.00</td><td class='num'>0.0729</td><td class='num'>0.1295</td></tr>
+</tbody></table>
+<div class='callout warn'><strong>Read the spread, not any single row.</strong> <code>w_cm</code> moves 33&times; and <code>w_asv</code> 49&times; across a plausible L2 range, so there is no identifiable &ldquo;best&rdquo; value &mdash; only a band. The default <code>l2=1.0</code> row (0.6054 / 1.1902) looks like it indicts the deployed preset (1.5 / 2.0) as over-weighting by ~2.5&times;, but that is an artefact of an arbitrary default, not evidence.</div>
+<div class='callout good'><strong>Conclusion: leave <code>w_cm=1.5</code> / <code>w_asv=2.0</code> alone.</strong> The preset sits <em>inside</em> the band at roughly L2 &asymp; 0.28&ndash;0.55, toward the conservative end and well below the aggressive <code>l2=0.1</code> fit (2.4469 / 6.3502). Changing it on a point estimate from 170 samples would be fitting to noise.</div>
+<p><strong>Trap found:</strong> <code>load_anchor()</code> is not optional. Skip it and <code>asv_mismatch</code> is constant, so <code>w_asv</code> silently fits to <b>0.0000</b> &mdash; which reads as &ldquo;ASV doesn't matter&rdquo; when it is really a missing-data artefact. Also do not export <code>VR_FUSION_W_CM</code> / <code>VR_FUSION_W_ASV</code> to &ldquo;fix&rdquo; the fusion: an explicit env var overrides the backend's real-backend preset and re-introduces the false-alarm behaviour that preset exists to remove.</p>
 <h2>Shipping recommendation</h2>
 <div class='callout good'><strong>Ship arm B (<code>--no-codec-augment</code>), not the G4 / augmented line.</strong><br>Arm B wins on the deployment distribution (ITW <code>full_call</code>: 33.979 / 35.921 vs 44.541 / 38.304), wins on the in-domain benchmark, and has 3&times; lower seed variance. There is no axis on which the augmented models win, so there is no trade-off to adjudicate.</div>
 <h3>Two consequences that must travel with it</h3><ul>
@@ -157,6 +170,6 @@ seed 43: 10.000 [8.91, 11.21] vs 21.168 [19.59, 22.83] gap +11.168 pp -&gt; disj
 <li><strong>Do not retrain to chase a better number.</strong> Ground rule 5 applies &mdash; publish as measured.</li>
 </ul>
 <div class='foot'>
-Generated 2026-09-20 00:37:14 by <code>scripts/build_results_site.py</code> &mdash; every number read from the JSON reports, none hand-typed.<br>
+Generated 2026-09-20 00:42:21 by <code>scripts/build_results_site.py</code> &mdash; every number read from the JSON reports, none hand-typed.<br>
 Adjudication: <code>docs20_adjudication_20260920_001613.json</code> &middot; bootstrap: 2,000-rep percentile, seed 1234 &middot; dev figures from the training logs on the full 140,950-record dev split (checkpoint <code>dev_eer</code> was clobbered by the calibration script &mdash; see the note in that file).
 </div></div></body></html>
