@@ -57,12 +57,17 @@ already telephone-captured) and on **In-the-Wild** (docs/18):
 - [ ] **Secondary (the one that actually matters):** In-the-Wild EER improves
       by more than the floor. The G4 seed-42 **final** checkpoint (epoch 7),
       re-measured 2026-09-19 07:10 on all 31,779 rows, scores **35.308 %**
-      (`clean`) and **44.990 %** (`full_call`) — that is the number to beat,
+      (      `clean`) and **44.990 %** (`full_call`) — that is the number to beat,
       not the ~37 %/42.6 % quoted from the epoch-3 checkpoint. If the frontend
       swap only helps in-domain and not out-of-domain, it has not fixed the
       problem that motivated it. Judge against `full_call`, the harder
       condition: `clean` is the one that has been improving while everything
       else regresses (docs/18).
+
+      Bootstrapped intervals: `clean` [34.780, 35.830], `full_call`
+      [44.390, 45.560] — ±0.54 / ±0.59 pp. The 0.770 pp floor **is**
+      defensible here (it exceeds the ±0.59 pp sampling noise), unlike the
+      per-attack case amended below.
 - [ ] **Secondary:** A19 and A20 EER both improve by more than the floor.
 
 **AMENDMENT 2026-09-19 08:00 — the per-attack bar above is underpowered and

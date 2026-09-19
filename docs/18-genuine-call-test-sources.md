@@ -128,15 +128,21 @@ previously quoted from the epoch-3 checkpoint and is superseded.
 Measured on the **full** In-the-Wild corpus (n = 31,779 — 19,963 bonafide /
 11,816 spoof), versus the full ASVspoof 5 20k slice:
 
-| Corpus | What it is | n | Pooled EER | minDCF |
+| Corpus | What it is | n | Pooled EER (95 % CI) | minDCF |
 |---|---|---|---|---|
-| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 20,000 | **11.212 %** | 0.7286 |
-| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | 31,779 | **35.308 %** | 0.9995 |
-| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | 31,779 | **44.990 %** | 0.9979 |
+| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 20,000 | **11.212 %** [10.718, 11.779] | 0.7286 |
+| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | 31,779 | **35.308 %** [34.780, 35.830] | 0.9995 |
+| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | 31,779 | **44.990 %** [44.390, 45.560] | 0.9979 |
+
+Intervals from 2,000-rep bootstrap (`scripts/eer_bootstrap_ci.py`). They are
+tight (±0.5–0.6 pp) because ITW is scored pooled over all 11,816 spoofs —
+unlike the per-attack ASVspoof numbers, which carry ±1.36 pp on ~900
+utterances each.
 
 **A 3.1× swing depending only on which corpus you score.** The 11 % number is
 the one that would end up in a benchmark table; the ~35–45 % numbers describe
-what happens on audio a fraudster actually made.
+what happens on audio a fraudster actually made. The intervals do not come
+close to overlapping, so the gap is not a sampling artefact.
 
 How it moved from the epoch-3 checkpoint: `clean` **improved** 37.187 →
 35.308 %, but `full_call` **regressed** 42.589 → 44.990 %. Same direction as

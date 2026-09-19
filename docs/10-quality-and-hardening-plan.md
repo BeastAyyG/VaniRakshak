@@ -495,8 +495,12 @@ So the trade-off is measured, not anecdotal: **augmented training buys pooled
 EER and costs A19/A20, in both directions, significantly.** The open question
 remains *why*, and the control arm is the clean test (see above).
 
-Not bootstrapped: the In-the-Wild figures in docs/18. Treat 35.308 % /
-44.990 % as point estimates until someone runs the interval.
+In-the-Wild, bootstrapped on the same script (n = 31,779; 19,963 bonafide /
+11,816 spoof): **clean 35.308 % [34.780, 35.830]**, **full_call 44.990 %
+[44.390, 45.560]** — ±0.54 and ±0.59. Both intervals are far tighter than the
+per-attack ones, because ITW is scored pooled over all 11,816 spoofs rather
+than per ~900-utterance attack family. Precision is not the limiting problem
+out of domain; the 35–45 % level is.
 
 **The gap this does not close.** The pre-augmentation model remains the only
 checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by

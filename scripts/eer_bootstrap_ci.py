@@ -38,7 +38,7 @@ from ml.aasist_model import AASISTLHead  # noqa: E402
 
 
 def score_and_cache(ckpt: Path, manifest: Path, batch: int, device: str,
-                    cache: Path, layer_override=None) -> None:
+                    cache: Path, layer_override=None, condition: str = "clean") -> None:
     ck = torch.load(ckpt, map_location="cpu", weights_only=False)
     merge_layers = ck.get("merge_layers")
     raw_li = ck.get("layer_index")
@@ -53,7 +53,7 @@ def score_and_cache(ckpt: Path, manifest: Path, batch: int, device: str,
     model.to(device).eval()
 
     _, rows = load_manifest(manifest, None)
-    channel = build_channel("clean")
+    channel = build_channel(condition)
     bon, spf, per_atk = score_all(model, wavlm, rows, channel, device,
                                   merge_layers, layer_index, batch, dtype)
     np.savez_compressed(
@@ -88,6 +88,9 @@ def main() -> int:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--attacks", nargs="*", default=["A19", "A20"])
     ap.add_argument("--layer-index", type=int, default=None)
+    ap.add_argument("--condition", default="clean",
+                    help="Channel condition to score (clean, full_call, ...). "
+                         "Part of the cache key.")
     ap.add_argument("--reuse", action="store_true", help="rescore=False; reload cache")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
@@ -98,12 +101,12 @@ def main() -> int:
     # silently overwrites the first, and --reuse then re-analyses the wrong
     # scores with no warning.
     mstem = Path(args.manifest).stem
-    cache = REPO_ROOT / "reports" / f"scores_{ckpt.stem}__{mstem}.npz"
+    cache = REPO_ROOT / "reports" / f"scores_{ckpt.stem}__{mstem}__{args.condition}.npz"
 
     if not args.reuse or not cache.exists():
         t = time.time()
         score_and_cache(ckpt, Path(args.manifest), args.batch, args.device,
-                        cache, args.layer_index)
+                        cache, args.layer_index, args.condition)
         print(f"  scoring took {time.time() - t:.0f}s")
 
     z = np.load(cache)
