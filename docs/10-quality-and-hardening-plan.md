@@ -502,6 +502,27 @@ per-attack ones, because ITW is scored pooled over all 11,816 spoofs rather
 than per ~900-utterance attack family. Precision is not the limiting problem
 out of domain; the 35–45 % level is.
 
+### Does the 0.770 pp floor survive this? For pooled yes, for per-attack no
+
+Comparing two checkpoints means comparing two noisy estimates, so the
+relevant quantity is √2 × (single-measurement half-width):
+
+| Comparison | √2 × half-width | vs 0.770 pp floor |
+|---|---|---|
+| pooled (0.53) | **0.75 pp** | ≈ the floor — **corroborated** |
+| A19 / A20 (1.36) | **1.92 pp** | 2.5× the floor — **floor too small** |
+
+So Ground rule 1's 0.770 pp is independently corroborated by bootstrap for
+**pooled** comparisons — it was measured as a seed-to-seed spread and lands
+almost exactly on √2 × 0.53. It should be kept there. But the same number is
+roughly 2.5× too small for a per-attack comparison, which is why docs/19's
+per-attack bar was raised to "≥1.36 pp **and** non-overlapping intervals"
+(non-overlap itself requires ≈1.92 pp of separation, matching the table).
+
+Not patched unilaterally: Ground rule 1 still states a single number for all
+metrics. Recommended change is a split floor (pooled 0.770 pp / per-attack
+≈1.9 pp), recorded as an open item in docs/19.
+
 **The gap this does not close.** The pre-augmentation model remains the only
 checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by
 roughly half. Every model trained on augmented data regressed there. RawBoost
