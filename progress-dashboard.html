@@ -132,7 +132,16 @@ function stageHtml(s){
     return "waiting for training";
   };
 
-  const meta = s.group === "finalize" ? finMeta()
+  // docs/20 has its own vocabulary: arm A was reused, no calibrations.
+  const d20Meta = () => {
+    if (/arm A/i.test(s.name)) return "reused from the G4 control — not retrained";
+    if (s.status === "done")    return "complete";
+    if (s.status === "running") return "scoring + adjudicating";
+    return "waiting for arm B";
+  };
+
+  const meta = s.group === "docs20" ? d20Meta()
+      : s.group === "finalize" ? finMeta()
       : s.status==="done"
       ? (s.best ? `best ep ${s.best.epoch} · dev minDCF ${fmt(s.best.dev_mindcf,4)} · dev EER ${fmt(s.best.dev_eer,2)}%${s.early_stop?" · early stop":""}` : "complete")
       : s.status==="running"

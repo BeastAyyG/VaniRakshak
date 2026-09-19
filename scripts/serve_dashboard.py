@@ -28,10 +28,18 @@ HTML = REPO / "progress-dashboard.html"
 
 G4_STATUS = LOG_DIR / "g4_sweep_status.json"
 CONTROL_STATUS = LOG_DIR / "control_status.json"
+DOCS20_STATUS = LOG_DIR / "docs20_status.json"
 
 # Measured: seed 42 ran 10 epochs in 4 h 15 m.
-AVG_EPOCH_S = 1560.0
+# Measured, not guessed: docs/20 arm B epoch 1 = 1369.7s wall clock
+# (17:15:50 -> 17:38:53). Note the log bracket is [total_including_val, val] --
+# adding 1369.7 + 589.5 gives 32.7 min, which is WRONG and will over-project
+# the ETA by ~45 %.
+AVG_EPOCH_S = 1370.0
 FINALIZE_S = 2400.0
+# docs/20 tail: 8 scorings (2 arms x 2 seeds x {eval, ITW clean, ITW full_call}
+# minus the 4 arm-A ITW ones already cached) at roughly 7 min each.
+DOCS20_SCORE_S = 3600.0
 EPOCH_BUDGET = 10
 
 RE_EPOCH_DONE = re.compile(r"Epoch\s+(\d+)/10\s+\[")
@@ -227,19 +235,55 @@ def build_status() -> dict:
     finalize = finalize_state(ctl, train_done)
     stages.append(finalize)
 
-    # Overall: 4 training runs carry the weight, finalize is a small tail.
+    # -- docs/20 (augmentation-off control) -------------------------------
+    # Arm A was NOT retrained: the docs/10 G4 control *is* arm A (codec ON,
+    # RawBoost OFF). Shown explicitly so the dashboard does not imply two more
+    # runs are owed.
+    d20 = read_json(DOCS20_STATUS)
+    stages20 = [{
+        "name": "Docs20 arm A (reused, not retrained)",
+        "group": "docs20", "seed": None, "status": "done", "progress": 1.0,
+        "epochs_done": 0, "epoch_frac": 0.0, "best": None, "early_stop": False,
+        "finished_at": "2026-09-19 16:21:49", "log": None,
+    }]
+    arm_b = [
+        build_stage("Docs20 arm B seed 42", "docs20", 42, d20,
+                    LOG_DIR / "docs20-s42.log"),
+        build_stage("Docs20 arm B seed 43", "docs20", 43, d20,
+                    LOG_DIR / "docs20-s43.log"),
+    ]
+    stages20 += arm_b
+    d20_adj = sorted((REPO / "reports").glob("docs20_adjudication_*.json"),
+                     key=lambda p: p.stat().st_mtime)
+    stages20.append({
+        "name": "Docs20 score + adjudicate", "group": "docs20", "seed": None,
+        "status": "done" if d20_adj else (
+            "running" if all(s["status"] == "done" for s in arm_b) else "pending"),
+        "progress": 1.0 if d20_adj else 0.0,
+        "epochs_done": 0, "epoch_frac": 0.0, "best": None, "early_stop": False,
+        "finished_at": None, "log": None,
+    })
+    stages += stages20
+
+    # Overall: G4 pipeline and docs/20 weighted roughly by GPU cost -- 4 runs
+    # vs 2 runs plus a scoring tail.
     train_p = sum(s["progress"] for s in stages[:4]) / 4.0
-    overall = train_p * 0.93 + finalize["progress"] * 0.07
+    g4_p = train_p * 0.93 + finalize["progress"] * 0.07
+    d20_train_p = sum(s["progress"] for s in arm_b) / 2.0
+    d20_p = d20_train_p * 0.9 + stages20[-1]["progress"] * 0.1
+    overall = g4_p * 0.6 + d20_p * 0.4
 
     # ETA from measured epoch cost.
     remaining_epochs = sum(
         max(0.0, EPOCH_BUDGET - (s["epochs_done"] + s["epoch_frac"]))
-        for s in stages[:4] if s["status"] != "done"
+        for s in stages[:4] + arm_b if s["status"] != "done"
     )
     eta_s = remaining_epochs * AVG_EPOCH_S
     if finalize["status"] != "done":
         # Only the not-yet-finished part of finalize counts.
         eta_s += FINALIZE_S * (1.0 - finalize["progress"])
+    if stages20[-1]["status"] != "done":
+        eta_s += DOCS20_SCORE_S * (1.0 - stages20[-1]["progress"])
     eta = datetime.now() + timedelta(seconds=eta_s)
 
     results = {"g4_seeds": [], "ood": [], "verdict": None}
