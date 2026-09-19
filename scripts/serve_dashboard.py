@@ -305,11 +305,48 @@ def build_status() -> dict:
                 "a20": g.get("per_attack_eer_pct", {}).get("A20"),
             })
 
+    # docs/20 verdict is surfaced next to G4's, because both are real: G4 FAILs
+    # its own bar while docs/20 PASSes. Showing only one would misrepresent the
+    # state of the work.
+    d20_adj_all = sorted((REPO / "reports").glob("docs20_adjudication_*.json"),
+                         key=lambda p: p.stat().st_mtime)
+    d20_rep = read_json(d20_adj_all[-1]) if d20_adj_all else None
+    if d20_rep:
+        results["docs20_verdict"] = d20_rep.get("OVERALL")
+        arms = []
+        for key in ("arm_a_s42", "arm_b_s42", "arm_a_s43", "arm_b_s43"):
+            m = d20_rep.get("measurements", {}).get(key) or {}
+            itw_c = (m.get("itw_clean") or {}).get("pooled")
+            itw_f = (m.get("itw_full_call") or {}).get("pooled")
+            arms.append({
+                "arm": key.replace("arm_a", "arm A").replace("arm_b", "arm B")
+                          .replace("s42", "seed 42").replace("s43", "seed 43"),
+                "clean": (itw_c or {}).get("eer_pct"),
+                "clean_ci": (itw_c or {}).get("ci95_pct"),
+                "full_call": (itw_f or {}).get("eer_pct"),
+                "full_call_ci": (itw_f or {}).get("ci95_pct"),
+                "pooled": m.get("eval_pooled_eer"),
+                "mindcf": m.get("eval_mindcf"),
+            })
+        results["d20_arms"] = arms
+
+    # Labels carry the augmentation setting: the whole point of the table is
+    # that the codec/none split predicts the out-of-domain ranking perfectly.
     ood_files = {
+        "Arm B s42 (none)": ("eer_ci_armB_s42_ITW_clean.json",
+                             "eer_ci_armB_s42_ITW_full_call.json"),
         "Pre-Aug L12 (none)": ("eer_ci_pre_aug_ITW_clean.json",
                                "eer_ci_pre_aug_ITW_full_call.json"),
+        "Arm B s43 (none)": ("eer_ci_armB_s43_ITW_clean.json",
+                             "eer_ci_armB_s43_ITW_full_call.json"),
+        "Arm A s43 (codec)": ("eer_ci_armA_control_s43_ITW_clean.json",
+                              "eer_ci_armA_control_s43_ITW_full_call.json"),
         "Post-Aug L12 (codec)": ("eer_ci_post_aug_ITW_clean.json",
                                  "eer_ci_post_aug_ITW_full_call.json"),
+        "G4 s43 (codec+RawBoost)": ("eer_ci_g4_s43_ITW.json",
+                                    "eer_ci_g4_s43_ITW_full_call.json"),
+        "Arm A s42 (codec)": ("eer_ci_armA_control_s42_ITW_clean.json",
+                              "eer_ci_armA_control_s42_ITW_full_call.json"),
         "AttM (codec)": ("eer_ci_attm_ITW_clean.json",
                          "eer_ci_attm_ITW_full_call.json"),
         "G4 s42 (codec+RawBoost)": ("eer_ci_g4_s42_ITW.json",

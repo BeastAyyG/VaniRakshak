@@ -1,0 +1,38 @@
+{
+  "checkpoint": "data\\cm_docs20_armb_s43.pt",
+  "fitted_on": "dev only",
+  "n_dev": 20000,
+  "n_eval": 19994,
+  "calibration_block": {
+    "method": "platt",
+    "scale_w": 0.259519,
+    "bias_b": -5.399087,
+    "calibrated_cllr": 0.3233,
+    "calibrated_actdcf_bayes": 1.3108
+  },
+  "dev": {
+    "raw_cllr": 2.9209,
+    "calibrated_cllr": 0.3233,
+    "raw_actdcf_bayes": 7.3937,
+    "calibrated_actdcf_bayes": 1.3108,
+    "eer_pct": 6.904,
+    "minDCF": 0.7455
+  },
+  "eval_raw": {
+    "raw_cllr": 3.8917,
+    "calibrated_cllr": 3.8917,
+    "raw_actdcf_bayes": 9.4448,
+    "calibrated_actdcf_bayes": 9.4448,
+    "eer_pct": 9.632,
+    "minDCF": 0.7001
+  },
+  "eval_calibrated": {
+    "raw_cllr": 3.8917,
+    "calibrated_cllr": 0.4112,
+    "raw_actdcf_bayes": 9.4448,
+    "calibrated_actdcf_bayes": 1.7473,
+    "eer_pct": 9.632,
+    "minDCF": 0.7001
+  },
+  "g2_criterion_cllr_lt_1": "PASS"
+}

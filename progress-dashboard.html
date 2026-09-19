@@ -100,6 +100,24 @@
   </div>
 
   <div class="card">
+    <h2>docs/20 — augmentation-off control</h2>
+    <div id="verdict20"></div>
+    <table id="d20table">
+      <thead><tr>
+        <th>Arm</th><th class="n">ITW clean</th><th class="n">ITW full_call</th>
+        <th class="n">Eval pooled</th><th class="n">minDCF</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note">
+      Matched, flag-flipped pair — arm A is the G4 control reused, arm B is
+      <code>--no-codec-augment</code>. Same seeds and recipe, one variable.
+      The augmenter costs on <b>both</b> domains; it is not a trade-off, so
+      the recommendation is to ship arm B.
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Out-of-domain — In-the-Wild, all 31,779 rows</h2>
     <table id="oodtable">
       <thead><tr>
@@ -108,9 +126,10 @@
       <tbody></tbody>
     </table>
     <div class="note">
-      The ranking <b>inverts</b> versus in-domain: the best in-domain model is
-      the worst out-of-domain, and the only non-augmented model is best by
-      11–15 pp. Follow-up experiment pre-registered in docs/20.
+      docs/20 settled this: the two groups <b>separate perfectly</b> — all
+      non-augmented checkpoints take the top ranks on <code>full_call</code>,
+      all augmented ones sit below, no interleaving. Augmentation is a net
+      loss out-of-domain, and in-domain too.
     </div>
   </div>
 
@@ -191,6 +210,20 @@ async function refresh(){
         <td class="n">${fmt(g.mindcf,4)}</td>
         <td class="n ${g.a19<12?"best":""}">${fmt(g.a19,3)}%</td>
         <td class="n ${g.a20<12?"best":""}">${fmt(g.a20,3)}%</td>
+      </tr>`).join("");
+
+    const v20 = document.getElementById("verdict20");
+    if(res.docs20_verdict){
+      v20.innerHTML = `<span class="verdict v-${res.docs20_verdict}">${res.docs20_verdict}</span>`;
+    } else { v20.innerHTML = `<span class="smeta">not adjudicated yet</span>`; }
+
+    document.querySelector("#d20table tbody").innerHTML = (res.d20_arms||[]).map(a=>
+      `<tr>
+        <td>${a.arm}</td>
+        <td class="n">${fmt(a.clean,3)}%<span class="smeta">${ci(a.clean_ci)}</span></td>
+        <td class="n">${fmt(a.full_call,3)}%<span class="smeta">${ci(a.full_call_ci)}</span></td>
+        <td class="n">${fmt(a.pooled,3)}%</td>
+        <td class="n">${fmt(a.mindcf,4)}</td>
       </tr>`).join("");
 
     document.querySelector("#oodtable tbody").innerHTML = (res.ood||[]).map(o=>

@@ -306,6 +306,45 @@ def main() -> int:
       "<code>scripts/fit_cm_calibration.py</code> is run on them.</li>")
     A("</ul>")
 
+    # ---- calibration / deployment readiness ----
+    A("<h2>Calibration and deployment readiness</h2>")
+    A("<p>Both arm B checkpoints Platt-calibrated (fitted on dev only) to "
+      "separate output files, leaving the originals untouched.</p>")
+    A("<table><thead><tr><th>checkpoint</th><th>eval CLLR raw &rarr; cal</th>"
+      "<th>eval actDCF raw &rarr; cal</th><th>EER</th><th>minDCF</th>"
+      "<th>G2 (CLLR &lt; 1.0)</th></tr></thead><tbody>")
+    A("<tr><td>arm B s42 <code>_cal.pt</code></td>"
+      "<td class='num'>3.2040 &rarr; <b>0.4271</b></td>"
+      "<td class='num'>8.6532 &rarr; <b>1.4493</b></td>"
+      "<td class='num'>9.249%</td><td class='num'>0.6990</td>"
+      "<td class='num' style='color:var(--good)'>PASS</td></tr>")
+    A("<tr><td>arm B s43 <code>_cal.pt</code></td>"
+      "<td class='num'>3.8917 &rarr; <b>0.4112</b></td>"
+      "<td class='num'>9.4448 &rarr; <b>1.7473</b></td>"
+      "<td class='num'>9.632%</td><td class='num'>0.7001</td>"
+      "<td class='num' style='color:var(--good)'>PASS</td></tr>")
+    A("</tbody></table>")
+    A("<p>EER and minDCF are unchanged by design &mdash; Platt is monotone in "
+      "the LLR, so it fixes the threshold and the calibration, never the "
+      "ranking.</p>")
+    A("<div class='callout good'><strong>Live load proof: PASS.</strong><br>"
+      "<code>scripts/wire_cm_into_backend.py --checkpoint "
+      "data/cm_docs20_armb_s42_cal.pt --live</code> constructs the real backend "
+      "detector and scores a real utterance.<br><br>"
+      "Detector <code>aasist_l_wavlm_dev_eer_0.067</code> &mdash; "
+      "<em>not</em> <code>aasist_missing_weights</code>, so the trained head is "
+      "in the request path and the stub is not deciding. Live LLR "
+      "<b>+7.036</b> on <code>hindi_sample.wav</code> &rarr; genuine-ward. "
+      "<code>calibration: present</code>.</div>")
+    A("<div class='callout warn'><strong>Still required before shipping:</strong> "
+      "re-fit the fusion weights <code>w_cm</code> / <code>w_asv</code>. They are "
+      "fitted to the old head's LLR distribution and calibration rescales the "
+      "LLR, so the fused risk score is not yet trustworthy even though the "
+      "detector itself is. Do not export <code>VR_FUSION_W_CM</code> / "
+      "<code>VR_FUSION_W_ASV</code> to work around it &mdash; an explicit env var "
+      "overrides the backend's real-backend preset and re-introduces the "
+      "false-alarm behaviour that preset exists to remove.</div>")
+
     # ---- shipping ----
     A("<h2>Shipping recommendation</h2>")
     A("<div class='callout good'><strong>Ship arm B "
@@ -320,10 +359,12 @@ def main() -> int:
       "<em>by luck</em> &mdash; arm B happens to win both. The converse does not "
       "hold: docs/18 measured an inversion across four models. Select on the "
       "deployment distribution.</li>")
-    A("<li><strong>Calibrate before shipping.</strong> Run "
-      "<code>scripts/fit_cm_calibration.py</code> on the chosen arm B checkpoint "
-      "and re-fit the fusion weights <code>w_cm</code> / <code>w_asv</code>. EER and "
-      "minDCF will not move; the decision threshold is what is currently wrong.</li>")
+    A("<li><strong>Calibration: DONE.</strong> Both arm B checkpoints carry a "
+      "Platt block and pass the G2 criterion (calibrated eval CLLR "
+      "<b>0.4271</b> / <b>0.4112</b> — the best in the repo), and arm B s42 "
+      "passes the live backend load proof. <strong>Remaining:</strong> re-fit "
+      "the fusion weights <code>w_cm</code> / <code>w_asv</code> against this "
+      "head; they are still fitted to the old LLR distribution.</li>")
     A("<li><strong>Do not retrain to chase a better number.</strong> Ground rule 5 "
       "applies &mdash; publish as measured.</li>")
     A("</ul>")

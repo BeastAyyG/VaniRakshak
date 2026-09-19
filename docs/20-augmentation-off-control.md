@@ -223,9 +223,42 @@ Augmentation was not only shifting the mean, it was destabilising training.
   separate OOD floor. **Not adjusted unilaterally here.**
 - This is a binary on/off test. Whether an *intermediate* augmentation
   strength is optimal is unanswered and needs its own pre-registration.
-- Arm B checkpoints carry **no Platt calibration block**. Their EER/minDCF
-  are unaffected (calibration cannot move either), but any deployed threshold
-  is uncalibrated until `fit_cm_calibration.py` is run on them.
+- ~~Arm B checkpoints carry no Platt calibration block.~~ **Closed** — both
+  are now calibrated and pass the G2 criterion. See the calibration section
+  below. The remaining work is re-fitting the fusion weights.
+
+## Calibration and deployment readiness — done, 2026-09-20 00:34
+
+Both arm B checkpoints Platt-calibrated (fitted on dev only) to separate
+output files, leaving the originals untouched:
+`data/cm_docs20_armb_{s42,s43}_cal.pt`.
+
+| | eval CLLR raw → cal | eval actDCF raw → cal | EER | minDCF | G2 (CLLR < 1.0) |
+|---|---|---|---|---|---|
+| arm B s42 | 3.2040 → **0.4271** | 8.6532 → **1.4493** | 9.249 % | 0.6990 | **PASS** |
+| arm B s43 | 3.8917 → **0.4112** | 9.4448 → **1.7473** | 9.632 % | 0.7001 | **PASS** |
+
+EER and minDCF are unchanged by design — Platt is monotone in the LLR, so it
+fixes the threshold and the calibration, never the ranking. These are the
+best calibrated CLLRs this repo has produced (the G4/control checkpoints came
+in at 0.5097–0.6518).
+
+**Live load proof: PASS.** `scripts/wire_cm_into_backend.py --checkpoint
+data/cm_docs20_armb_s42_cal.pt --live` constructs the real backend detector
+and scores a real utterance:
+
+- detector `aasist_l_wavlm_dev_eer_0.067` — **not** `aasist_missing_weights`,
+  so the trained head is in the request path and the stub is not deciding
+- live LLR **+7.036** on `test_audio/hindi_sample.wav` → decides genuine-ward
+- `calibration: present`
+
+**Still required before shipping:** re-fit the fusion weights `w_cm` /
+`w_asv`. They are fitted to the old head's LLR distribution, and calibration
+rescales the LLR, so the fused risk score is not yet trustworthy even though
+the detector itself is. Do not export `VR_FUSION_W_CM` / `VR_FUSION_W_ASV` to
+work around it — an explicit env var overrides the backend's real-backend
+preset and re-introduces the false-alarm behaviour the preset exists to
+remove.
 
 ## Shipping recommendation
 
