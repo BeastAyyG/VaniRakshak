@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VaniRakshak — G4 pipeline progress</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171b21; --panel2:#1d222a; --line:#2a3038;
+    --txt:#e6e9ee; --dim:#98a2b3; --faint:#6b7482;
+    --ok:#3fb950; --run:#d29922; --pend:#4a5260; --fail:#f85149;
+    --accent:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:28px 20px 60px}
+  h1{font-size:19px; margin:0 0 4px; font-weight:600}
+  .sub{color:var(--dim); font-size:13px; margin-bottom:22px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px}
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 14px; font-weight:600}
+
+  .bigrow{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:12px}
+  .pct{font-size:38px; font-weight:650; line-height:1; font-variant-numeric:tabular-nums}
+  .eta{color:var(--dim); font-size:13px}
+  .eta b{color:var(--txt); font-weight:600}
+
+  .bar{height:9px; background:var(--panel2); border-radius:99px; overflow:hidden}
+  .bar > i{display:block; height:100%; background:var(--accent); border-radius:99px; transition:width .5s ease}
+
+  table{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font-size:13px}
+  th{color:var(--faint); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em}
+  td.n,th.n{text-align:right}
+  tr:last-child td{border-bottom:none}
+
+  .stage{margin-bottom:16px}
+  .stage:last-child{margin-bottom:0}
+  .srow{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px}
+  .sname{font-weight:550}
+  .smeta{color:var(--faint); font-size:12px}
+  .chip{font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; text-transform:uppercase; letter-spacing:.04em}
+  .chip.done{background:rgba(63,185,80,.15); color:var(--ok)}
+  .chip.running{background:rgba(210,153,34,.15); color:var(--run)}
+  .chip.pending{background:rgba(74,82,96,.25); color:var(--dim)}
+  .chip.failed{background:rgba(248,81,73,.15); color:var(--fail)}
+  .sbar{height:6px; background:var(--panel2); border-radius:99px; overflow:hidden}
+  .sbar > i{display:block; height:100%; border-radius:99px; transition:width .5s ease}
+  .i-done{background:var(--ok)} .i-running{background:var(--run)}
+  .i-pending{background:var(--pend)} .i-failed{background:var(--fail)}
+
+  .verdict{display:inline-block; padding:4px 12px; border-radius:6px; font-weight:700; font-size:13px; letter-spacing:.04em}
+  .v-FAIL{background:rgba(248,81,73,.16); color:var(--fail)}
+  .v-PASS{background:rgba(63,185,80,.16); color:var(--ok)}
+  .v-UNRESOLVED{background:rgba(210,153,34,.16); color:var(--run)}
+
+  .note{color:var(--faint); font-size:12px; margin-top:12px; line-height:1.6}
+  .best{color:var(--ok); font-weight:650}
+  .warn{color:var(--run)}
+  .foot{color:var(--faint); font-size:12px; text-align:center; margin-top:20px}
+  .live{display:inline-block; width:7px; height:7px; border-radius:99px; background:var(--ok); margin-right:6px; vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>VaniRakshak — G4 pipeline</h1>
+  <div class="sub">Live progress for the RawBoost experiment and its control arm.</div>
+
+  <div class="card">
+    <h2>Overall</h2>
+    <div class="bigrow">
+      <div class="pct" id="pct">—</div>
+      <div class="eta">ETA <b id="eta">—</b> · <span id="rem"></span></div>
+    </div>
+    <div class="bar"><i id="obar" style="width:0%"></i></div>
+    <div class="note" id="overall-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Stages</h2>
+    <div id="stages"></div>
+  </div>
+
+  <div class="card">
+    <h2>G4 result — both seeds, full 20k eval</h2>
+    <div id="verdict"></div>
+    <table id="g4table">
+      <thead><tr>
+        <th>Seed</th><th class="n">Best ep</th><th class="n">Pooled EER</th>
+        <th class="n">minDCF</th><th class="n">A19</th><th class="n">A20</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note">
+      Criterion: A19 and A20 both below 12 %, worst-seed. Bars are fixed in
+      advance in docs/10 and are not adjusted after the fact.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Out-of-domain — In-the-Wild, all 31,779 rows</h2>
+    <table id="oodtable">
+      <thead><tr>
+        <th>Model</th><th class="n">ITW clean</th><th class="n">ITW full_call</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note">
+      The ranking <b>inverts</b> versus in-domain: the best in-domain model is
+      the worst out-of-domain, and the only non-augmented model is best by
+      11–15 pp. Follow-up experiment pre-registered in docs/20.
+    </div>
+  </div>
+
+  <div class="foot"><span class="live"></span>auto-refreshing every 20 s · <span id="gen"></span></div>
+</div>
+
+<script>
+const fmt = (v, d=2) => (v===null||v===undefined) ? "—" : Number(v).toFixed(d);
+const ci  = (c) => (c && c.length===2) ? ` [${c[0].toFixed(2)}, ${c[1].toFixed(2)}]` : "";
+
+function stageHtml(s){
+  const cls = s.status;
+  const meta = s.status==="done"
+      ? (s.best ? `best ep ${s.best.epoch} · dev minDCF ${fmt(s.best.dev_mindcf,4)} · dev EER ${fmt(s.best.dev_eer,2)}%${s.early_stop?" · early stop":""}` : "complete")
+      : s.status==="running"
+        ? `epoch ${s.epochs_done} done${s.epoch_frac?` + ${Math.round(s.epoch_frac*100)}% of next`:""}`
+        : "waiting";
+  return `<div class="stage">
+    <div class="srow">
+      <div class="sname">${s.name}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="smeta">${meta}</div>
+        <span class="chip ${cls}">${cls}</span>
+      </div>
+    </div>
+    <div class="sbar"><i class="i-${cls}" style="width:${(s.progress*100).toFixed(1)}%"></i></div>
+  </div>`;
+}
+
+async function refresh(){
+  try{
+    const r = await fetch("/api/status", {cache:"no-store"});
+    const d = await r.json();
+
+    document.getElementById("pct").textContent = d.overall_percent.toFixed(1) + "%";
+    document.getElementById("obar").style.width = d.overall_percent + "%";
+    document.getElementById("eta").textContent = d.eta;
+    document.getElementById("rem").textContent = d.remaining_hours + " h remaining (est.)";
+    document.getElementById("gen").textContent = "generated " + d.generated_at;
+
+    const dn = d.stages.filter(s=>s.status==="done").length;
+    document.getElementById("overall-note").innerHTML =
+      `${dn} of ${d.stages.length} stages complete. ETA is derived from the measured ` +
+      `26 min/epoch and assumes no early stopping.`;
+
+    document.getElementById("stages").innerHTML = d.stages.map(stageHtml).join("");
+
+    const res = d.results || {};
+    const v = document.getElementById("verdict");
+    if(res.verdict){
+      v.innerHTML = `<span class="verdict v-${res.verdict}">${res.verdict}</span>`;
+    } else { v.innerHTML = `<span class="smeta">not adjudicated yet</span>`; }
+
+    document.querySelector("#g4table tbody").innerHTML = (res.g4_seeds||[]).map(g=>
+      `<tr>
+        <td>seed ${g.seed}</td>
+        <td class="n">${g.epoch ?? "—"}</td>
+        <td class="n">${fmt(g.pooled,3)}%</td>
+        <td class="n">${fmt(g.mindcf,4)}</td>
+        <td class="n ${g.a19<12?"best":""}">${fmt(g.a19,3)}%</td>
+        <td class="n ${g.a20<12?"best":""}">${fmt(g.a20,3)}%</td>
+      </tr>`).join("");
+
+    document.querySelector("#oodtable tbody").innerHTML = (res.ood||[]).map(o=>
+      `<tr>
+        <td>${o.model}</td>
+        <td class="n">${fmt(o.clean,3)}%<span class="smeta">${ci(o.clean_ci)}</span></td>
+        <td class="n">${fmt(o.full_call,3)}%<span class="smeta">${ci(o.full_call_ci)}</span></td>
+      </tr>`).join("");
+  }catch(e){
+    document.getElementById("gen").textContent = "refresh failed: " + e;
+  }
+}
+
+refresh();
+setInterval(refresh, 20000);
+</script>
+</body>
+</html>
