@@ -468,6 +468,36 @@ regressed" and A20 as "unchanged within noise".
 (A20 counts 920 here and 921 in the adjudication: one utterance failed to
 decode. Immaterial at 0.04 pp.)
 
+### Same intervals for the comparators — so the ranking is tested, not assumed
+
+Bootstrapping only G4 would let me compare a *point estimate* against an
+*interval*, which proves nothing. All three models, same script, same slice:
+
+| Model | pooled EER (95 % CI) | A19 (95 % CI) | A20 (95 % CI) |
+|---|---|---|---|
+| **G4 s42 ep7** | **11.212 %** [10.718, 11.779] | 16.264 % [14.973, 17.792] | 17.324 % [15.943, 18.680] |
+| AttM | 12.682 % [12.150, 13.270] | 20.214 % [18.600, 22.350] | 24.022 % [22.280, 25.430] |
+| Pre-Aug L12 | 12.870 % [12.260, 13.380] | **8.984 %** [7.930, 10.160] | **6.382 %** [5.570, 7.390] |
+
+Now every claim is a test with non-overlapping intervals, not an assertion:
+
+- **G4 beats AttM on pooled** — 11.779 ceiling vs 12.150 floor. Significant.
+- **G4 beats AttM on A19 *and* A20** — both intervals disjoint. So RawBoost
+  did recover ground on those two attacks; it just did not recover *enough*.
+- **G4 still fails the bar** — its best-case A19/A20 (14.973 / 15.943) are
+  both above 12 %.
+- **Pre-Aug beats G4 on A19/A20 by a wide margin** — 10.160 ceiling vs 14.973
+  floor. It is also the only model whose *entire interval* sits under the
+  12 % bar, so its pass is real, not a lucky point estimate.
+- **…but loses on pooled** — 12.260 floor vs 11.779 ceiling. Significant.
+
+So the trade-off is measured, not anecdotal: **augmented training buys pooled
+EER and costs A19/A20, in both directions, significantly.** The open question
+remains *why*, and the control arm is the clean test (see above).
+
+Not bootstrapped: the In-the-Wild figures in docs/18. Treat 35.308 % /
+44.990 % as point estimates until someone runs the interval.
+
 **The gap this does not close.** The pre-augmentation model remains the only
 checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by
 roughly half. Every model trained on augmented data regressed there. RawBoost

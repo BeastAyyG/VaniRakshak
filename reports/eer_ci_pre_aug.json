@@ -1,0 +1,35 @@
+{
+  "checkpoint": "data\\pre_aug_cm_aasist.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 4058,
+  "pooled": {
+    "n_spoof": 15936,
+    "eer_pct": 12.87,
+    "ci95_pct": [
+      12.255,
+      13.381
+    ],
+    "half_width_pp": 0.555
+  },
+  "attacks": {
+    "A19": {
+      "n_spoof": 935,
+      "eer_pct": 8.984,
+      "ci95_pct": [
+        7.934,
+        10.16
+      ],
+      "half_width_pp": 1.088
+    },
+    "A20": {
+      "n_spoof": 920,
+      "eer_pct": 6.382,
+      "ci95_pct": [
+        5.569,
+        7.391
+      ],
+      "half_width_pp": 0.905
+    }
+  }
+}
