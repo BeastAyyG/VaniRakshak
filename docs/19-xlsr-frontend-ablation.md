@@ -68,6 +68,25 @@ already telephone-captured) and on **In-the-Wild** (docs/18):
       [44.390, 45.560] — ±0.54 / ±0.59 pp. The 0.770 pp floor **is**
       defensible here (it exceeds the ±0.59 pp sampling noise), unlike the
       per-attack case amended below.
+
+      Two baselines, because they say different things:
+      - **Matched baseline — G4 s42:** 35.308 / 44.990. Beat this and the
+        frontend swap beat the same recipe on a different frontend.
+      - **Best known OOD — Pre-Aug L12:** **22.173 / 33.908** (docs/18). This
+        is the number that actually matters for deployment, and no
+        augmented model has come within 11 pp of it. An XLS-R result that
+        beats G4 but lands at 33 % has improved the benchmark and not the
+        product. Report against both.
+
+      Baseline uses G4 **seed 42**; G4 seed 43's ITW has not been measured
+      (the two seeds are statistically indistinguishable in-domain, but that
+      does not guarantee it out-of-domain).
+
+**Why this criterion is now the primary one, not an afterthought.** In-domain
+and out-of-domain rankings **invert** in this stack (docs/18): the best
+in-domain model is the worst out-of-domain. So an in-domain improvement is
+weak evidence of anything. If XLS-R only helps on ASVspoof 5 and not on
+In-the-Wild, it has not addressed the actual problem.
 - [ ] **Secondary:** A19 and A20 EER both improve by more than the floor.
 
 **AMENDMENT 2026-09-19 08:00 — the per-attack bar above is underpowered and
