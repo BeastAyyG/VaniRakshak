@@ -65,6 +65,37 @@ already telephone-captured) and on **In-the-Wild** (docs/18):
       else regresses (docs/18).
 - [ ] **Secondary:** A19 and A20 EER both improve by more than the floor.
 
+**AMENDMENT 2026-09-19 08:00 — the per-attack bar above is underpowered and
+is raised here, before any XLS-R result exists.** This is the correct time to
+change it; changing it afterwards would be fitting the bar to the outcome.
+
+The 0.770 pp floor (docs/10 Ground rule 1) was measured between two
+full-corpus checkpoints on the **pooled** EER. It says nothing about
+per-attack precision, and per-attack precision is much worse, because A19 and
+A20 have only ~935 and ~920 spoof utterances in the 20k slice. Bootstrapped
+(`scripts/eer_bootstrap_ci.py`, 2,000 reps):
+
+| | 95 % CI half-width |
+|---|---|
+| pooled (n = 15,936 spoof) | **±0.53 pp** |
+| A19 (n = 935) | **±1.36 pp** |
+| A20 (n = 920) | **±1.36 pp** |
+
+So a 0.770 pp movement on A19 is **well inside** the sampling noise. Keeping
+that bar would let the XLS-R arm "PASS" on a difference that is
+indistinguishable from resampling luck.
+
+**Revised per-attack criterion:** A19 and A20 must each improve by **more than
+1.36 pp**, and the 95 % bootstrap intervals of the XLS-R arm and the
+G4/control baseline must **not overlap**. (Equivalently: report the intervals
+and require disjointness — do not compare a point estimate to a point
+estimate.) The pooled criterion stays at 0.770 pp, which is defensible: it is
+larger than the pooled sampling noise of ±0.53 pp.
+
+Open item this creates: docs/10 Ground rule 1 gives a single number for all
+metrics. It should probably carry a per-attack floor alongside the pooled
+one. **Not patched unilaterally** — recorded here as an open item instead.
+
 **Falsification:** if XLS-R does not beat WavLM beyond the floor on both
 seeds, the Arena ranking does not transfer to this stack and the result is
 reported as a negative — published as measured, not re-run (ground rule 5).
