@@ -1,0 +1,411 @@
+{
+  "experiment": "docs/20 -- augmentation-off matched control",
+  "adjudicated_at": "2026-09-20 00:16:13",
+  "arms": {
+    "A": "codec ON, RawBoost OFF (docs/10 G4 control, reused)",
+    "B": "codec OFF, RawBoost OFF"
+  },
+  "manifests": {
+    "eval": "data\\eval_benchmark\\eval_slice_20k.tsv",
+    "itw": "A:\\cm-corpus\\manifests\\itw_manifest.tsv"
+  },
+  "measurements": {
+    "arm_a_s42": {
+      "_tag": "armA_control_s42",
+      "eval": {
+        "checkpoint": "data\\cm_g4_control_s42.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 4058,
+        "pooled": {
+          "n_spoof": 15936,
+          "eer_pct": 15.437,
+          "ci95_pct": [
+            14.933,
+            15.993
+          ],
+          "half_width_pp": 0.543
+        },
+        "attacks": {
+          "A19": {
+            "n_spoof": 935,
+            "eer_pct": 22.353,
+            "ci95_pct": [
+              20.552,
+              24.171
+            ],
+            "half_width_pp": 1.784
+          },
+          "A20": {
+            "n_spoof": 920,
+            "eer_pct": 29.3,
+            "ci95_pct": [
+              27.5,
+              31.173
+            ],
+            "half_width_pp": 1.857
+          }
+        }
+      },
+      "itw_clean": {
+        "checkpoint": "data\\cm_g4_control_s42.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 40.555,
+          "ci95_pct": [
+            39.989,
+            41.114
+          ],
+          "half_width_pp": 0.559
+        },
+        "attacks": {}
+      },
+      "itw_full_call": {
+        "checkpoint": "data\\cm_g4_control_s42.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 44.541,
+          "ci95_pct": [
+            43.971,
+            45.094
+          ],
+          "half_width_pp": 0.558
+        },
+        "attacks": {}
+      },
+      "eval_mindcf": 0.9686,
+      "eval_pooled_eer": 15.437
+    },
+    "arm_a_s43": {
+      "_tag": "armA_control_s43",
+      "eval": {
+        "checkpoint": "data\\cm_g4_control_s43.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 4058,
+        "pooled": {
+          "n_spoof": 15936,
+          "eer_pct": 12.4,
+          "ci95_pct": [
+            11.885,
+            12.983
+          ],
+          "half_width_pp": 0.556
+        },
+        "attacks": {
+          "A19": {
+            "n_spoof": 935,
+            "eer_pct": 17.861,
+            "ci95_pct": [
+              16.067,
+              19.679
+            ],
+            "half_width_pp": 1.837
+          },
+          "A20": {
+            "n_spoof": 920,
+            "eer_pct": 21.168,
+            "ci95_pct": [
+              19.591,
+              22.826
+            ],
+            "half_width_pp": 1.589
+          }
+        }
+      },
+      "itw_clean": {
+        "checkpoint": "data\\cm_g4_control_s43.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 32.761,
+          "ci95_pct": [
+            32.26,
+            33.345
+          ],
+          "half_width_pp": 0.548
+        },
+        "attacks": {}
+      },
+      "itw_full_call": {
+        "checkpoint": "data\\cm_g4_control_s43.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 38.304,
+          "ci95_pct": [
+            37.788,
+            38.871
+          ],
+          "half_width_pp": 0.544
+        },
+        "attacks": {}
+      },
+      "eval_mindcf": 0.8759,
+      "eval_pooled_eer": 12.4
+    },
+    "arm_b_s42": {
+      "_tag": "armB_s42",
+      "eval": {
+        "checkpoint": "data\\cm_docs20_armb_s42.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 4058,
+        "pooled": {
+          "n_spoof": 15936,
+          "eer_pct": 9.241,
+          "ci95_pct": [
+            8.71,
+            9.759
+          ],
+          "half_width_pp": 0.538
+        },
+        "attacks": {
+          "A19": {
+            "n_spoof": 935,
+            "eer_pct": 7.594,
+            "ci95_pct": [
+              6.738,
+              8.452
+            ],
+            "half_width_pp": 0.904
+          },
+          "A20": {
+            "n_spoof": 920,
+            "eer_pct": 8.97,
+            "ci95_pct": [
+              7.861,
+              10.109
+            ],
+            "half_width_pp": 1.13
+          }
+        }
+      },
+      "itw_clean": {
+        "checkpoint": "data\\cm_docs20_armb_s42.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 17.277,
+          "ci95_pct": [
+            16.871,
+            17.693
+          ],
+          "half_width_pp": 0.412
+        },
+        "attacks": {
+          "ITW": {
+            "n_spoof": 11816,
+            "eer_pct": 17.277,
+            "ci95_pct": [
+              16.871,
+              17.693
+            ],
+            "half_width_pp": 0.412
+          }
+        }
+      },
+      "itw_full_call": {
+        "checkpoint": "data\\cm_docs20_armb_s42.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 33.979,
+          "ci95_pct": [
+            33.446,
+            34.564
+          ],
+          "half_width_pp": 0.567
+        },
+        "attacks": {
+          "ITW": {
+            "n_spoof": 11816,
+            "eer_pct": 33.979,
+            "ci95_pct": [
+              33.446,
+              34.564
+            ],
+            "half_width_pp": 0.567
+          }
+        }
+      },
+      "eval_mindcf": 0.6991,
+      "eval_pooled_eer": 9.241
+    },
+    "arm_b_s43": {
+      "_tag": "armB_s43",
+      "eval": {
+        "checkpoint": "data\\cm_docs20_armb_s43.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 4058,
+        "pooled": {
+          "n_spoof": 15936,
+          "eer_pct": 9.635,
+          "ci95_pct": [
+            9.143,
+            10.103
+          ],
+          "half_width_pp": 0.47
+        },
+        "attacks": {
+          "A19": {
+            "n_spoof": 935,
+            "eer_pct": 12.568,
+            "ci95_pct": [
+              11.532,
+              13.904
+            ],
+            "half_width_pp": 1.224
+          },
+          "A20": {
+            "n_spoof": 920,
+            "eer_pct": 10.0,
+            "ci95_pct": [
+              8.913,
+              11.212
+            ],
+            "half_width_pp": 1.177
+          }
+        }
+      },
+      "itw_clean": {
+        "checkpoint": "data\\cm_docs20_armb_s43.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 21.107,
+          "ci95_pct": [
+            20.658,
+            21.57
+          ],
+          "half_width_pp": 0.46
+        },
+        "attacks": {
+          "ITW": {
+            "n_spoof": 11816,
+            "eer_pct": 21.107,
+            "ci95_pct": [
+              20.658,
+              21.57
+            ],
+            "half_width_pp": 0.46
+          }
+        }
+      },
+      "itw_full_call": {
+        "checkpoint": "data\\cm_docs20_armb_s43.pt",
+        "reps": 2000,
+        "seed": 1234,
+        "n_bonafide": 19963,
+        "pooled": {
+          "n_spoof": 11816,
+          "eer_pct": 35.921,
+          "ci95_pct": [
+            35.39,
+            36.467
+          ],
+          "half_width_pp": 0.551
+        },
+        "attacks": {
+          "ITW": {
+            "n_spoof": 11816,
+            "eer_pct": 35.921,
+            "ci95_pct": [
+              35.39,
+              36.467
+            ],
+            "half_width_pp": 0.551
+          }
+        }
+      },
+      "eval_mindcf": 0.7003,
+      "eval_pooled_eer": 9.635
+    }
+  },
+  "criteria": {
+    "primary_itw_full_call_better_off": {
+      "status": "PASS",
+      "rule": "arm B better than arm A with non-overlapping 95% CI, both seeds",
+      "per_seed": {
+        "42": {
+          "ok": true,
+          "detail": "33.979 [33.45, 34.56] vs 44.541 [43.97, 45.09] gap +10.562 pp -> disjoint"
+        },
+        "43": {
+          "ok": true,
+          "detail": "35.921 [35.39, 36.47] vs 38.304 [37.79, 38.87] gap +2.383 pp -> disjoint"
+        }
+      }
+    },
+    "secondary_per_attack": {
+      "A19": {
+        "status": "PASS",
+        "floor_pp": 1.36,
+        "per_seed": {
+          "42": {
+            "ok": true,
+            "detail": "7.594 [6.74, 8.45] vs 22.353 [20.55, 24.17] gap +14.759 pp -> disjoint"
+          },
+          "43": {
+            "ok": true,
+            "detail": "12.568 [11.53, 13.90] vs 17.861 [16.07, 19.68] gap +5.293 pp -> disjoint"
+          }
+        }
+      },
+      "A20": {
+        "status": "PASS",
+        "floor_pp": 1.36,
+        "per_seed": {
+          "42": {
+            "ok": true,
+            "detail": "8.970 [7.86, 10.11] vs 29.300 [27.50, 31.17] gap +20.330 pp -> disjoint"
+          },
+          "43": {
+            "ok": true,
+            "detail": "10.000 [8.91, 11.21] vs 21.168 [19.59, 22.83] gap +11.168 pp -> disjoint"
+          }
+        }
+      }
+    }
+  },
+  "recorded_not_pass_fail": {
+    "arm_a_s42": {
+      "eval_pooled_eer_pct": 15.437,
+      "eval_minDCF": 0.9686
+    },
+    "arm_a_s43": {
+      "eval_pooled_eer_pct": 12.4,
+      "eval_minDCF": 0.8759
+    },
+    "arm_b_s42": {
+      "eval_pooled_eer_pct": 9.241,
+      "eval_minDCF": 0.6991
+    },
+    "arm_b_s43": {
+      "eval_pooled_eer_pct": 9.635,
+      "eval_minDCF": 0.7003
+    }
+  },
+  "open_items": [
+    "arm_a ITW full_call seed spread 6.237 pp; the pre-registered noise floor is 0.770 pp (Ground rule 1, measured in-domain). Recorded as an open item; the floor was NOT adjusted.",
+    "arm_b ITW full_call seed spread 1.942 pp; the pre-registered noise floor is 0.770 pp (Ground rule 1, measured in-domain). Recorded as an open item; the floor was NOT adjusted."
+  ],
+  "OVERALL": "PASS"
+}

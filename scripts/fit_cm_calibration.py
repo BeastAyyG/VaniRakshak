@@ -178,8 +178,19 @@ def main() -> int:
 
     if not args.no_write:
         ck["calibration"] = block
-        ck["dev_eer"] = float(dev["eer_pct"]) / 100.0
-        ck["dev_min_dcf"] = float(dev["minDCF"])
+        # Do NOT clobber dev_eer / dev_min_dcf. Those were measured by
+        # ml/train_cm.py on the FULL dev split (140,950 records) at the best
+        # epoch, and downstream comparisons read them. The numbers below come
+        # from this script's own smaller dev subsample (12,000 records), so
+        # they are a different measurement of a different sample -- writing
+        # them over the training-time values makes a checkpoint disagree with
+        # its own training log (seen: control s42 stored 16.297% vs logged
+        # 15.856%). Keep both, under distinct keys.
+        if "dev_eer" in ck:
+            ck.setdefault("dev_eer_full_dev", ck["dev_eer"])
+            ck.setdefault("dev_min_dcf_full_dev", ck["dev_min_dcf"])
+        ck["calibration_dev_eer"] = float(dev["eer_pct"]) / 100.0
+        ck["calibration_dev_min_dcf"] = float(dev["minDCF"])
         out = Path(args.output) if args.output else ckpt_path
         torch.save(ck, out)
         print(f"  wrote calibration block -> {out}")

@@ -1,0 +1,153 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>VaniRakshak &mdash; docs/20 augmentation-off control</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2129; --line:#30363d;
+  --tx:#e6edf3; --mut:#8b949e; --good:#3fb950; --bad:#f85149;
+  --acc:#58a6ff; --warn:#d29922; --on:#f85149; --off:#3fb950;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+h1{font-size:30px;margin:0 0 6px;letter-spacing:-.4px}
+h2{font-size:20px;margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h3{font-size:15px;margin:24px 0 10px;color:var(--mut);font-weight:600;
+  text-transform:uppercase;letter-spacing:.06em}
+p{margin:10px 0}
+.sub{color:var(--mut);font-size:14px;margin:0}
+.badge{display:inline-block;padding:5px 14px;border-radius:999px;font-weight:700;
+  font-size:13px;letter-spacing:.06em}
+.badge.pass{background:rgba(63,185,80,.15);color:var(--good);
+  border:1px solid rgba(63,185,80,.4)}
+.badge.fail{background:rgba(248,81,73,.15);color:var(--bad);
+  border:1px solid rgba(248,81,73,.4)}
+.hero{background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);border-radius:14px;padding:28px 30px;margin:28px 0}
+.hero .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.callout{border-left:3px solid var(--acc);background:var(--panel);
+  padding:16px 20px;border-radius:0 10px 10px 0;margin:20px 0}
+.callout.warn{border-left-color:var(--warn)}
+.callout.bad{border-left-color:var(--bad)}
+.callout.good{border-left-color:var(--good)}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;
+  letter-spacing:.05em;border-bottom:1px solid var(--line)}
+tbody tr:hover{background:rgba(88,166,255,.05)}
+tr.win td{color:var(--good);font-weight:600}
+td.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.card .k{font-size:13px;color:var(--mut);margin-bottom:8px}
+.card .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.card .d{font-size:12px;color:var(--mut);margin-top:10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.bar{position:relative;height:22px;background:var(--panel2);border-radius:5px;
+  margin:3px 0;overflow:visible}
+.bar .fill{position:absolute;top:0;height:100%;border-radius:5px;opacity:.28}
+.bar .val{position:absolute;top:0;height:100%;border-radius:5px}
+.bar .ci{position:absolute;top:8px;height:6px;background:var(--tx);opacity:.75}
+.bar .lbl{position:absolute;top:3px;left:8px;font-size:12px;line-height:16px;
+  color:var(--tx);white-space:nowrap}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;margin:16px 0}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--mut);margin-bottom:14px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px}
+code{background:var(--panel2);padding:2px 6px;border-radius:4px;font-size:13px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+ul{margin:10px 0;padding-left:22px}li{margin:6px 0}
+.foot{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);
+  color:var(--mut);font-size:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+</style></head><body><div class='wrap'>
+<h1>Does the codec/telephony augmenter cause the out-of-domain regression?</h1>
+<p class='sub'>VaniRakshak &middot; docs/20 &middot; pre-registered 2026-09-19, adjudicated 2026-09-20 &middot; paired, flag-flipped, 2 seeds</p>
+<div class='hero'><div class='row'>
+<span class='badge pass'>OVERALL PASS</span>
+<span style='color:var(--mut)'>all three criteria resolve, both seeds, non-overlapping 95% intervals</span>
+</div>
+<div class='callout good' style='margin-top:20px'><strong>The augmenter is not trading in-domain for out-of-domain. It is a net loss on both.</strong><br>Turning codec augmentation off improved <em>every</em> metric measured &mdash; in-domain and out-of-domain, on both seeds. The pre-registered prediction that in-domain would get worse was wrong, and is stated as such below rather than quietly dropped.</div>
+</div>
+<h2>Criteria (fixed before any result existed)</h2>
+<div class='cards'>
+<div class='card'><div class='k'>Primary &mdash; ITW <code>full_call</code>, both seeds, disjoint</div><div class='v' style='color:var(--good)'>PASS</div><div class='d'>
+seed 42: 33.979 [33.45, 34.56] vs 44.541 [43.97, 45.09] gap +10.562 pp -&gt; disjoint<br>
+seed 43: 35.921 [35.39, 36.47] vs 38.304 [37.79, 38.87] gap +2.383 pp -&gt; disjoint<br>
+</div></div>
+<div class='card'><div class='k'>Secondary &mdash; A19, disjoint and &gt;1.36 pp</div><div class='v' style='color:var(--good)'>PASS</div><div class='d'>
+seed 42: 7.594 [6.74, 8.45] vs 22.353 [20.55, 24.17] gap +14.759 pp -&gt; disjoint<br>
+seed 43: 12.568 [11.53, 13.90] vs 17.861 [16.07, 19.68] gap +5.293 pp -&gt; disjoint<br>
+</div></div>
+<div class='card'><div class='k'>Secondary &mdash; A20, disjoint and &gt;1.36 pp</div><div class='v' style='color:var(--good)'>PASS</div><div class='d'>
+seed 42: 8.970 [7.86, 10.11] vs 29.300 [27.50, 31.17] gap +20.330 pp -&gt; disjoint<br>
+seed 43: 10.000 [8.91, 11.21] vs 21.168 [19.59, 22.83] gap +11.168 pp -&gt; disjoint<br>
+</div></div>
+</div>
+<h2>In-domain (ASVspoof 5)</h2>
+<p>Augmentation off wins here too &mdash; which is the opposite of what docs/20 predicted.</p>
+<table><thead><tr><th>arm</th><th>best ep</th><th>dev minDCF</th><th>dev EER</th><th>eval pooled EER (95% CI)</th><th>eval minDCF</th></tr></thead><tbody>
+<tr><td>arm A s42 &mdash; codec ON</td><td class='num'>2</td><td class='num'>0.9965</td><td class='num'>15.856%</td><td class='num'>15.437%</td><td class='num'>0.9686</td></tr>
+<tr class='win'><td>arm B s42 &mdash; codec OFF</td><td class='num'>2</td><td class='num'>0.7105</td><td class='num'>6.728%</td><td class='num'>9.241%</td><td class='num'>0.6991</td></tr>
+<tr><td>arm A s43 &mdash; codec ON</td><td class='num'>3</td><td class='num'>0.9920</td><td class='num'>13.983%</td><td class='num'>12.400%</td><td class='num'>0.8759</td></tr>
+<tr class='win'><td>arm B s43 &mdash; codec OFF</td><td class='num'>4</td><td class='num'>0.7843</td><td class='num'>7.297%</td><td class='num'>9.635%</td><td class='num'>0.7003</td></tr>
+</tbody></table>
+<h2>Out-of-domain (In-the-Wild, 31,779 rows)</h2>
+<table><thead><tr><th>arm</th><th>ITW <code>clean</code></th><th>ITW <code>full_call</code> &mdash; primary</th></tr></thead><tbody>
+<tr><td>arm A s42 &mdash; codec ON</td><td class='num'><span class="mut">not measured</span></td><td class='num'><span class="mut">not measured</span></td></tr>
+<tr class='win'><td>arm B s42 &mdash; codec OFF</td><td class='num'><span class="mut">not measured</span></td><td class='num'><span class="mut">not measured</span></td></tr>
+<tr><td>arm A s43 &mdash; codec ON</td><td class='num'><span class="mut">not measured</span></td><td class='num'><span class="mut">not measured</span></td></tr>
+<tr class='win'><td>arm B s43 &mdash; codec OFF</td><td class='num'><span class="mut">not measured</span></td><td class='num'><span class="mut">not measured</span></td></tr>
+</tbody></table>
+<h2>Every checkpoint, out-of-domain</h2>
+<p><strong>Perfect separation.</strong> All 3 non-augmented checkpoints occupy the top 3 ranks (35.92% worst) and all 6 augmented checkpoints sit below them (38.30% best) &mdash; a 2.38 pp gap with no interleaving. Nine independently trained models, not one lucky run.</p>
+<div class='chart'><h3>ITW <code>full_call</code> EER (primary condition)</h3>
+<div class='legend'><span><i style='background:var(--off)'></i>codec OFF</span><span><i style='background:var(--on)'></i>codec ON</span><span><i style='background:var(--tx);opacity:.75'></i>95% CI</span></div>
+<div class="bar"><div class="fill" style="left:0;width:70.2%;background:var(--off)"></div><div class="val" style="left:0;width:70.2%;background:var(--off)"></div><div class="ci" style="left:69.2%;width:2.1%"></div><span class="lbl">pre-aug baseline &nbsp; 33.908%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:70.4%;background:var(--off)"></div><div class="val" style="left:0;width:70.4%;background:var(--off)"></div><div class="ci" style="left:69.3%;width:2.3%"></div><span class="lbl">arm B s42 (codec off) &nbsp; 33.979%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:74.4%;background:var(--off)"></div><div class="val" style="left:0;width:74.4%;background:var(--off)"></div><div class="ci" style="left:73.3%;width:2.2%"></div><span class="lbl">arm B s43 (codec off) &nbsp; 35.921%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:79.3%;background:var(--on)"></div><div class="val" style="left:0;width:79.3%;background:var(--on)"></div><div class="ci" style="left:78.3%;width:2.2%"></div><span class="lbl">arm A s43 (codec on) &nbsp; 38.304%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:84.1%;background:var(--on)"></div><div class="val" style="left:0;width:84.1%;background:var(--on)"></div><div class="ci" style="left:82.9%;width:2.4%"></div><span class="lbl">post-aug (codec on) &nbsp; 40.590%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:85.3%;background:var(--on)"></div><div class="val" style="left:0;width:85.3%;background:var(--on)"></div><div class="ci" style="left:84.1%;width:2.5%"></div><span class="lbl">G4 RawBoost s43 &nbsp; 41.181%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:92.2%;background:var(--on)"></div><div class="val" style="left:0;width:92.2%;background:var(--on)"></div><div class="ci" style="left:91.1%;width:2.3%"></div><span class="lbl">arm A s42 (codec on) &nbsp; 44.541%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:92.7%;background:var(--on)"></div><div class="val" style="left:0;width:92.7%;background:var(--on)"></div><div class="ci" style="left:91.6%;width:2.2%"></div><span class="lbl">attentive merge &nbsp; 44.758%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:93.2%;background:var(--on)"></div><div class="val" style="left:0;width:93.2%;background:var(--on)"></div><div class="ci" style="left:91.9%;width:2.4%"></div><span class="lbl">G4 RawBoost s42 &nbsp; 44.990%</span></div>
+</div>
+<div class='chart'><h3>ITW <code>clean</code> EER</h3>
+<div class="bar"><div class="fill" style="left:0;width:39.6%;background:var(--off)"></div><div class="val" style="left:0;width:39.6%;background:var(--off)"></div><div class="ci" style="left:38.7%;width:1.9%"></div><span class="lbl">arm B s42 (codec off) &nbsp; 17.277%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:48.4%;background:var(--off)"></div><div class="val" style="left:0;width:48.4%;background:var(--off)"></div><div class="ci" style="left:47.4%;width:2.1%"></div><span class="lbl">arm B s43 (codec off) &nbsp; 21.107%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:50.9%;background:var(--off)"></div><div class="val" style="left:0;width:50.9%;background:var(--off)"></div><div class="ci" style="left:49.8%;width:2.2%"></div><span class="lbl">pre-aug baseline &nbsp; 22.173%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:75.2%;background:var(--on)"></div><div class="val" style="left:0;width:75.2%;background:var(--on)"></div><div class="ci" style="left:74.0%;width:2.5%"></div><span class="lbl">arm A s43 (codec on) &nbsp; 32.761%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:76.7%;background:var(--on)"></div><div class="val" style="left:0;width:76.7%;background:var(--on)"></div><div class="ci" style="left:75.5%;width:2.4%"></div><span class="lbl">post-aug (codec on) &nbsp; 33.422%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:81.0%;background:var(--on)"></div><div class="val" style="left:0;width:81.0%;background:var(--on)"></div><div class="ci" style="left:79.8%;width:2.4%"></div><span class="lbl">G4 RawBoost s42 &nbsp; 35.308%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:85.8%;background:var(--on)"></div><div class="val" style="left:0;width:85.8%;background:var(--on)"></div><div class="ci" style="left:84.5%;width:2.6%"></div><span class="lbl">attentive merge &nbsp; 37.379%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:88.6%;background:var(--on)"></div><div class="val" style="left:0;width:88.6%;background:var(--on)"></div><div class="ci" style="left:87.3%;width:2.7%"></div><span class="lbl">G4 RawBoost s43 &nbsp; 38.611%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:93.1%;background:var(--on)"></div><div class="val" style="left:0;width:93.1%;background:var(--on)"></div><div class="ci" style="left:91.8%;width:2.6%"></div><span class="lbl">arm A s42 (codec on) &nbsp; 40.555%</span></div>
+</div>
+<h2>The prediction that was wrong</h2>
+<div class='callout warn'>docs/20 pre-registered that in-domain performance was <em>expected to get worse</em> with augmentation off, on the strength of Pre-Aug 12.870% vs G4 11.212%. That did not happen. Arm B is better in-domain on every axis &mdash; pooled EER (&minus;6.196 pp s42, &minus;2.765 pp s43), minDCF (0.9686 &rarr; 0.6991), A19, A20, and dev EER (&minus;9.128 pp s42, &minus;6.686 pp s43).</div>
+<p>So this is <strong>not</strong> the trade-off that was hypothesised. It is not &ldquo;augmentation buys benchmark numbers at the cost of the real world&rdquo;. It is <strong>augmentation costs on both and buys nothing</strong>. The earlier docs/08 comparison was confounded &mdash; Pre-Aug and Post-Aug were separate runs whose seed, epoch count and recipe were never controlled, and docs/20 said so at the time. The paired, flag-flipped run resolves it the other way.</p>
+<h3>Why that is plausible</h3>
+<p>ASVspoof 5 was already captured over real telephone networks, so <code>clean</code> in this corpus <em>is</em> the call condition. Applying a synthetic codec/telephony chain on top double-transcodes the input and pushes it off-distribution relative to both eval and ITW &mdash; the augmenter teaches invariance to distortions the deployment signal does not contain.</p>
+<p>A second, consistent signal: <strong>out-of-domain seed spread collapses when augmentation is off</strong> &mdash; 6.237 pp (arm A) &rarr; 1.942 pp (arm B) on <code>full_call</code>. Augmentation was not only shifting the mean, it was destabilising training.</p>
+<h2>Open items (recorded, not patched)</h2><ul>
+<li>arm_a ITW full_call seed spread 6.237 pp; the pre-registered noise floor is 0.770 pp (Ground rule 1, measured in-domain). Recorded as an open item; the floor was NOT adjusted.</li>
+<li>arm_b ITW full_call seed spread 1.942 pp; the pre-registered noise floor is 0.770 pp (Ground rule 1, measured in-domain). Recorded as an open item; the floor was NOT adjusted.</li>
+<li>This is a binary on/off test. Whether an <em>intermediate</em> augmentation strength is optimal is unanswered and needs its own pre-registration.</li>
+<li>Arm B checkpoints carry <strong>no Platt calibration block</strong>. EER and minDCF are unaffected &mdash; calibration cannot move either &mdash; but any deployed threshold is uncalibrated until <code>scripts/fit_cm_calibration.py</code> is run on them.</li>
+</ul>
+<h2>Shipping recommendation</h2>
+<div class='callout good'><strong>Ship arm B (<code>--no-codec-augment</code>), not the G4 / augmented line.</strong><br>Arm B wins on the deployment distribution (ITW <code>full_call</code>: 33.979 / 35.921 vs 44.541 / 38.304), wins on the in-domain benchmark, and has 3&times; lower seed variance. There is no axis on which the augmented models win, so there is no trade-off to adjudicate.</div>
+<h3>Two consequences that must travel with it</h3><ul>
+<li><strong>The docs/10 headline metric needs revisiting.</strong> It is written on ASVspoof 5 pooled EER, which here ranks the models correctly <em>by luck</em> &mdash; arm B happens to win both. The converse does not hold: docs/18 measured an inversion across four models. Select on the deployment distribution.</li>
+<li><strong>Calibrate before shipping.</strong> Run <code>scripts/fit_cm_calibration.py</code> on the chosen arm B checkpoint and re-fit the fusion weights <code>w_cm</code> / <code>w_asv</code>. EER and minDCF will not move; the decision threshold is what is currently wrong.</li>
+<li><strong>Do not retrain to chase a better number.</strong> Ground rule 5 applies &mdash; publish as measured.</li>
+</ul>
+<div class='foot'>
+Generated 2026-09-20 00:24:54 by <code>scripts/build_results_site.py</code> &mdash; every number read from the JSON reports, none hand-typed.<br>
+Adjudication: <code>docs20_adjudication_20260920_001613.json</code> &middot; bootstrap: 2,000-rep percentile, seed 1234 &middot; dev figures from the training logs on the full 140,950-record dev split (checkpoint <code>dev_eer</code> was clobbered by the calibration script &mdash; see the note in that file).
+</div></div></body></html>

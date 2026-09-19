@@ -1,0 +1,26 @@
+{
+  "checkpoint": "data\\cm_g4_rawboost_s43.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 19963,
+  "pooled": {
+    "n_spoof": 11816,
+    "eer_pct": 38.611,
+    "ci95_pct": [
+      38.033,
+      39.193
+    ],
+    "half_width_pp": 0.583
+  },
+  "attacks": {
+    "ITW": {
+      "n_spoof": 11816,
+      "eer_pct": 38.611,
+      "ci95_pct": [
+        38.033,
+        39.193
+      ],
+      "half_width_pp": 0.583
+    }
+  }
+}

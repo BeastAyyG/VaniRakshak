@@ -1,0 +1,26 @@
+{
+  "checkpoint": "data\\cm_docs20_armb_s42.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 19963,
+  "pooled": {
+    "n_spoof": 11816,
+    "eer_pct": 33.979,
+    "ci95_pct": [
+      33.446,
+      34.564
+    ],
+    "half_width_pp": 0.567
+  },
+  "attacks": {
+    "ITW": {
+      "n_spoof": 11816,
+      "eer_pct": 33.979,
+      "ci95_pct": [
+        33.446,
+        34.564
+      ],
+      "half_width_pp": 0.567
+    }
+  }
+}
