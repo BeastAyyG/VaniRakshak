@@ -99,9 +99,16 @@ def mindcf_from_cache(npz: Path) -> float | None:
 
 
 def ci_of(rep: dict | None, key: str = "pooled"):
+    """(point, [lo, hi]) out of an eer_bootstrap_ci.py report.
+
+    Per-attack entries live under rep["attacks"], NOT at top level. Reading
+    rep["A19"] directly returns None, which then reads as "missing data" and
+    would leave the secondary criterion permanently UNRESOLVED for no visible
+    reason. Caught by tests/test_adjudicate_docs20.py.
+    """
     if not rep:
         return None
-    e = rep.get(key) if key != "pooled" else rep.get("pooled")
+    e = rep.get("pooled") if key == "pooled" else (rep.get("attacks") or {}).get(key)
     if not e:
         return None
     return e["eer_pct"], e["ci95_pct"]
