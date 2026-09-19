@@ -441,10 +441,25 @@ control has not trained yet.
 **The gap this does not close.** The pre-augmentation model remains the only
 checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by
 roughly half. Every model trained on augmented data regressed there. RawBoost
-recovered part of it (~20 → 16.3 on A19) but not the missing half. Since the
-training partition is A01–A08 only (§12), this is still a generalisation gap
-to unseen attacks, not a scoring artefact — and the control arm is what will
-say whether augmentation is the cause.
+recovered part of it (~20 → 16.3 on A19) but not the missing half.
+
+**Read the pre-aug comparison as suggestive, not causal.** `pre_aug_cm_aasist.pt`
+and `cm_aasist.pt` are both layer-12 `aasist-l`, and both were scored on the
+*same* 20k slice (docs/08 §"Side-by-Side Eval Comparison"), so the swing is
+measured on comparable terms:
+
+| docs/08 label | A19 | A20 | Pooled EER | minDCF |
+|---|---|---|---|---|
+| Pre-Augmentation L12 | **9.044 %** | **6.407 %** | 12.878 % | 0.8834 |
+| Post-Augmentation L12 | 21.316 % | 23.189 % | 13.627 % | 0.8048 |
+
+That is the same trade-off seen in G4: augmentation buys pooled separation
+(minDCF 0.8834 → 0.8048) and costs A19/A20 (~12 and ~17 pp). But these are
+two separate training runs, not one run with a flag flipped, so seed, epochs
+and data volume are not controlled between them. **It is a correlation, not a
+demonstration.** The control arm — identical run, `--g4-rawboost` omitted — is
+the clean test of whether augmentation is the cause, and it is the reason that
+arm was queued. Until it reports, do not state "augmentation caused this".
 
 ---
 

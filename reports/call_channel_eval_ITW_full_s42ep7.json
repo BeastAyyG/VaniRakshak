@@ -1,0 +1,29 @@
+{
+  "checkpoint": "data\\cm_g4_rawboost_s42.pt",
+  "manifest": "A:/cm-corpus/manifests/itw_manifest.tsv",
+  "n_rows": 31779,
+  "conditions": {
+    "clean": {
+      "pooled_eer_pct": 35.308,
+      "pooled_minDCF": 0.9995,
+      "threshold": 6.9439,
+      "n_bonafide": 19963,
+      "n_spoof": 11816,
+      "per_attack_eer_pct": {
+        "ITW": 35.308
+      },
+      "seconds": 382.6
+    },
+    "full_call": {
+      "pooled_eer_pct": 44.99,
+      "pooled_minDCF": 0.9979,
+      "threshold": 2.8753,
+      "n_bonafide": 19963,
+      "n_spoof": 11816,
+      "per_attack_eer_pct": {
+        "ITW": 44.99
+      },
+      "seconds": 440.8
+    }
+  }
+}

@@ -121,30 +121,39 @@ not uniformly good or bad; it is blind to specific generators.
 
 ## The generalisation gap — the uncomfortable result
 
-Same checkpoint, same harness, two corpora, ~2 h into training:
+Same checkpoint, same harness, two corpora. **Updated 2026-09-19 07:10 to the
+final G4 seed-42 checkpoint (best epoch 7)** — every number below was
+previously quoted from the epoch-3 checkpoint and is superseded.
 
 Measured on the **full** In-the-Wild corpus (n = 31,779 — 19,963 bonafide /
-11,816 spoof), versus a 1,500-row ASVspoof 5 slice:
+11,816 spoof), versus the full ASVspoof 5 20k slice:
 
 | Corpus | What it is | n | Pooled EER | minDCF |
 |---|---|---|---|---|
-| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 20,000 | **11.24 %** | 0.7071 |
-| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | 31,779 | **37.19 %** | 0.9989 |
-| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | 31,779 | **42.59 %** | 0.9981 |
+| **ASVspoof 5** (`clean` = native telephone) | Lab-generated fakes, real phone channel | 20,000 | **11.212 %** | 0.7286 |
+| **In-the-Wild** (`clean`) | **Real** deepfakes scraped from online video | 31,779 | **35.308 %** | 0.9995 |
+| **In-the-Wild** (`full_call`) | Real deepfakes + simulated phone path | 31,779 | **44.990 %** | 0.9979 |
 
-**A 3.3× swing depending only on which corpus you score.** The 11 % number is
-the one that would end up in a benchmark table; the ~37–43 % numbers describe
+**A 3.1× swing depending only on which corpus you score.** The 11 % number is
+the one that would end up in a benchmark table; the ~35–45 % numbers describe
 what happens on audio a fraudster actually made.
 
+How it moved from the epoch-3 checkpoint: `clean` **improved** 37.187 →
+35.308 %, but `full_call` **regressed** 42.589 → 44.990 %. Same direction as
+A19/A20 (§docs/10 G4) — the checkpoint that wins on the in-domain pooled score
+loses ground on the harder condition. Report both; do not quote only the one
+that improved.
+
 On the same 20k slice, the two attacks the G4 criterion is written against are
-**A19 13.70 %** and **A20 16.44 %** — both above the 12 % bar.
+**A19 16.257 %** and **A20 17.283 %** — both above the 12 % bar.
+(Previously quoted here as 13.70 / 16.44 from epoch 3.)
 
 > **Sample size changed the verdict once already.** At n = 1,500 this same
 > checkpoint read A19 **11.94 %** — apparently *under* the bar. At the full
-> 20k it is 13.70 %, over it. Do not adjudicate G4 on a slice.
+> 20k it is 16.257 %, over it. Do not adjudicate G4 on a slice.
 
 The 2,000-row ITW pilot earlier gave 36.51 % / 42.22 %, so the pilot was
-within 0.7 pp of the full corpus — small pilots are adequate for tracking this
+within ~1.2 pp of the full corpus — small pilots are adequate for tracking this
 metric, which makes it cheap enough to run every time.
 
 This is not a fluke of this checkpoint — it is the single most consistent
