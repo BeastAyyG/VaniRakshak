@@ -425,7 +425,37 @@ same modern harness, so the table is apples-to-apples.
 
 **Verdict on the stated criterion: FAIL.** A19 16.257 % and A20 17.283 %
 against a 12 % bar. Regression vs the control arm is **UNRESOLVED** — the
-control has not trained yet.
+control began training 2026-09-19 10:18 and is not finished.
+
+### Both seeds (seed 43 finished 10:18, early stop at epoch 9)
+
+| Seed | best ep | dev minDCF | pooled EER (95 % CI) | A19 (95 % CI) | A20 (95 % CI) |
+|---|---|---|---|---|---|
+| 42 | 7 | 0.8590 | 11.212 % [10.718, 11.779] | 16.264 % [14.973, 17.792] | 17.324 % [15.943, 18.680] |
+| 43 | 4 | 0.9208 | **10.522 %** [9.930, 11.090] | 15.623 % [14.220, 17.000] | 14.786 % [13.480, 16.170] |
+
+Worst-seed is the decision rule, so the verdict is A19 **16.257 %** / A20
+**17.283 %** (seed 42) → **FAIL**.
+
+**The FAIL is robust across seeds, not seed luck.** Each seed independently
+clears the bar at no point: seed 43's CI floors are 14.220 (A19) and 13.480
+(A20), both above 12 %.
+
+**The two seeds are statistically indistinguishable.** Every interval
+overlaps (pooled overlap [10.718, 11.090]; A20 barely overlaps at
+[15.943, 16.170]). Seed 43's apparently better pooled EER is within noise.
+minDCF is nearly identical — 0.7286 vs 0.7287. Seed-to-seed pooled spread is
+0.714 pp, **below** the 0.770 pp floor, so no open item is raised.
+
+**Dev-based selection did not predict eval across seeds.** Seed 43 has the
+*worse* dev minDCF (0.9208 vs 0.8590) yet the *better* eval pooled EER. Within
+a run, dev minDCF is the pre-registered selector and is the right one to use;
+across runs it did not rank them. Do not use dev minDCF to choose between
+seeds.
+
+Seed 43's curve also stalled: after epoch 4 its dev minDCF returned to 1.0000
+(trivial reject-all) and never recovered, so early stopping fired at epoch 9
+(patience 5/5). The selected checkpoint is still epoch 4.
 
 **Two honest findings, reported whether or not they flatter the run:**
 

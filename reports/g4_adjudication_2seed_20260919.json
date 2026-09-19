@@ -1,0 +1,93 @@
+{
+  "experiment": "docs/10 G4 -- attack diversity (RawBoost augmentation)",
+  "criterion": "A19 and A20 eval EER both < 12% without pooled EER regressing beyond the noise floor",
+  "adjudicated_at": "2026-09-19 10:27:20",
+  "manifest": "data\\eval_benchmark\\eval_slice_20k.tsv",
+  "n_rows": 20000,
+  "noise_floor_pp": 0.77,
+  "g4_arm": [
+    {
+      "checkpoint": "data\\cm_g4_rawboost_s42.pt",
+      "seed": 42,
+      "best_epoch": 7,
+      "pooled_eer_pct": 11.212,
+      "pooled_minDCF": 0.7286,
+      "per_attack_eer_pct": {
+        "A25": 6.555,
+        "A21": 4.261,
+        "A30": 12.79,
+        "A32": 19.936,
+        "A23": 6.284,
+        "A17": 1.19,
+        "A26": 6.727,
+        "A18": 4.975,
+        "A19": 16.257,
+        "A29": 0.724,
+        "A28": 16.996,
+        "A22": 4.92,
+        "A24": 6.703,
+        "A27": 16.484,
+        "A20": 17.283,
+        "A31": 13.221
+      },
+      "n_bonafide": 4058,
+      "n_spoof": 15936,
+      "g4_rawboost": true
+    },
+    {
+      "checkpoint": "data\\cm_g4_rawboost_s43.pt",
+      "seed": 43,
+      "best_epoch": 4,
+      "pooled_eer_pct": 10.498,
+      "pooled_minDCF": 0.7287,
+      "per_attack_eer_pct": {
+        "A25": 5.668,
+        "A21": 5.52,
+        "A30": 12.321,
+        "A32": 17.653,
+        "A23": 7.239,
+        "A17": 1.091,
+        "A26": 6.949,
+        "A18": 4.677,
+        "A19": 15.623,
+        "A29": 0.62,
+        "A28": 16.289,
+        "A22": 5.347,
+        "A24": 6.136,
+        "A27": 15.229,
+        "A20": 14.783,
+        "A31": 14.736
+      },
+      "n_bonafide": 4058,
+      "n_spoof": 15936,
+      "g4_rawboost": true
+    }
+  ],
+  "control_arm": [],
+  "criteria": {
+    "A19_below_12pct": {
+      "status": "FAIL",
+      "bar_pct": 12.0,
+      "per_seed_pct": [
+        16.257,
+        15.623
+      ],
+      "worst_pct": 16.257
+    },
+    "A20_below_12pct": {
+      "status": "FAIL",
+      "bar_pct": 12.0,
+      "per_seed_pct": [
+        17.283,
+        14.783
+      ],
+      "worst_pct": 17.283
+    },
+    "pooled_eer_no_regression": {
+      "status": "UNRESOLVED",
+      "detail": "control arm not available yet"
+    }
+  },
+  "open_items": [],
+  "OVERALL": "FAIL"
+}
