@@ -55,9 +55,14 @@ already telephone-captured) and on **In-the-Wild** (docs/18):
       Ground rule 1), on **both** seeds. One seed proves nothing at this
       spread.
 - [ ] **Secondary (the one that actually matters):** In-the-Wild EER improves
-      by more than the floor. WavLM scores ~37 % there (docs/18). If the
-      frontend swap only helps in-domain and not out-of-domain, it has not
-      fixed the problem that motivated it.
+      by more than the floor. The G4 seed-42 **final** checkpoint (epoch 7),
+      re-measured 2026-09-19 07:10 on all 31,779 rows, scores **35.308 %**
+      (`clean`) and **44.990 %** (`full_call`) — that is the number to beat,
+      not the ~37 %/42.6 % quoted from the epoch-3 checkpoint. If the frontend
+      swap only helps in-domain and not out-of-domain, it has not fixed the
+      problem that motivated it. Judge against `full_call`, the harder
+      condition: `clean` is the one that has been improving while everything
+      else regresses (docs/18).
 - [ ] **Secondary:** A19 and A20 EER both improve by more than the floor.
 
 **Falsification:** if XLS-R does not beat WavLM beyond the floor on both
