@@ -256,12 +256,35 @@ when the result is negative.
    22 %). `score_pre_aug_eval.py` gets the unpacking and the LLR **right**, so
    it is not affected — but it builds `AASISTLHead(in_dim=768)` with **no
    `merge_layers`**, so it cannot score a 12-layer-merge checkpoint correctly
-   at all. `evaluate_3way_benchmark.py` and `evaluate_4way_benchmark.py` build
-   most heads the same way; only their `m_attm` passes `merge_layers=12`.
-   **Any eval run against a post-G2 checkpoint through those scripts is
-   invalid.** The new `eval_call_channel.py` reads `merge_layers`,
-   `layer_index` and `freeze_merge` straight from the checkpoint instead of
-   assuming, which is the safer pattern.
+   at all.
+
+   **CORRECTION (2026-09-19 07:00) — the blanket "invalid" verdict below was
+   wrong, and I have withdrawn it.** An earlier draft of this section claimed
+   "any eval run against a post-G2 checkpoint through those scripts is
+   invalid" because `evaluate_4way_benchmark.py` passes `merge_layers=12` only
+   for `m_attm`. That reasoning read the constructor and stopped. Re-scoring
+   every baseline with the modern `adjudicate_g4.py` harness reproduced the
+   legacy numbers to within **0.15 pp**, which settles it:
+
+   | Checkpoint | legacy A19 / A20 | modern rescore A19 / A20 |
+   |---|---|---|
+   | `pre_aug_cm_aasist.pt` | 9.044 / 6.407 | 8.920 / 6.330 |
+   | `cm_aasist.pt` | 21.316 / 23.189 | 21.390 / 23.150 |
+   | `cm_aasist_attm.pt` | 20.214 / 24.104 | 20.210 / 24.020 |
+   | `cm_aasist_ft4_s42.pt` | 20.321 / 22.693 | 20.430 / 22.600 |
+
+   Why they hold up: `evaluate_finetune_benchmark.py:65` reads
+   `ckpt.get("merge_layers")` from the checkpoint, and the meanpool/uniform
+   scripts hardcode `merge_layers=12` for exactly the checkpoints that have
+   it. The 4-way script's *other* heads are built without a merge, but they
+   only ever score pre-G2 no-merge checkpoints. The genuinely broken script is
+   **`score_pre_aug_eval.py`** — and only if pointed at a merge checkpoint.
+
+   So: the legacy reports in `reports/cm_*benchmark.json` are **usable**. The
+   real defect was narrower than claimed. `eval_call_channel.py` /
+   `adjudicate_g4.py` remain the safer pattern because they read
+   `merge_layers`, `layer_index` and `freeze_merge` from the checkpoint rather
+   than assuming — use them for anything new.
 
    **Void artifact, kept for provenance (ground rule 4 — do not delete
    retracted items):** `reports/call_channel_eval_cm_g4_rawboost_s42_20260919_034748.json`

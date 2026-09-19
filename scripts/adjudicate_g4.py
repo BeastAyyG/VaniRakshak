@@ -46,10 +46,23 @@ DEFAULT_FLOOR_PP = 0.770    # docs/10 line 168, Ground rule 1
 CRITERION_ATTACKS = ("A19", "A20")
 
 
-def score_checkpoint(ckpt_path: Path, rows, device, batch, limit=None):
+def score_checkpoint(ckpt_path: Path, rows, device, batch, limit=None,
+                     layer_override=None):
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     merge_layers = ck.get("merge_layers")
-    layer_index = int(ck.get("layer_index", 5))
+
+    # Pre-G2 checkpoints (pre_aug_cm_aasist.pt, cm_aasist.pt) record NO
+    # layer_index at all -- they predate the field. The default of 5 would
+    # silently score a layer-12 model at layer 5 and produce a wrong number
+    # that still looks plausible. Pass --layer-index for those.
+    raw_li = ck.get("layer_index")
+    layer_index = int(raw_li) if raw_li is not None else 5
+    if layer_override is not None:
+        layer_index = int(layer_override)
+    if raw_li is None and layer_override is None:
+        print(f"  [warn] {ckpt_path.name} has no layer_index; defaulting to 5. "
+              f"Pass --layer-index if that is wrong.", flush=True)
+
     freeze_merge = bool(ck.get("freeze_merge", False))
 
     wavlm, dtype = load_frontend_for(ck, device)
@@ -98,6 +111,10 @@ def main() -> int:
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--layer-index", type=int, default=None,
+                    help="Override the checkpoint's layer_index. Required for "
+                         "pre-G2 checkpoints (pre_aug_cm_aasist.pt, cm_aasist.pt) "
+                         "which predate the field and would otherwise default to 5.")
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -111,7 +128,8 @@ def main() -> int:
             if not pp.exists():
                 print(f"[{label}] MISSING {pp} -- skipping")
                 continue
-            r = score_checkpoint(pp, rows, device, args.batch, args.limit)
+            r = score_checkpoint(pp, rows, device, args.batch, args.limit,
+                                 layer_override=args.layer_index)
             out.append(r)
             pa = r["per_attack_eer_pct"]
             print(

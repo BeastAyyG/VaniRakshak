@@ -1,0 +1,63 @@
+{
+  "experiment": "docs/10 G4 -- attack diversity (RawBoost augmentation)",
+  "criterion": "A19 and A20 eval EER both < 12% without pooled EER regressing beyond the noise floor",
+  "adjudicated_at": "2026-09-19 07:04:11",
+  "manifest": "data\\eval_benchmark\\eval_slice_20k.tsv",
+  "n_rows": 20000,
+  "noise_floor_pp": 0.77,
+  "g4_arm": [
+    {
+      "checkpoint": "data\\cm_aasist_attm.pt",
+      "seed": null,
+      "best_epoch": null,
+      "pooled_eer_pct": 12.682,
+      "pooled_minDCF": 0.8802,
+      "per_attack_eer_pct": {
+        "A25": 6.037,
+        "A21": 5.002,
+        "A30": 14.712,
+        "A32": 24.421,
+        "A23": 8.88,
+        "A17": 1.134,
+        "A26": 6.996,
+        "A18": 5.027,
+        "A19": 20.214,
+        "A29": 0.827,
+        "A28": 15.993,
+        "A22": 5.487,
+        "A24": 5.15,
+        "A27": 19.123,
+        "A20": 24.022,
+        "A31": 15.845
+      },
+      "n_bonafide": 4058,
+      "n_spoof": 15936,
+      "g4_rawboost": false
+    }
+  ],
+  "control_arm": [],
+  "criteria": {
+    "A19_below_12pct": {
+      "status": "FAIL",
+      "bar_pct": 12.0,
+      "per_seed_pct": [
+        20.214
+      ],
+      "worst_pct": 20.214
+    },
+    "A20_below_12pct": {
+      "status": "FAIL",
+      "bar_pct": 12.0,
+      "per_seed_pct": [
+        24.022
+      ],
+      "worst_pct": 24.022
+    },
+    "pooled_eer_no_regression": {
+      "status": "UNRESOLVED",
+      "detail": "control arm not available yet"
+    }
+  },
+  "open_items": [],
+  "OVERALL": "FAIL"
+}

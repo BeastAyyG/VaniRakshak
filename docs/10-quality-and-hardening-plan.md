@@ -408,6 +408,44 @@ regressing beyond the noise floor. Current best on those two is ~20 % and
 ~24 %, against a pre-augmentation Layer-12 baseline of 9.0 % and 6.4 % — the
 multi-layer models gave those attacks away and never got them back.
 
+### G4 measured — seed 42 final (2026-09-19 06:50, `eb0f13c`)
+
+Seed 42 finished on the epoch budget (patience 3/5); best epoch **7**, dev
+minDCF 0.8590 / dev EER 11.677 %. Scored on the full 20,000-row eval slice
+with `adjudicate_g4.py`. Every comparison row below was re-scored on that
+same modern harness, so the table is apples-to-apples.
+
+| Checkpoint | Pooled EER | minDCF | A19 | A20 |
+|---|---|---|---|---|
+| **cm_g4_rawboost_s42.pt (ep 7)** | **11.212 %** | **0.7286** | 16.257 % | 17.283 % |
+| pre_aug_cm_aasist.pt (L12) | 12.845 % | — | **8.920 %** | **6.330 %** |
+| cm_aasist_attm.pt | 12.682 % | — | 20.210 % | 24.020 % |
+| cm_aasist_ft4_s42.pt | 13.529 % | — | 20.430 % | 22.600 % |
+| cm_aasist.pt (post-aug L12) | 13.598 % | — | 21.390 % | 23.150 % |
+
+**Verdict on the stated criterion: FAIL.** A19 16.257 % and A20 17.283 %
+against a 12 % bar. Regression vs the control arm is **UNRESOLVED** — the
+control has not trained yet.
+
+**Two honest findings, reported whether or not they flatter the run:**
+
+1. **Pooled 11.212 % / minDCF 0.7286 is the best pooled result this repo has
+   produced.** RawBoost helped the pooled score.
+2. **Dev-minDCF selection made A19/A20 worse.** Epoch 3 measured A19 13.701 /
+   A20 16.437; the checkpoint actually selected (epoch 7) measures 16.257 /
+   17.283. Pooled improved 11.237 → 11.212 while the two attacks the criterion
+   targets regressed ~2.6 pp and ~0.8 pp. Selection was fixed in advance on
+   dev minDCF, so epoch 7 is the correct checkpoint — but both numbers belong
+   in the record, not just the flattering one.
+
+**The gap this does not close.** The pre-augmentation model remains the only
+checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by
+roughly half. Every model trained on augmented data regressed there. RawBoost
+recovered part of it (~20 → 16.3 on A19) but not the missing half. Since the
+training partition is A01–A08 only (§12), this is still a generalisation gap
+to unseen attacks, not a scoring artefact — and the control arm is what will
+say whether augmentation is the cause.
+
 ---
 
 ## G5 — Authentication (product P0, independent of all CM work)
