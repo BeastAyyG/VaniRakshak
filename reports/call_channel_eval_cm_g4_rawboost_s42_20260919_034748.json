@@ -1,0 +1,25 @@
+{
+  "checkpoint": "data\\cm_g4_rawboost_s42.pt",
+  "manifest": "data/eval_benchmark/eval_slice_20k.tsv",
+  "n_rows": 400,
+  "conditions": {
+    "clean": {
+      "pooled_eer_pct": 77.709,
+      "pooled_minDCF": 1.0,
+      "threshold": 0.6711,
+      "n_bonafide": 77,
+      "n_spoof": 323,
+      "per_attack_eer_pct": {
+        "A17": 93.506,
+        "A18": 93.506,
+        "A21": 96.667,
+        "A22": 94.805,
+        "A24": 89.61,
+        "A25": 90.0,
+        "A27": 35.0,
+        "A28": 87.5
+      },
+      "seconds": 3.8
+    }
+  }
+}

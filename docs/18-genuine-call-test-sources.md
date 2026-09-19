@@ -262,3 +262,9 @@ when the result is negative.
    invalid.** The new `eval_call_channel.py` reads `merge_layers`,
    `layer_index` and `freeze_merge` straight from the checkpoint instead of
    assuming, which is the safer pattern.
+
+   **Void artifact, kept for provenance (ground rule 4 — do not delete
+   retracted items):** `reports/call_channel_eval_cm_g4_rawboost_s42_20260919_034748.json`
+   is the pre-fix output — pooled EER 77.709 % on 400 rows. It is **not** a
+   measurement. Every number in it is inverted. The corrected run is
+   `..._20260919_034940.json` (22 %-class). Do not quote the 034748 file.

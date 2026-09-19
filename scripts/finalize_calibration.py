@@ -91,8 +91,36 @@ def main() -> int:
     log(f"calibrated: {done}")
     if missing:
         log(f"not calibrated: {missing}")
-    log("next: python scripts/adjudicate_g4.py --g4 <g4 ckpts> --control <control ckpts>")
-    return 0
+
+    # -- Adjudicate -------------------------------------------------------
+    # Calibration cannot move EER or minDCF (it is a monotone map of the LLR),
+    # so the verdict is identical before and after this step. What changes is
+    # CLLR/actDCF, which is exactly the G2 criterion. Run the verdict anyway so
+    # the pipeline ends with a number rather than a suggested command.
+    g4 = [c for c in TARGETS[:2] if c.exists()]
+    control = [c for c in TARGETS[2:] if c.exists()]
+    if not g4:
+        log("no G4 checkpoints -- nothing to adjudicate")
+        return 1
+
+    log("adjudicating G4 against the pre-registered criterion (full 20k eval)")
+    rc = subprocess.run(
+        [str(PY), "-u", str(REPO / "scripts" / "adjudicate_g4.py"),
+         "--g4", *[str(c) for c in g4],
+         "--control", *[str(c) for c in control]],
+        cwd=str(REPO),
+    ).returncode
+    log(f"adjudicate_g4.py -> rc={rc}")
+
+    # Persist the verdict next to the other artifacts.
+    verdicts = sorted(
+        (REPO / "reports").glob("g4_adjudication_*.json"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if verdicts:
+        latest = json.loads(verdicts[-1].read_text(encoding="utf-8"))
+        log(f"OVERALL: {latest.get('OVERALL')}")
+    return 0 if rc == 0 else 1
 
 
 if __name__ == "__main__":
