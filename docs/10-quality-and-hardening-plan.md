@@ -615,6 +615,7 @@ roughly half. Every model trained on augmented data regressed there. RawBoost
 recovered part of it (~20 → 16.3 on A19) but not the missing half.
 
 ### The larger problem: augmentation trades away out-of-domain performance
+#### — SUPERSEDED: the matched pair has since reported. See the correction below.
 
 See docs/18 for the full table. Measured on all 31,779 In-the-Wild rows:
 
@@ -636,8 +637,8 @@ is not in doubt; the *magnitude* is not a clean single-variable estimate
 because they are separate training runs. The control arm tests the RawBoost
 layer cleanly; isolating the codec augmenter would need a matched pair.
 
-**This is the finding that matters for what to ship.** Ranked by in-domain
-pooled EER, G4 wins. Ranked by unseen attacks (A19/A20) or by real scraped
+**This is the finding that matters for what to ship.** — *superseded; see the
+correction immediately below.* Ranked by in-domain pooled EER, G4 wins. Ranked by unseen attacks (A19/A20) or by real scraped
 deepfakes (ITW), Pre-Aug wins by 8–13 pp. G4's criterion is written on A19/A20
 and it fails it; the pooled number it does win is the one that least predicts
 real-world behaviour.
@@ -659,6 +660,48 @@ and data volume are not controlled between them. **It is a correlation, not a
 demonstration.** The control arm — identical run, `--g4-rawboost` omitted — is
 the clean test of whether augmentation is the cause, and it is the reason that
 arm was queued. Until it reports, do not state "augmentation caused this".
+
+#### Correction (2026-09-20) — the matched pair reported, and it is not a trade-off
+
+This section asked for exactly one thing: a matched, flag-flipped pair to test
+whether the codec/telephony augmenter causes the out-of-domain regression.
+That experiment is **docs/20**, and it is complete. It **supports the
+direction** and **overturns the framing**. Kept in place rather than deleted
+(ground rule 4).
+
+The matched pair is arm A = the G4 control (codec ON) reused, arm B =
+`--no-codec-augment`, same seeds and recipe, one variable:
+
+| | ITW `full_call` | eval pooled EER | eval minDCF |
+|---|---|---|---|
+| arm A s42 (codec ON) | 44.541 % | 15.437 % | 0.9686 |
+| **arm B s42 (OFF)** | **33.979 %** | **9.241 %** | **0.6991** |
+| arm A s43 (codec ON) | 38.304 % | 12.400 % | 0.8759 |
+| **arm B s43 (OFF)** | **35.921 %** | **9.635 %** | **0.7003** |
+
+**Correction 1 — "trades away" is the wrong verb.** A trade implies paying
+in-domain to win out-of-domain. Arm B wins **both**. In-domain pooled EER
+improves by 6.196 pp (s42) and 2.765 pp (s43); minDCF improves 0.9686 →
+0.6991. This section predicted the opposite, on the strength of the
+Pre-Aug/Post-Aug comparison below — which it correctly labelled a correlation,
+not a demonstration. The flag-flipped pair resolves it the other way:
+**augmentation costs on both domains and buys nothing.**
+
+**Correction 2 — "Ranked by in-domain pooled EER, G4 wins" no longer holds.**
+Against arm B, G4 loses on pooled EER too. G4's own criterion remains
+A19/A20 and it still fails it, so nothing about G4's verdict changes — but
+G4 is no longer the best in-domain model either.
+
+**What survives, sharpened.** The warning that pooled EER "least predicts
+real-world behaviour" is now the operative lesson. In docs/20 pooled EER
+happens to rank arm B correctly, but **by luck** — docs/18's inversion across
+four models was real, and nothing about pooled EER earned that ranking here.
+Select on the deployment distribution (ITW / telephony), not on pooled EER.
+
+**Action taken:** arm B is calibrated and passes the live backend load proof;
+see docs/20 §"Calibration and deployment readiness". Ship arm B
+(`--no-codec-augment`). The fusion weights were checked against it and need no
+change.
 
 ---
 
