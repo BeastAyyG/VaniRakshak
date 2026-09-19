@@ -1,0 +1,26 @@
+{
+  "checkpoint": "data\\cm_aasist.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 19963,
+  "pooled": {
+    "n_spoof": 11816,
+    "eer_pct": 40.59,
+    "ci95_pct": [
+      40.014,
+      41.161
+    ],
+    "half_width_pp": 0.581
+  },
+  "attacks": {
+    "ITW": {
+      "n_spoof": 11816,
+      "eer_pct": 40.59,
+      "ci95_pct": [
+        40.014,
+        41.161
+      ],
+      "half_width_pp": 0.581
+    }
+  }
+}

@@ -139,6 +139,59 @@ tight (±0.5–0.6 pp) because ITW is scored pooled over all 11,816 spoofs —
 unlike the per-attack ASVspoof numbers, which carry ±1.36 pp on ~900
 utterances each.
 
+## Out-of-domain, by model — the result that reframes everything
+
+Measured on all 31,779 ITW rows, all models, same harness:
+
+| Model | ASVspoof 5 pooled | ITW `clean` (95 % CI) | ITW `full_call` (95 % CI) |
+|---|---|---|---|
+| **Pre-Aug L12** (no augmentation) | 12.870 % | **22.173 %** [21.71, 22.65] | **33.908 %** [33.42, 34.44] |
+| Post-Aug L12 (with augmentation) | 13.598 % | 33.422 % [32.92, 33.96] | 40.590 % [40.01, 41.16] |
+| **G4 s42** (codec + RawBoost) | **11.212 %** | 35.308 % [34.78, 35.83] | 44.990 % [44.39, 45.56] |
+
+**Read the two columns in opposite directions.** The model with the *best*
+in-domain pooled EER (G4, 11.212 %) has the *worst* out-of-domain EER
+(35.308 % / 44.990 %). The model with the *worst* in-domain pooled EER
+(Pre-Aug, 12.870 %) has by far the *best* out-of-domain EER — better by
+**13.1 pp** on `clean` and **11.1 pp** on `full_call`.
+
+The intervals are not close to overlapping: Pre-Aug's `clean` ceiling is 22.65
+against G4's floor of 34.78. This is not a sampling artefact.
+
+**The generalisation gap is model-dependent, so quote it per model.** Pre-Aug
+goes 12.870 → 22.173 (**1.7×**). G4 goes 11.212 → 35.308 (**3.1×**). The
+"3.1×" figure quoted earlier in this file is G4's, not a property of the
+stack — more augmentation widened the gap rather than narrowing it.
+
+### The direct pair
+
+Pre-Aug L12 and Post-Aug L12 are the **same architecture** (`aasist-l`, layer
+12, no merge), differing only in whether training used the codec/telephony
+augmenter:
+
+- `clean`: 22.173 % → 33.422 % — **+11.2 pp**
+- `full_call`: 33.908 % → 40.590 % — **+6.7 pp**
+
+That is the same trade-off seen in-domain, in the opposite direction and at
+much larger magnitude: augmentation bought minDCF (0.8834 → 0.8048) and cost
+real-world generalisation by ~11 pp.
+
+**Caveat, stated plainly:** these are two separate training runs, not one run
+with a flag flipped, so seed / epochs / data volume are not controlled between
+them. The effect size (11 pp) is far larger than any plausible run-to-run
+variation measured in this repo (pooled seed-to-seed spread is 0.714 pp), so
+the direction is not in doubt — but the *magnitude* is not a clean single-
+variable estimate. The queued control arm (identical run, `--g4-rawboost`
+omitted) is the clean test for the RawBoost layer specifically, and a
+pre/post-aug pair trained under matched conditions would be needed to isolate
+the codec augmenter.
+
+**Deployment implication:** "which model is best" has no single answer here.
+Ranked by in-domain pooled EER, G4 wins. Ranked by unseen attacks (A19/A20) or
+by real scraped deepfakes (ITW), Pre-Aug wins by 8–13 pp. If the system is
+meant to work on audio a fraudster actually made, the in-domain pooled number
+is the wrong one to optimise.
+
 **A 3.1× swing depending only on which corpus you score.** The 11 % number is
 the one that would end up in a benchmark table; the ~35–45 % numbers describe
 what happens on audio a fraudster actually made. The intervals do not come

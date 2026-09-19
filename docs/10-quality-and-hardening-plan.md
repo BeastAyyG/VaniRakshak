@@ -558,6 +558,34 @@ checkpoint that clears 12 % on A19 and A20 (8.920 / 6.330), and it does so by
 roughly half. Every model trained on augmented data regressed there. RawBoost
 recovered part of it (~20 → 16.3 on A19) but not the missing half.
 
+### The larger problem: augmentation trades away out-of-domain performance
+
+See docs/18 for the full table. Measured on all 31,779 In-the-Wild rows:
+
+| Model | ASVspoof 5 pooled | ITW `clean` (95 % CI) | ITW `full_call` (95 % CI) |
+|---|---|---|---|
+| **Pre-Aug L12** (no augmentation) | 12.870 % | **22.173 %** [21.71, 22.65] | **33.908 %** [33.42, 34.44] |
+| Post-Aug L12 (with augmentation) | 13.598 % | 33.422 % [32.92, 33.96] | 40.590 % [40.01, 41.16] |
+| **G4 s42** (codec + RawBoost) | **11.212 %** | 35.308 % [34.78, 35.83] | 44.990 % [44.39, 45.56] |
+
+The ordering **inverts**. Best in-domain pooled (G4) is worst out-of-domain;
+worst in-domain pooled (Pre-Aug) is best out-of-domain by 13.1 pp (`clean`)
+and 11.1 pp (`full_call`), with non-overlapping intervals.
+
+The direct pair — Pre-Aug vs Post-Aug, identical architecture, differing only
+by the codec/telephony augmenter — shows **+11.2 pp** on ITW `clean` and
+**+6.7 pp** on `full_call` attributable to turning augmentation on. Effect
+size is ~15× the 0.714 pp seed-to-seed spread measured here, so the direction
+is not in doubt; the *magnitude* is not a clean single-variable estimate
+because they are separate training runs. The control arm tests the RawBoost
+layer cleanly; isolating the codec augmenter would need a matched pair.
+
+**This is the finding that matters for what to ship.** Ranked by in-domain
+pooled EER, G4 wins. Ranked by unseen attacks (A19/A20) or by real scraped
+deepfakes (ITW), Pre-Aug wins by 8–13 pp. G4's criterion is written on A19/A20
+and it fails it; the pooled number it does win is the one that least predicts
+real-world behaviour.
+
 **Read the pre-aug comparison as suggestive, not causal.** `pre_aug_cm_aasist.pt`
 and `cm_aasist.pt` are both layer-12 `aasist-l`, and both were scored on the
 *same* 20k slice (docs/08 §"Side-by-Side Eval Comparison"), so the swing is
