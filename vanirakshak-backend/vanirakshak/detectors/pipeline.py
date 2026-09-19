@@ -37,7 +37,12 @@ def _default_cm() -> "CMModel | CMModelWavLM | CMModelAASIST":
     VR_CM_AASIST_WEIGHTS); default `stub` keeps the zero-dependency
     numpy/scipy detector. Degrades to the stub on any load failure — never
     raises past construction."""
-    backend = os.environ.get("VR_CM_BACKEND", "stub").lower()
+    # Deferred to backend_selection so config.py can apply the real-backend
+    # fusion preset against the SAME answer, instead of re-reading the env
+    # var and disagreeing whenever the backend is auto-selected.
+    from .backend_selection import resolve_cm_backend
+
+    backend = resolve_cm_backend()
     if backend == "wavlm":
         from .cm_wavlm import CMModelWavLM
 

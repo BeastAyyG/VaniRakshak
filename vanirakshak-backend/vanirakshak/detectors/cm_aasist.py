@@ -72,16 +72,54 @@ _WINDOW_S = 4.0
 _WEIGHTS_LOADED = False
 
 
+# Default checkpoint: the docs/20 arm B winner (codec augmentation OFF,
+# seed 42), Platt-calibrated. docs/20 adjudicated it against its three
+# pre-registered criteria -- all PASS on both seeds -- and it beats the
+# augmented line out-of-domain (ITW full_call +10.56 / +2.38 pp) AND
+# in-domain (pooled EER -6.20 / -2.77 pp), so it is what should run by
+# default. See docs/20 and the correction recorded in docs/10.
+#
+# Both are repo-relative and gitignored, so no weights file can be committed
+# by accident and the default travels with the repo rather than with one box.
+PREFERRED_WEIGHTS_RELATIVE = Path("data") / "cm_docs20_armb_s42_cal.pt"
+LEGACY_WEIGHTS_RELATIVE = Path("data") / "cm_aasist.pt"
+
+
+def repo_root() -> Path:
+    """.../vanirakshak-backend/vanirakshak/detectors/ -> repo root."""
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
 def weights_path() -> Path:
-    """Resolve the checkpoint location. Env override wins; the default is a
-    repo-relative path that is gitignored (check ``.gitignore``) so a
-    ~5–20 MB weights file can never be committed by accident."""
+    """Resolve the checkpoint location.
+
+    Precedence:
+
+      1. ``VR_CM_AASIST_WEIGHTS``, if set and non-empty -- always wins. This
+         is what ``scripts/wire_cm_into_backend.py`` emits for deployment, so
+         it is how an operator pins a different checkpoint.
+      2. PREFERRED (docs/20 arm B, calibrated), if that file exists.
+      3. LEGACY ``data/cm_aasist.pt``, if it exists -- an older box may have
+         it and not arm B, and running a real model beats falling to the stub.
+      4. PREFERRED anyway, so a missing-file error names the path we actually
+         want rather than one we merely tolerate.
+
+    Step 3 is a deliberate degradation, not a silent one: the detector's
+    ``name`` still reflects what loaded, and
+    ``scripts/verify_cm_deployment.py`` / ``tests/test_cm_deployment.py``
+    fail if the result is the stub or an uncalibrated checkpoint.
+    """
     override = os.environ.get("VR_CM_AASIST_WEIGHTS", "").strip()
     if override:
         return Path(override)
-    here = Path(__file__).resolve()
-    repo_root = here.parent.parent.parent.parent
-    return repo_root / "data" / "cm_aasist.pt"
+    root = repo_root()
+    preferred = root / PREFERRED_WEIGHTS_RELATIVE
+    if preferred.exists():
+        return preferred
+    legacy = root / LEGACY_WEIGHTS_RELATIVE
+    if legacy.exists():
+        return legacy
+    return preferred
 
 
 @dataclass

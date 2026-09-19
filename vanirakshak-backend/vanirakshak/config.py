@@ -193,10 +193,13 @@ class Settings:
             object.__setattr__(self, "fusion", FusionConfig(**_DEMO_OVERRIDES[preset]))
             return
 
-        real_backend_active = (
-            os.environ.get("VR_ASV_BACKEND", "stub").lower() == "ecapa"
-            or os.environ.get("VR_CM_BACKEND", "stub").lower() in ("wavlm", "aasist")
-        )
+        # Ask the detector layer, do not re-read the env var. The pipeline
+        # auto-selects aasist when a checkpoint is present, so reading the
+        # env here would report "stub" and skip the real-backend preset while
+        # the real detector was running -- wrong fusion weights, no error.
+        from vanirakshak.detectors.backend_selection import real_backend_active
+
+        real_backend_active = real_backend_active()
         if real_backend_active:
             # An explicit VR_FUSION_W_CM / VR_FUSION_W_ASV env var always wins —
             # this preset only fills in the ones the user didn't set themselves.
