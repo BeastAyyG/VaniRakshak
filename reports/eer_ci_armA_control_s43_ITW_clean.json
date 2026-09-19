@@ -1,0 +1,16 @@
+{
+  "checkpoint": "data\\cm_g4_control_s43.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 19963,
+  "pooled": {
+    "n_spoof": 11816,
+    "eer_pct": 32.761,
+    "ci95_pct": [
+      32.26,
+      33.345
+    ],
+    "half_width_pp": 0.548
+  },
+  "attacks": {}
+}

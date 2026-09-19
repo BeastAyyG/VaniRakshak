@@ -75,10 +75,45 @@ the intervals on both seeds, then the observed 11 pp difference is a property
 of those particular training runs rather than of augmentation, and the result
 is reported as a negative. Published as measured, not re-run (ground rule 5).
 
+## Measured — arm A (In-the-Wild), 2026-09-19 17:15
+
+Arm A needed no new training. The docs/10 G4 **control** (`cm_g4_control_s42/s43.pt`)
+is exactly "codec ON, `--g4-rawboost` omitted" with identical architecture,
+seeds, data and recipe — so it *is* arm A and was reused rather than retrained.
+Scored on all 31,779 ITW rows, 2,000-rep bootstrap, same harness.
+
+| | ITW `clean` (95 % CI) | ITW `full_call` (95 % CI) |
+|---|---|---|
+| **Arm A seed 42** (codec only) | 40.555 % [39.99, 41.11] | 44.541 % [43.97, 45.09] |
+| **Arm A seed 43** (codec only) | 32.761 % [32.26, 33.34] | 38.304 % [37.79, 38.87] |
+| G4 seed 42 (codec + RawBoost) | 35.308 % [34.78, 35.83] | 44.990 % [44.39, 45.56] |
+| Pre-Aug L12 (**no** augmentation) | **22.173 %** [21.71, 22.65] | **33.908 %** [33.42, 34.44] |
+
+Two findings, and the first is a caveat that has to travel with the result:
+
+**1. Out-of-domain seed spread is an order of magnitude worse than in-domain.**
+The two arm-A seeds differ by **7.79 pp** on `clean` and **6.24 pp** on
+`full_call`, with *non-overlapping* intervals — against an in-domain pooled
+spread of 0.714 pp (docs/10). Any single-seed OOD number in this repo is close
+to uninterpretable. The experiment is still valid because arms are compared
+**within seed**, but the effect will have to be large to be unambiguous, and
+this is recorded as an open item against Ground rule 1, which sets one noise
+floor for all metrics. Not patched unilaterally.
+
+**2. RawBoost helps OOD on `clean` and not on `full_call`.** Against arm A seed
+42, G4 seed 42 is 5.25 pp better on `clean` (intervals disjoint) and 0.45 pp
+*worse* on `full_call` (intervals overlap). This is why the primary criterion
+below is written on `full_call`: `clean` is the condition that has been
+flattering the augmented models all along.
+
 ## Cost
 
-~4 h 15 m per run × 4 runs (2 arms × 2 seeds) ≈ **17 h of GPU**, matching the
-G4/control sweep. Early stopping may cut it.
+**Revised: ~4 h 15 m × 2 runs ≈ 8.5 h**, not 17 h. Arm A already existed as the
+G4 control, so only arm B (2 seeds) needed training. Early stopping may cut it
+further.
+
+Arm B launched 2026-09-19 17:15, seeds 42 then 43, via
+`scripts/docs20_armb_runner.py`.
 
 ## What this will not answer
 
