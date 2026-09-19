@@ -159,13 +159,23 @@ class CodecTelephonyAugmenter:
         codecs: Sequence[str] = ("alaw", "ulaw", "amr_wb", "gsm_efr"),
         snr_range: tuple[float, float] = (5.0, 20.0),
         seed: Optional[int] = None,
+        strength: float = 1.0,
     ) -> None:
+        # `strength` is the docs/21 dose knob: it scales every probability
+        # together, so one number walks the whole pipeline from "off" (0.0)
+        # to today's setting (1.0) without changing their ratios. Scaling the
+        # probabilities -- rather than, say, the codec distortion depth --
+        # keeps the comparison interpretable: at strength s, each effect is
+        # applied to a fraction s of its usual share of utterances.
+        if not 0.0 <= strength <= 1.0:
+            raise ValueError(f"strength must be in [0, 1], got {strength}")
+        self.strength = float(strength)
         self.sr = sr
-        self.p_codec = p_codec
-        self.p_noise = p_noise
-        self.p_bandpass = p_bandpass
-        self.p_rir = p_rir
-        self.p_gain = p_gain
+        self.p_codec = p_codec * self.strength
+        self.p_noise = p_noise * self.strength
+        self.p_bandpass = p_bandpass * self.strength
+        self.p_rir = p_rir * self.strength
+        self.p_gain = p_gain * self.strength
         self.codecs = list(codecs)
         self.snr_range = snr_range
         self.rng = np.random.default_rng(seed)

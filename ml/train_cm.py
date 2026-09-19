@@ -619,6 +619,7 @@ def train_recipe_a(
     encoder_lr: float = 1e-5,
     g4_rawboost: bool = False,
     codec_augment: bool = True,
+    codec_augment_strength: float = 1.0,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation.
 
@@ -626,6 +627,12 @@ def train_recipe_a(
     (docs/20 arm B). With `g4_rawboost` also off this is a fully
     un-augmented run; both flags are recorded in the checkpoint so the arms
     stay distinguishable after the fact.
+
+    `codec_augment_strength` (docs/21) scales every augmenter probability by
+    the same factor, so 0.0 == off, 1.0 == today's setting, and intermediate
+    values give a dose-response curve. It is ignored when
+    `codec_augment=False` -- that is the 0.0 arm, and expressing it two ways
+    would let the same run be described two ways.
     """
     output_checkpoint = Path(output_checkpoint)
     if output_checkpoint.exists():
@@ -651,8 +658,15 @@ def train_recipe_a(
             p_rir=0.2,
             p_gain=0.3,
             seed=seed,
+            strength=codec_augment_strength,
         )
-        logger.info("Codec/telephony augmentation ENABLED")
+        logger.info(
+            "Codec/telephony augmentation ENABLED at strength %.2f "
+            "(p_codec=%.3f p_noise=%.3f p_bandpass=%.3f p_rir=%.3f p_gain=%.3f)",
+            codec_augment_strength,
+            augmenter.p_codec, augmenter.p_noise, augmenter.p_bandpass,
+            augmenter.p_rir, augmenter.p_gain,
+        )
     else:
         augmenter = None
         logger.info(
@@ -1011,6 +1025,12 @@ def train_recipe_a(
                 "encoder_lr": float(encoder_lr) if unfreeze_top_n > 0 else None,
                 "frontend_dtype": str(frontend_dtype).replace("torch.", ""),
                 "codec_augment": bool(codec_augment),
+                # Recorded as a float even when augmentation is off, so a
+                # reader never has to guess whether "off" meant strength 0.0
+                # or "flag not passed". Off arms store 0.0.
+                "codec_augment_strength": (
+                    float(codec_augment_strength) if codec_augment else 0.0
+                ),
                 "g4_rawboost": {
                     "enabled": bool(g4_rawboost),
                     "recipe": RawBoostAugmenter.VERSION if g4_rawboost else None,
@@ -1157,6 +1177,13 @@ def main() -> None:
              "changes nothing unless passed. Recorded in the checkpoint as "
              "codec_augment=False so the arms stay distinguishable later.",
     )
+    parser.add_argument(
+        "--codec-augment-strength", type=float, default=1.0, metavar="S",
+        help="Scale every codec/telephony augmentation probability by S "
+             "(docs/21 dose-response). S=1.0 is today's setting, S=0.0 is "
+             "effectively off. Ignored when --no-codec-augment is passed. "
+             "Recorded in the checkpoint as codec_augment_strength.",
+    )
     parser.add_argument("--workers", type=int, default=24)
     args = parser.parse_args()
 
@@ -1185,6 +1212,7 @@ def main() -> None:
         encoder_lr=args.encoder_lr,
         g4_rawboost=args.g4_rawboost,
         codec_augment=args.codec_augment,
+        codec_augment_strength=args.codec_augment_strength,
     )
 
 
