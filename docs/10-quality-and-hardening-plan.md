@@ -424,8 +424,9 @@ same modern harness, so the table is apples-to-apples.
 | cm_aasist.pt (post-aug L12) | 13.598 % | — | 21.390 % | 23.150 % |
 
 **Verdict on the stated criterion: FAIL.** A19 16.257 % and A20 17.283 %
-against a 12 % bar. Regression vs the control arm is **UNRESOLVED** — the
-control began training 2026-09-19 10:18 and is not finished.
+against a 12 % bar. Regression vs the control arm was **UNRESOLVED** when this
+was written — the control began training 2026-09-19 10:18. It is now resolved;
+see "Control arm" below, which settles the last open criterion.
 
 ### Both seeds (seed 43 finished 10:18, early stop at epoch 9)
 
@@ -456,6 +457,61 @@ seeds.
 Seed 43's curve also stalled: after epoch 4 its dev minDCF returned to 1.0000
 (trivial reject-all) and never recovered, so early stopping fired at epoch 9
 (patience 5/5). The selected checkpoint is still epoch 4.
+
+### Control arm (RawBoost OFF) — measured 2026-09-19 16:47, both seeds
+
+The control is G4 with `--g4-rawboost` omitted and **nothing else changed**
+(`control_status.json`: same `merge_layers=12`, `unfreeze_top_n=0`, same seeds,
+same data, same init weights). Both control checkpoints record
+`g4_rawboost.enabled = False`, so `adjudicate_g4.py` labels the arms correctly
+with no manual help. Full 20k eval, identical manifest and harness —
+`reports/g4_adjudication_20260919_164752.json`.
+
+| Arm | Seed | best ep | pooled EER | minDCF | A19 | A20 |
+|---|---|---|---|---|---|---|
+| G4 (RawBoost ON) | 42 | 7 | **11.212 %** | 0.7286 | 16.257 % | 17.283 % |
+| G4 (RawBoost ON) | 43 | 4 | **10.498 %** | 0.7287 | 15.623 % | 14.783 % |
+| Control (OFF) | 42 | 2 | 15.430 % | 0.9677 | 22.376 % | 29.399 % |
+| Control (OFF) | 43 | 3 | 12.395 % | 0.8767 | 17.754 % | 21.196 % |
+
+**All three criteria are now resolved** (worst-seed rule for the attack bars,
+median rule for the regression check, both pre-registered):
+
+| Criterion | Result | Numbers |
+|---|---|---|
+| A19 < 12 % | **FAIL** | worst seed **16.257 %** |
+| A20 < 12 % | **FAIL** | worst seed **17.283 %** |
+| pooled EER no regression (≤ 0.770 pp) | **PASS** | median G4 **10.855 %** vs control **13.913 %**, delta **−3.057 pp** |
+
+**OVERALL: FAIL.** Two of three criteria fail and the criterion is a
+conjunction. This is the first adjudication of G4 in which no criterion is left
+unresolved.
+
+**What the control actually shows: RawBoost is not a wash — it improves every
+in-domain number, including the two the criterion is written against.**
+
+| | seed 42 (control → G4) | seed 43 (control → G4) |
+|---|---|---|
+| pooled | 15.430 → 11.212 (**−4.22 pp**) | 12.395 → 10.498 (**−1.90 pp**) |
+| A19 | 22.376 → 16.257 (**−6.12 pp**) | 17.754 → 15.623 (**−2.13 pp**) |
+| A20 | 29.399 → 17.283 (**−12.12 pp**) | 21.196 → 14.783 (**−6.41 pp**) |
+| minDCF | 0.9677 → 0.7286 | 0.8767 → 0.7287 |
+
+So G4 misses because the bar was set at 12 % and these two attacks start from
+22–29 % without augmentation — not because RawBoost failed to help. It cut A20
+by 12.1 pp on seed 42 and still missed the bar by 5.28 pp.
+
+One more thing the control makes explicit: the un-augmented model's minDCF
+(0.9677 / 0.8767) sits close to the no-discrimination ceiling of 1.0 even
+though its EER is a middling 12–15 %. **The control has no usable
+low-false-alarm operating point.** RawBoost is what creates one.
+
+**This sharpens the out-of-domain inversion below, it does not soften it.**
+In-domain, more augmentation is better on every axis measured. Out-of-domain,
+the one non-augmented model wins by 11–15 pp. Both are measured. The honest
+reading is that augmentation buys in-domain separation partly by fitting the
+synthesis artefacts of the training partition — which is exactly why it does
+not transfer.
 
 **Two honest findings, reported whether or not they flatter the run:**
 

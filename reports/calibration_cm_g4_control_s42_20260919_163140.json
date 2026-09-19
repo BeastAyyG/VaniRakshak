@@ -1,0 +1,38 @@
+{
+  "checkpoint": "C:\\VaniRakshak\\data\\cm_g4_control_s42.pt",
+  "fitted_on": "dev only",
+  "n_dev": 12000,
+  "n_eval": 19994,
+  "calibration_block": {
+    "method": "platt",
+    "scale_w": 0.307932,
+    "bias_b": -4.241071,
+    "calibrated_cllr": 0.6431,
+    "calibrated_actdcf_bayes": 3.0346
+  },
+  "dev": {
+    "raw_cllr": 3.2914,
+    "calibrated_cllr": 0.6431,
+    "raw_actdcf_bayes": 11.4928,
+    "calibrated_actdcf_bayes": 3.0346,
+    "eer_pct": 16.297,
+    "minDCF": 0.9882
+  },
+  "eval_raw": {
+    "raw_cllr": 3.7774,
+    "calibrated_cllr": 3.7774,
+    "raw_actdcf_bayes": 13.8413,
+    "calibrated_actdcf_bayes": 13.8413,
+    "eer_pct": 15.43,
+    "minDCF": 0.9677
+  },
+  "eval_calibrated": {
+    "raw_cllr": 3.7774,
+    "calibrated_cllr": 0.6518,
+    "raw_actdcf_bayes": 13.8413,
+    "calibrated_actdcf_bayes": 2.4339,
+    "eer_pct": 15.43,
+    "minDCF": 0.9677
+  },
+  "g2_criterion_cllr_lt_1": "PASS"
+}

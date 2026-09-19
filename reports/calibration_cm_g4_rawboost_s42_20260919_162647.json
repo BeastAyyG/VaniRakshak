@@ -1,0 +1,38 @@
+{
+  "checkpoint": "C:\\VaniRakshak\\data\\cm_g4_rawboost_s42.pt",
+  "fitted_on": "dev only",
+  "n_dev": 12000,
+  "n_eval": 19994,
+  "calibration_block": {
+    "method": "platt",
+    "scale_w": 0.578169,
+    "bias_b": -6.471567,
+    "calibrated_cllr": 0.4686,
+    "calibrated_actdcf_bayes": 2.2455
+  },
+  "dev": {
+    "raw_cllr": 2.3852,
+    "calibrated_cllr": 0.4686,
+    "raw_actdcf_bayes": 9.7616,
+    "calibrated_actdcf_bayes": 2.2455,
+    "eer_pct": 11.538,
+    "minDCF": 0.8727
+  },
+  "eval_raw": {
+    "raw_cllr": 2.6703,
+    "calibrated_cllr": 2.6703,
+    "raw_actdcf_bayes": 11.9196,
+    "calibrated_actdcf_bayes": 11.9196,
+    "eer_pct": 11.212,
+    "minDCF": 0.7286
+  },
+  "eval_calibrated": {
+    "raw_cllr": 2.6703,
+    "calibrated_cllr": 0.5097,
+    "raw_actdcf_bayes": 11.9196,
+    "calibrated_actdcf_bayes": 1.7143,
+    "eer_pct": 11.212,
+    "minDCF": 0.7286
+  },
+  "g2_criterion_cllr_lt_1": "PASS"
+}
