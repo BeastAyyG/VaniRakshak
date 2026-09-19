@@ -121,7 +121,7 @@ class FastAudioAugmentLoader:
     def __init__(
         self,
         dataset: AudioDataset,
-        augmenter: CodecTelephonyAugmenter,
+        augmenter: Optional[CodecTelephonyAugmenter],
         batch_size: int = 64,
         shuffle: bool = True,
         drop_last: bool = True,
@@ -171,7 +171,7 @@ class FastAudioAugmentLoader:
             w = prepare_audio_window(
                 audio, sr=sr, target_duration=4.0, random_crop=True, rng=rng
             )
-            w_aug = self.augmenter(w, rng=rng)
+            w_aug = w if self.augmenter is None else self.augmenter(w, rng=rng)
             if self.rawboost_augmenter is not None:
                 w_aug = self.rawboost_augmenter(w_aug, rng=rng)
             return w_aug, label
@@ -618,8 +618,15 @@ def train_recipe_a(
     unfreeze_top_n: int = 0,
     encoder_lr: float = 1e-5,
     g4_rawboost: bool = False,
+    codec_augment: bool = True,
 ) -> Path:
-    """Train Recipe A with on-the-fly codec/telephony augmentation."""
+    """Train Recipe A with on-the-fly codec/telephony augmentation.
+
+    `codec_augment=False` disables the codec/telephony augmenter entirely
+    (docs/20 arm B). With `g4_rawboost` also off this is a fully
+    un-augmented run; both flags are recorded in the checkpoint so the arms
+    stay distinguishable after the fact.
+    """
     output_checkpoint = Path(output_checkpoint)
     if output_checkpoint.exists():
         raise FileExistsError(
@@ -636,14 +643,22 @@ def train_recipe_a(
 
     # 1. Setup Audio Training Set & DataLoader
     train_set = AudioDataset(train_manifest)
-    augmenter = CodecTelephonyAugmenter(
-        p_codec=0.5,
-        p_noise=0.3,
-        p_bandpass=0.3,
-        p_rir=0.2,
-        p_gain=0.3,
-        seed=seed,
-    )
+    if codec_augment:
+        augmenter = CodecTelephonyAugmenter(
+            p_codec=0.5,
+            p_noise=0.3,
+            p_bandpass=0.3,
+            p_rir=0.2,
+            p_gain=0.3,
+            seed=seed,
+        )
+        logger.info("Codec/telephony augmentation ENABLED")
+    else:
+        augmenter = None
+        logger.info(
+            "Codec/telephony augmentation DISABLED (docs/20 arm B) -- "
+            "training on raw windows only"
+        )
     rawboost_augmenter = None
     if g4_rawboost:
         rawboost_augmenter = RawBoostAugmenter(seed=seed)
@@ -653,7 +668,11 @@ def train_recipe_a(
             RawBoostAugmenter.VERSION,
         )
     else:
-        logger.info("G4 RawBoost augmentation disabled (baseline codec pipeline only)")
+        logger.info(
+            "G4 RawBoost augmentation disabled (%s)",
+            "baseline codec pipeline only" if codec_augment
+            else "no augmentation at all",
+        )
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
         augmenter=augmenter,
@@ -991,6 +1010,7 @@ def train_recipe_a(
                 "unfreeze_top_n": int(unfreeze_top_n),
                 "encoder_lr": float(encoder_lr) if unfreeze_top_n > 0 else None,
                 "frontend_dtype": str(frontend_dtype).replace("torch.", ""),
+                "codec_augment": bool(codec_augment),
                 "g4_rawboost": {
                     "enabled": bool(g4_rawboost),
                     "recipe": RawBoostAugmenter.VERSION if g4_rawboost else None,
@@ -1129,6 +1149,14 @@ def main() -> None:
              "distortion, chained after the codec/telephony pipeline. "
              "Deterministic via the per-item (seed, epoch, index) RNG.",
     )
+    parser.add_argument(
+        "--no-codec-augment", dest="codec_augment", action="store_false",
+        default=True,
+        help="Disable the codec/telephony augmenter entirely (docs/20 arm B): "
+             "train on raw windows. Default is ON, so this is additive and "
+             "changes nothing unless passed. Recorded in the checkpoint as "
+             "codec_augment=False so the arms stay distinguishable later.",
+    )
     parser.add_argument("--workers", type=int, default=24)
     args = parser.parse_args()
 
@@ -1156,6 +1184,7 @@ def main() -> None:
         unfreeze_top_n=args.unfreeze_top_n,
         encoder_lr=args.encoder_lr,
         g4_rawboost=args.g4_rawboost,
+        codec_augment=args.codec_augment,
     )
 
 
