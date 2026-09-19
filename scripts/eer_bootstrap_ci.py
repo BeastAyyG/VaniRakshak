@@ -93,7 +93,12 @@ def main() -> int:
     args = ap.parse_args()
 
     ckpt = Path(args.checkpoint)
-    cache = REPO_ROOT / "reports" / f"scores_{ckpt.stem}.npz"
+    # Key the cache on BOTH checkpoint and manifest. Keying on the checkpoint
+    # alone means scoring the same model on a second corpus (e.g. In-the-Wild)
+    # silently overwrites the first, and --reuse then re-analyses the wrong
+    # scores with no warning.
+    mstem = Path(args.manifest).stem
+    cache = REPO_ROOT / "reports" / f"scores_{ckpt.stem}__{mstem}.npz"
 
     if not args.reuse or not cache.exists():
         t = time.time()
