@@ -123,7 +123,17 @@ const ci  = (c) => (c && c.length===2) ? ` [${c[0].toFixed(2)}, ${c[1].toFixed(2
 
 function stageHtml(s){
   const cls = s.status;
-  const meta = s.status==="done"
+
+  // Finalize is steps, not epochs: 4 calibrations + 1 adjudication.
+  const finMeta = () => {
+    const n = (s.calibrated||[]).length;
+    if (s.status === "done")     return `4 calibrated · adjudicated${s.finished_at?` at ${s.finished_at.slice(11)}`:""}`;
+    if (s.status === "running")  return `${s.epochs_done}/${s.epochs_total} steps · ${n} calibrated`;
+    return "waiting for training";
+  };
+
+  const meta = s.group === "finalize" ? finMeta()
+      : s.status==="done"
       ? (s.best ? `best ep ${s.best.epoch} · dev minDCF ${fmt(s.best.dev_mindcf,4)} · dev EER ${fmt(s.best.dev_eer,2)}%${s.early_stop?" · early stop":""}` : "complete")
       : s.status==="running"
         ? `epoch ${s.epochs_done} done${s.epoch_frac?` + ${Math.round(s.epoch_frac*100)}% of next`:""}`

@@ -137,6 +137,81 @@ def build_stage(name: str, group: str, seed: int, status_obj: dict,
     }
 
 
+# The four checkpoints finalize_calibration.py walks, in order.
+CALIB_STEMS = (
+    "cm_g4_rawboost_s42",
+    "cm_g4_rawboost_s43",
+    "cm_g4_control_s42",
+    "cm_g4_control_s43",
+)
+
+
+def finalize_state(ctl: dict, train_done: bool) -> dict:
+    """Derive the finalize stage from artifacts it actually produces.
+
+    Previously this keyed off `any(g4_adjudication_2seed*.json)`, which matched
+    the *pre-control* report written hours earlier -- so the stage read "done"
+    the instant training stopped, while calibration had not even started.
+
+    Real signals, both written after training ends:
+      reports/calibration_<stem>_<YYYYMMDD_HHMMSS>.json  (one per checkpoint)
+      reports/g4_adjudication_<YYYYMMDD>_<HHMMSS>.json   (one, last)
+    Both are only counted if newer than the control sweep's finished_at, so a
+    stale run from a previous experiment can never satisfy this stage.
+    """
+    reports = REPO / "reports"
+    raw_fin = ctl.get("finished_at")
+    try:
+        cutoff = datetime.strptime(raw_fin, "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        cutoff = None
+
+    def fresh(paths):
+        out = []
+        for p in paths:
+            m = datetime.fromtimestamp(p.stat().st_mtime)
+            if cutoff is None or m >= cutoff:
+                out.append((m, p))
+        return sorted(out, key=lambda t: t[0])
+
+    # calibration_<stem>_20260919_051642.json -> <stem>
+    calibrated = set()
+    for _m, p in fresh(reports.glob("calibration_*.json")):
+        stem = p.name[len("calibration_"):-len("_20260919_051642.json")]
+        if stem in CALIB_STEMS:
+            calibrated.add(stem)
+
+    adj = fresh(reports.glob("g4_adjudication_*.json"))
+    adj_done = adj[-1] if adj else None
+
+    steps = len(CALIB_STEMS) + 1          # 4 calibrations + 1 adjudication
+    done_steps = len(calibrated) + (1 if adj_done else 0)
+
+    if not train_done:
+        status, progress = "pending", 0.0
+    elif adj_done:
+        status, progress = "done", 1.0
+    else:
+        status, progress = "running", done_steps / steps
+
+    return {
+        "name": "Calibrate + adjudicate",
+        "group": "finalize",
+        "seed": None,
+        "status": status,
+        "progress": round(progress, 4),
+        "epochs_done": done_steps,
+        "epochs_total": steps,
+        "epoch_frac": 0.0,
+        "best": None,
+        "early_stop": False,
+        "finished_at": (adj_done[0].strftime("%Y-%m-%d %H:%M:%S")
+                        if adj_done else None),
+        "log": None,
+        "calibrated": sorted(calibrated),
+    }
+
+
 def build_status() -> dict:
     g4 = read_json(G4_STATUS)
     ctl = read_json(CONTROL_STATUS)
@@ -149,21 +224,7 @@ def build_status() -> dict:
     ]
 
     train_done = all(s["status"] == "done" for s in stages)
-    finalize = {
-        "name": "Calibrate + adjudicate",
-        "group": "finalize",
-        "seed": None,
-        "status": "done" if (train_done and any(
-            (REPO / "reports").glob("g4_adjudication_2seed*.json"))) else
-                  ("running" if train_done else "pending"),
-        "progress": 1.0 if train_done else 0.0,
-        "epochs_done": EPOCH_BUDGET if train_done else 0,
-        "epoch_frac": 0.0,
-        "best": None,
-        "early_stop": False,
-        "finished_at": None,
-        "log": None,
-    }
+    finalize = finalize_state(ctl, train_done)
     stages.append(finalize)
 
     # Overall: 4 training runs carry the weight, finalize is a small tail.
@@ -176,13 +237,18 @@ def build_status() -> dict:
         for s in stages[:4] if s["status"] != "done"
     )
     eta_s = remaining_epochs * AVG_EPOCH_S
-    if finalize["status"] == "pending":
-        eta_s += FINALIZE_S
+    if finalize["status"] != "done":
+        # Only the not-yet-finished part of finalize counts.
+        eta_s += FINALIZE_S * (1.0 - finalize["progress"])
     eta = datetime.now() + timedelta(seconds=eta_s)
 
     results = {"g4_seeds": [], "ood": [], "verdict": None}
-    adj = REPO / "reports" / "g4_adjudication_2seed_20260919.json"
-    if adj.exists():
+    # Newest adjudication wins -- the run has been re-adjudicated as arms
+    # landed, and a hardcoded filename would keep serving the stale one.
+    adj_all = sorted((REPO / "reports").glob("g4_adjudication_*.json"),
+                     key=lambda p: p.stat().st_mtime)
+    adj = adj_all[-1] if adj_all else None
+    if adj is not None and adj.exists():
         d = read_json(adj)
         results["verdict"] = d.get("OVERALL")
         for g in d.get("g4_arm", []):
