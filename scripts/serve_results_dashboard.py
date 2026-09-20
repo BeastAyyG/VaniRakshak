@@ -243,6 +243,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
+        # The page may be opened from a different origin -- e.g. an IDE
+        # preview proxy serving the file on its own port -- in which case its
+        # relative fetch("/api/results") misses and it falls back to this
+        # absolute origin. That is a cross-origin request, so it needs CORS.
+        # Localhost-only dashboard; no credentials are involved.
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

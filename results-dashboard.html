@@ -56,10 +56,12 @@ code{background:var(--panel2);padding:2px 6px;border-radius:4px;font-size:13px;
   <p class="sub">What the experiments concluded · auto-refreshing every 30 s ·
     <span id="gen"></span></p>
 
+  <div id="err"></div>
+
   <div class="strip" id="verdicts"></div>
 
   <h2>Does any amount of codec augmentation help?</h2>
-  <div class="card" id="chart"></div>
+  <div class="card" id="chart"><span class="muted">loading…</span></div>
   <p class="note" id="mono"></p>
 
   <h2>Out-of-domain — In-the-Wild, all 31,779 rows</h2>
@@ -88,9 +90,41 @@ code{background:var(--panel2);padding:2px 6px;border-radius:4px;font-size:13px;
 const fmt=(v,d=2)=>(v===null||v===undefined)?"—":Number(v).toFixed(d);
 const ci=c=>(c&&c.length===2)?` [${c[0].toFixed(2)}, ${c[1].toFixed(2)}]`:"";
 
+// Several ports because restarting a dashboard on the same port is unsafe
+// here: Windows SO_REUSEADDR lets the new process bind while the OLD one
+// keeps answering, so a "restart" can silently keep serving old code. New
+// instances therefore get a new port, and the page tries them all.
+const API_PORTS = [8792, 8794];
+
+// Served by the dashboard itself -> the relative path works. Opened as a
+// static file or through a preview proxy on another port -> a relative
+// fetch("/api/results") resolves against THAT origin and 404s, so fall back
+// to the dashboard's own origin (it sends Access-Control-Allow-Origin).
+async function getJSON(path){
+  let last;
+  for (const u of [path, ...API_PORTS.map(p => `http://127.0.0.1:${p}${path}`)]){
+    try{
+      const r = await fetch(u);
+      if (r.ok) return await r.json();
+      last = new Error(`${u} -> HTTP ${r.status}`);
+    }catch(e){ last = e; }
+  }
+  throw last;
+}
+
+function showError(msg){
+  document.getElementById("err").innerHTML =
+    `<div class="callout warn"><strong>Dashboard data unavailable.</strong><br>
+     ${msg}<br><br>If you are viewing this file outside the dashboard, start
+     it with
+     <code>python scripts/serve_results_dashboard.py --port ${API_PORTS[API_PORTS.length-1]}</code>
+     and open that port directly.</div>`;
+}
+
 async function draw(){
   try{
-    const res = await fetch("/api/results").then(r=>r.json());
+    const res = await getJSON("/api/results");
+    document.getElementById("err").innerHTML = "";
     document.getElementById("gen").textContent = "generated " + res.generated_at;
 
     document.getElementById("verdicts").innerHTML = (res.verdicts||[]).map(v=>
@@ -149,7 +183,8 @@ async function draw(){
          dev EER ${fmt(d.dev_eer,3)}%</div>`
       : `<div class="callout warn">Deployment check: ${d.detail||"unavailable"}</div>`;
   }catch(e){
-    document.getElementById("gen").textContent = "error: " + e;
+    document.getElementById("gen").textContent = "no data";
+    showError(String(e && e.message ? e.message : e));
   }
 }
 draw();

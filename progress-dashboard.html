@@ -204,10 +204,31 @@ function stageHtml(s){
   </div>`;
 }
 
+// Several ports: restarting on the same port is unsafe here (Windows
+// SO_REUSEADDR lets the new process bind while the OLD one keeps answering),
+// so new instances get a new port and the page tries them all.
+const API_PORTS = [8793, 8795];
+
+// Served by the dashboard itself -> relative path works. Opened as a static
+// file or via a preview proxy on another port -> relative fetch("/api/status")
+// resolves against that origin and 404s, leaving the page blank. Fall back to
+// the dashboard's own origin, which sends Access-Control-Allow-Origin.
+async function getStatus(){
+  let last;
+  for (const u of ["/api/status",
+                   ...API_PORTS.map(p => `http://127.0.0.1:${p}/api/status`)]){
+    try{
+      const r = await fetch(u, {cache:"no-store"});
+      if (r.ok) return await r.json();
+      last = new Error(`${u} -> HTTP ${r.status}`);
+    }catch(e){ last = e; }
+  }
+  throw last;
+}
+
 async function refresh(){
   try{
-    const r = await fetch("/api/status", {cache:"no-store"});
-    const d = await r.json();
+    const d = await getStatus();
 
     document.getElementById("pct").textContent = d.overall_percent.toFixed(1) + "%";
     document.getElementById("obar").style.width = d.overall_percent + "%";
@@ -277,7 +298,14 @@ async function refresh(){
         <td class="n">${fmt(o.full_call,3)}%<span class="smeta">${ci(o.full_call_ci)}</span></td>
       </tr>`).join("");
   }catch(e){
-    document.getElementById("gen").textContent = "refresh failed: " + e;
+    document.getElementById("gen").textContent = "no data — is the dashboard running?";
+    const el = document.getElementById("overall-note");
+    if (el){
+      el.innerHTML = `<b>Could not reach the dashboard API.</b> ${e && e.message ? e.message : e}
+        <br><br>Start it with
+        <code>python scripts/serve_dashboard.py --port ${API_PORTS[API_PORTS.length-1]}</code>
+        and open that port directly.`;
+    }
   }
 }
 

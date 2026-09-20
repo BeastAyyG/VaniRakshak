@@ -542,6 +542,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
+            # See the note in serve_results_dashboard: the page may be opened
+            # from another origin (preview proxy), so allow the cross-origin
+            # fallback fetch.
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
