@@ -1,5 +1,29 @@
 # Codec Augmentation & Telephony Simulation
 
+> **⚠️ DEPRECATED FOR TRAINING — read before using this stack.**
+>
+> The codec/telephony augmenter is **OFF by default in `ml/train_cm.py`**
+> since 2026-09-21, and this document's rationale no longer holds for this
+> corpus.
+>
+> - **docs/20** (matched on/off control): the augmenter is a net loss —
+>   **not** a trade-off. Turning it off improved ITW `full_call` by
+>   10.56 / 2.38 pp *and* in-domain pooled EER by 6.20 / 2.77 pp.
+> - **docs/21** (dose sweep 0.0 → 1.0): **no interior optimum (`AT_0`)**. No
+>   partial strength beats "off". The curve is not even monotone — it peaks
+>   at dose 0.50 and improves at 1.0, so half-measures are the worst option.
+>
+> **Why the original rationale failed here:** ASVspoof 5 was *already*
+> captured over real telephone networks, so `clean` in this corpus **is** the
+> call condition. Simulating codecs on top double-transcodes the audio and
+> moves it off-distribution relative to both eval and In-the-Wild data. The
+> augmenter teaches invariance to distortions the deployment signal does not
+> contain.
+>
+> Pass `--codec-augment` to re-enable for research. Do not train a shipping
+> candidate with it. The rationale below is kept for provenance (ground
+> rule 4) and may still apply to corpora that were *not* phone-captured.
+
 ## 1. Overview & Context
 
 In voice fraud attacks targeting Indian financial institutions, voice clones rarely arrive as pristine, uncompressed 48 kHz studio master recordings. Attackers route synthetic audio through:

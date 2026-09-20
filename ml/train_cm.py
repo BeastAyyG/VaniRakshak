@@ -618,15 +618,26 @@ def train_recipe_a(
     unfreeze_top_n: int = 0,
     encoder_lr: float = 1e-5,
     g4_rawboost: bool = False,
-    codec_augment: bool = True,
+    codec_augment: bool = False,
     codec_augment_strength: float = 1.0,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation.
 
-    `codec_augment=False` disables the codec/telephony augmenter entirely
-    (docs/20 arm B). With `g4_rawboost` also off this is a fully
-    un-augmented run; both flags are recorded in the checkpoint so the arms
-    stay distinguishable after the fact.
+    `codec_augment` now defaults to **False**. docs/20 measured the augmenter
+    as a net loss out-of-domain (10.56 / 2.38 pp on ITW `full_call`) *and*
+    in-domain, and docs/21 swept the dose axis and found **no interior
+    optimum** (`AT_0`): no partial strength beats "off". So "off" is the
+    recipe the evidence supports, and the default now reproduces the model
+    we actually ship (`data/cm_docs20_armb_s42_cal.pt`) instead of one that
+    measures ~10 pp worse out-of-domain.
+
+    Pass `--codec-augment` to re-enable it for research (docs/21's dose
+    sweep used `--codec-augment-strength`). `--no-codec-augment` is kept so
+    existing commands keep working, but it is now redundant.
+
+    `g4_rawboost` off plus `codec_augment=False` is a fully un-augmented
+    run; both flags are recorded in the checkpoint so the arms stay
+    distinguishable after the fact.
 
     `codec_augment_strength` (docs/21) scales every augmenter probability by
     the same factor, so 0.0 == off, 1.0 == today's setting, and intermediate
@@ -1169,13 +1180,22 @@ def main() -> None:
              "distortion, chained after the codec/telephony pipeline. "
              "Deterministic via the per-item (seed, epoch, index) RNG.",
     )
+    # Default is OFF: docs/20 + docs/21 measured the augmenter as a net loss
+    # with no interior optimum, so the default now reproduces the shipped
+    # model rather than a worse one. --codec-augment opts back in.
+    parser.add_argument(
+        "--codec-augment", dest="codec_augment", action="store_true",
+        default=False,
+        help="Re-enable the codec/telephony augmenter. OFF by default since "
+             "docs/20 (net loss on both domains) and docs/21 (AT_0: no "
+             "interior optimum across doses 0.0-1.0). Only for research -- "
+             "do not train a shipping candidate with this on.",
+    )
     parser.add_argument(
         "--no-codec-augment", dest="codec_augment", action="store_false",
-        default=True,
-        help="Disable the codec/telephony augmenter entirely (docs/20 arm B): "
-             "train on raw windows. Default is ON, so this is additive and "
-             "changes nothing unless passed. Recorded in the checkpoint as "
-             "codec_augment=False so the arms stay distinguishable later.",
+        default=False,
+        help="Deprecated and now redundant: augmentation is already off by "
+             "default. Kept so existing runner scripts keep working.",
     )
     parser.add_argument(
         "--codec-augment-strength", type=float, default=1.0, metavar="S",

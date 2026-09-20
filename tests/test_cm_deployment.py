@@ -135,6 +135,49 @@ def test_detector_is_not_the_stub():
 
 
 # --------------------------------------------------------------------------
+# the shipped model must actually have been trained the way the evidence says
+# --------------------------------------------------------------------------
+
+def test_trainer_defaults_to_no_codec_augmentation():
+    """ml/train_cm.py must default to augmentation OFF.
+
+    docs/20 measured the augmenter as a net loss on BOTH domains and docs/21
+    swept the dose axis and found no interior optimum (AT_0). A default of
+    "on" means anyone running the trainer with no flags produces a model
+    ~10 pp worse out-of-domain than the one we ship.
+    """
+    import inspect
+
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    import ml.train_cm as train_cm
+
+    default = inspect.signature(train_cm.train_recipe_a).parameters[
+        "codec_augment"].default
+    assert default is False, (
+        "train_recipe_a(codec_augment=) should default to False -- docs/20 "
+        "and docs/21 both measured augmentation as harmful with no useful "
+        f"interior dose, but the default is {default!r}"
+    )
+
+
+@pytest.mark.skipif(not _resolved().exists(),
+                    reason=f"weights not on this box: {_resolved()}")
+def test_deployed_checkpoint_has_no_codec_augmentation():
+    """Belt and braces: the checkpoint we deploy must agree with the default."""
+    import torch
+
+    ckpt = torch.load(str(_resolved()), map_location="cpu", weights_only=False)
+    # Older checkpoints predate the key entirely; those are all augmented
+    # runs and must NOT be the deployed one.
+    assert ckpt.get("codec_augment") is False, (
+        f"deployed checkpoint has codec_augment={ckpt.get('codec_augment')!r}. "
+        "Absent means the pre-flag checkpoints, which were all trained WITH "
+        "augmentation. Deploy docs/20 arm B instead."
+    )
+
+
+# --------------------------------------------------------------------------
 # backend selection -- the auto-select path, no torch needed
 # --------------------------------------------------------------------------
 

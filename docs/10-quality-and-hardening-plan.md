@@ -23,8 +23,14 @@ and having to retract a published conclusion.
    that between separately trained checkpoints **means nothing** and must not
    be reported as a win, a regression, or a ranking. Do not quote three decimal
    places of a quantity you cannot resolve to one.
+   **⚠️ PROPOSED AMENDMENT — see "Proposed: a split noise floor" below.**
+   Measured 2026-09-21, this floor is **1.6× too small in-domain and 5–6×
+   too small out-of-domain**. The amendment is proposed, **not applied**,
+   because adopting it changes how past margins should be read.
 2. **Two seeds minimum for any claim.** `--seed` exists now. A single run
    cannot distinguish an improvement from a lucky initialisation.
+   (Measurement below suggests two is *also* thin out-of-domain — see
+   `reports/seed_spread_by_metric_class.json`.)
 3. **Change one thing per run.** The `--freeze-merge` experiment was read as
    evidence about attention when it was confounded with weight initialisation
    and batch order. If two things differ, the run answers nothing.
@@ -39,6 +45,66 @@ and having to retract a published conclusion.
    `python scripts/check_docs.py`.
 
 ---
+
+## Proposed: a split noise floor (measured 2026-09-21, NOT yet applied)
+
+Ground rule 1 sets one floor — 0.770 pp — for every metric. It was measured
+as a **pooled in-domain** seed-to-seed spread. `scripts/measure_seed_spread.py`
+now measures it per metric class across every configuration that has two
+seeds (5 configs: the four docs/21 doses plus G4 RawBoost):
+
+| Metric class | n | mean spread | max spread | vs 0.770 pp |
+|---|---|---|---|---|
+| pooled in-domain | 5 | **1.260 pp** | 3.037 pp | 1.6× |
+| per-attack (A19/A20) | 10 | **2.865 pp** | 8.132 pp | 3.7× |
+| ITW `clean` | 3 | **4.976 pp** | 7.794 pp | 6.5× |
+| ITW `full_call` | 5 | **3.995 pp** | 6.237 pp | 5.2× |
+
+Full data: `reports/seed_spread_by_metric_class.json`.
+
+### Two different quantities — do not conflate them
+
+- **0.770 pp** is a *comparison* floor: √2 × bootstrap half-width (0.53 pp) on
+  a 31,779-row test set. It answers "could this gap be sampling noise?" It is
+  well founded for pooled in-domain and docs/10 corroborated it.
+- **Seed spread** answers "could this gap be a different random init?" That is
+  the dominant uncertainty out-of-domain, and it is 5–6× larger.
+
+A gap can clear the bootstrap floor and still be inside seed noise. Both
+questions need asking, and today only the first one is.
+
+### Proposal
+
+| Class | Proposed floor |
+|---|---|
+| pooled in-domain | keep **0.770 pp** (measured on 5 seeds in G3 — better evidence than these 2-seed pairs) |
+| per-attack | **1.92 pp** (= √2 × 1.36 pp half-width — already the de-facto rule via docs/19's non-overlap requirement) |
+| out-of-domain | **provisional 4.0 pp**, to be re-measured once ≥3 seeds exist |
+
+### Would adopting this change any adjudicated verdict? — Yes, and that is why it is a proposal
+
+Both docs/20 and docs/21 were judged on **non-overlapping bootstrap
+intervals**, not on the 0.770 pp floor, so neither verdict is invalid. But
+under a 4 pp OOD floor:
+
+- **docs/20 seed 43**: margin **+2.383 pp** — *below* the proposed OOD floor
+  (observed OOD spread 1.9–6.2 pp). Seed 42 (+10.562 pp) clears it easily.
+- **docs/21**: the `AT_0` verdict rests on the same 0.0-vs-1.0 gaps
+  (+10.562 / +2.383 pp), with the same seed-43 exposure.
+
+So docs/20's PASS is safe on its own pre-registered terms, and is
+corroborated independently by the **perfect separation of all nine
+checkpoints** (non-augmented 33.9–35.9 %, augmented 38.3–45.0 %) plus both
+seeds agreeing in direction. But its *weakest link* is precisely this: the
+seed-43 margin is not large relative to seed-level noise.
+
+That is the honest reason this is **proposed and not applied** — retroactively
+tightening a floor to re-judge a finished experiment is exactly what
+pre-registration exists to prevent. It is also the strongest argument for
+**more seeds on the shipping configuration** (arm B seed 44 is running).
+
+**Recommendation:** adopt the split floor **prospectively** for any new
+experiment, and re-measure the OOD floor once arm B has ≥3 seeds.
 
 ## Corpus integrity — verified 2026-09-12
 

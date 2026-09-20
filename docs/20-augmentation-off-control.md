@@ -189,6 +189,20 @@ G4 s43's In-the-Wild figures were measured to fill the gap docs/19 flagged
 **OVERALL: PASS.** All three criteria resolve, on both seeds, with
 non-overlapping intervals throughout.
 
+**Caveat added 2026-09-21 — the seed-43 margin is thin against seed noise.**
+These criteria test *bootstrap sampling error* (n = 31,779), and on that basis
+every margin above is solid. They do not test *seed-to-seed* variance. Measured
+afterwards (`scripts/measure_seed_spread.py`), out-of-domain seed spread is
+**1.9–6.2 pp** — so docs/20's seed-43 margin of **+2.383 pp** sits inside it,
+while seed 42's +10.562 pp does not.
+
+This does **not** overturn the verdict: it passed on its own pre-registered
+terms, both seeds move in the same direction, and the nine-checkpoint perfect
+separation corroborates it independently. But the seed-43 arm is the weakest
+link, and it is why a third arm-B seed is being trained. See docs/10
+§"Proposed: a split noise floor" — the amendment is deliberately **not**
+applied retroactively.
+
 ### The prediction that was wrong, stated plainly
 
 docs/20 pre-registered that in-domain performance was "expected to get worse"

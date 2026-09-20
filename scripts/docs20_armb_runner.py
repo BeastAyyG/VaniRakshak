@@ -110,6 +110,8 @@ def main() -> int:
 
     state = {
         "experiment": "docs/20 augmentation-off control -- arm B",
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "seeds": {},
         "arm_a": {
             "source": "reused, not retrained: the docs/10 G4 control",
             "checkpoints": [
@@ -124,9 +126,21 @@ def main() -> int:
         "differs_by": ["codec/telephony augmenter"],
         "identical": ["merge_layers=12", "unfreeze_top_n=0", "seeds",
                       "data", "init weights", "epochs", "g4_rawboost=off"],
-        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "seeds": {},
     }
+
+    # Merge, do not reset. Extra seeds (44+) are launched as later separate
+    # invocations; starting from an empty "seeds" would discard the original
+    # 42/43 entries that the dashboard reads.
+    if STATUS.exists():
+        try:
+            prev = json.loads(STATUS.read_text(encoding="utf-8"))
+            state["seeds"] = prev.get("seeds", {})
+            state["created_at"] = prev.get("created_at", state["created_at"])
+            log(f"resuming status with {len(state['seeds'])} prior seed(s)")
+        except Exception as exc:  # noqa: BLE001 - corrupt status is not fatal
+            log(f"could not read prior status ({exc}); starting fresh")
+
     write_status(state)
 
     ok = True

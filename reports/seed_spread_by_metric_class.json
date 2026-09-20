@@ -1,0 +1,126 @@
+{
+  "by_class": {
+    "pooled_in_domain": {
+      "pairs": [
+        {
+          "label": "dose 0.0 (arm B)",
+          "spread_pp": 0.394
+        },
+        {
+          "label": "dose 0.25",
+          "spread_pp": 1.479
+        },
+        {
+          "label": "dose 0.50",
+          "spread_pp": 0.701
+        },
+        {
+          "label": "dose 1.0 (G4 control)",
+          "spread_pp": 3.037
+        },
+        {
+          "label": "G4 RawBoost",
+          "spread_pp": 0.69
+        }
+      ],
+      "n": 5,
+      "mean": 1.26,
+      "max": 3.037
+    },
+    "per_attack": {
+      "pairs": [
+        {
+          "label": "dose 0.0 (arm B) A19",
+          "spread_pp": 4.974
+        },
+        {
+          "label": "dose 0.0 (arm B) A20",
+          "spread_pp": 1.03
+        },
+        {
+          "label": "dose 0.25 A19",
+          "spread_pp": 0.334
+        },
+        {
+          "label": "dose 0.25 A20",
+          "spread_pp": 1.522
+        },
+        {
+          "label": "dose 0.50 A19",
+          "spread_pp": 2.032
+        },
+        {
+          "label": "dose 0.50 A20",
+          "spread_pp": 2.957
+        },
+        {
+          "label": "dose 1.0 (G4 control) A19",
+          "spread_pp": 4.492
+        },
+        {
+          "label": "dose 1.0 (G4 control) A20",
+          "spread_pp": 8.132
+        },
+        {
+          "label": "G4 RawBoost A19",
+          "spread_pp": 0.641
+        },
+        {
+          "label": "G4 RawBoost A20",
+          "spread_pp": 2.538
+        }
+      ],
+      "n": 10,
+      "mean": 2.865,
+      "max": 8.132
+    },
+    "itw_clean": {
+      "pairs": [
+        {
+          "label": "dose 0.0 (arm B)",
+          "spread_pp": 3.83
+        },
+        {
+          "label": "dose 1.0 (G4 control)",
+          "spread_pp": 7.794
+        },
+        {
+          "label": "G4 RawBoost",
+          "spread_pp": 3.303
+        }
+      ],
+      "n": 3,
+      "mean": 4.976,
+      "max": 7.794
+    },
+    "itw_full_call": {
+      "pairs": [
+        {
+          "label": "dose 0.0 (arm B)",
+          "spread_pp": 1.942
+        },
+        {
+          "label": "dose 0.25",
+          "spread_pp": 2.022
+        },
+        {
+          "label": "dose 0.50",
+          "spread_pp": 5.967
+        },
+        {
+          "label": "dose 1.0 (G4 control)",
+          "spread_pp": 6.237
+        },
+        {
+          "label": "G4 RawBoost",
+          "spread_pp": 3.809
+        }
+      ],
+      "n": 5,
+      "mean": 3.995,
+      "max": 6.237
+    }
+  },
+  "current_single_floor_pp": 0.77,
+  "missing": []
+}
