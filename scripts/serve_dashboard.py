@@ -40,7 +40,25 @@ FINALIZE_S = 2400.0
 # docs/20 tail: 8 scorings (2 arms x 2 seeds x {eval, ITW clean, ITW full_call}
 # minus the 4 arm-A ITW ones already cached) at roughly 7 min each.
 DOCS20_SCORE_S = 3600.0
+# docs/21 tail: 8 scorings (4 new checkpoints x {eval, ITW full_call}); the
+# two endpoint doses already have cached reports. Measured ~5 min per ITW
+# full_call scoring plus bootstrap.
+DOCS21_SCORE_S = 2700.0
 EPOCH_BUDGET = 10
+
+DOCS21_STATUS = LOG_DIR / "docs21_status.json"
+
+# Endpoint dev figures, read from the earlier experiments' training logs
+# (full 140,950-record dev split). They are deliberately NOT read from the
+# checkpoints: fit_cm_calibration.py used to overwrite dev_eer/dev_min_dcf
+# with its own 12,000-record subsample measurement, so the G4-control
+# checkpoints store 16.297% where the log says 15.856%.
+DOCS21_ENDPOINT_DEV = {
+    0.0: {42: {"epoch": 2, "dev_mindcf": 0.7105, "dev_eer": 6.728},
+          43: {"epoch": 4, "dev_mindcf": 0.7843, "dev_eer": 7.297}},
+    1.0: {42: {"epoch": 2, "dev_mindcf": 0.9965, "dev_eer": 15.856},
+          43: {"epoch": 3, "dev_mindcf": 0.9920, "dev_eer": 13.983}},
+}
 
 RE_EPOCH_DONE = re.compile(r"Epoch\s+(\d+)/10\s+\[")
 RE_STEP = re.compile(r"Epoch\s+(\d+):\s+step\s+(\d+)/(\d+)")
@@ -220,6 +238,97 @@ def finalize_state(ctl: dict, train_done: bool) -> dict:
     }
 
 
+def docs21_stages() -> list:
+    """docs/21 dose-response stages.
+
+    docs21_status.json keys runs as "<dose>_<seed>" rather than nesting them
+    under a "seeds" dict, so build_stage() cannot be reused here.
+
+    Each stage carries its live dev minDCF/EER (parsed from the log), which
+    is the interesting part mid-sweep: the dose-response curve is visible in
+    the dev numbers hours before any In-the-Wild scoring exists.
+    """
+    st = read_json(DOCS21_STATUS)
+    runs = st.get("runs") or {}
+    empty = {"epochs_done": 0, "frac": 0.0, "progress": 0.0, "best": None,
+             "early_stop": False}
+    out = []
+
+    def sort_key(k):
+        try:
+            dose_s, seed_s = k.split("_")
+            return (float(dose_s), int(seed_s))
+        except (ValueError, AttributeError):
+            return (999.0, 0)
+
+    for key in sorted(runs, key=sort_key):
+        try:
+            dose_s, seed_s = key.split("_")
+            dose, seed = float(dose_s), int(seed_s)
+        except (ValueError, AttributeError):
+            continue
+        entry = runs[key]
+        log_path = Path(entry.get("log") or "")
+        lg = parse_log(log_path) if log_path.exists() else empty
+
+        s = entry.get("status")
+        if s == "ok":
+            status, progress = "done", 1.0
+        elif s == "failed":
+            status, progress = "failed", lg["progress"]
+        elif s == "running":
+            status, progress = "running", lg["progress"]
+        else:
+            status, progress = "pending", 0.0
+
+        out.append({
+            "name": f"docs/21 dose {dose_s} seed {seed_s}",
+            "group": "docs21",
+            "seed": seed,
+            "dose": dose,
+            "status": status,
+            "progress": round(progress, 4),
+            "epochs_done": lg["epochs_done"],
+            "epoch_frac": round(lg["frac"], 3),
+            "best": lg["best"],
+            "early_stop": lg["early_stop"] and status == "done",
+            "finished_at": entry.get("finished_at"),
+            "log": str(log_path) if log_path.exists() else None,
+        })
+
+    # Scoring + adjudication. Counted from the artifact it actually emits,
+    # not from the training status -- see the finalize_state() note.
+    adj = sorted((REPO / "reports").glob("docs21_adjudication_*.json"),
+                 key=lambda p: p.stat().st_mtime)
+    train_stages = [s for s in out if s["seed"] is not None]
+    all_trained = bool(train_stages) and all(
+        s["status"] == "done" for s in train_stages)
+
+    if adj:
+        status, progress = "done", 1.0
+    elif all_trained:
+        status, progress = "running", 0.15
+    else:
+        status, progress = "pending", 0.0
+
+    out.append({
+        "name": "docs/21 score + adjudicate",
+        "group": "docs21",
+        "seed": None,
+        "dose": None,
+        "status": status,
+        "progress": progress,
+        "epochs_done": 0,
+        "epoch_frac": 0.0,
+        "best": None,
+        "early_stop": False,
+        "finished_at": (datetime.fromtimestamp(adj[-1].stat().st_mtime)
+                        .strftime("%Y-%m-%d %H:%M:%S") if adj else None),
+        "log": None,
+    })
+    return out
+
+
 def build_status() -> dict:
     g4 = read_json(G4_STATUS)
     ctl = read_json(CONTROL_STATUS)
@@ -265,18 +374,24 @@ def build_status() -> dict:
     })
     stages += stages20
 
-    # Overall: G4 pipeline and docs/20 weighted roughly by GPU cost -- 4 runs
-    # vs 2 runs plus a scoring tail.
+    d21 = docs21_stages()
+    d21_train = [s for s in d21 if s["seed"] is not None]
+    stages += d21
+
+    # Overall: weighted by GPU cost -- G4 4 runs, docs/20 2 runs, docs/21
+    # 4 runs (each ~3.7 h measured, not the 2.5-3.5 h first assumed).
     train_p = sum(s["progress"] for s in stages[:4]) / 4.0
     g4_p = train_p * 0.93 + finalize["progress"] * 0.07
     d20_train_p = sum(s["progress"] for s in arm_b) / 2.0
     d20_p = d20_train_p * 0.9 + stages20[-1]["progress"] * 0.1
-    overall = g4_p * 0.6 + d20_p * 0.4
+    d21_p = ((sum(s["progress"] for s in d21_train) / len(d21_train)) * 0.9
+             + d21[-1]["progress"] * 0.1) if d21_train else 0.0
+    overall = g4_p * 0.4 + d20_p * 0.2 + d21_p * 0.4
 
     # ETA from measured epoch cost.
     remaining_epochs = sum(
         max(0.0, EPOCH_BUDGET - (s["epochs_done"] + s["epoch_frac"]))
-        for s in stages[:4] + arm_b if s["status"] != "done"
+        for s in stages[:4] + arm_b + d21_train if s["status"] != "done"
     )
     eta_s = remaining_epochs * AVG_EPOCH_S
     if finalize["status"] != "done":
@@ -284,6 +399,8 @@ def build_status() -> dict:
         eta_s += FINALIZE_S * (1.0 - finalize["progress"])
     if stages20[-1]["status"] != "done":
         eta_s += DOCS20_SCORE_S * (1.0 - stages20[-1]["progress"])
+    if d21 and d21[-1]["status"] != "done":
+        eta_s += DOCS21_SCORE_S * (1.0 - d21[-1]["progress"])
     eta = datetime.now() + timedelta(seconds=eta_s)
 
     results = {"g4_seeds": [], "ood": [], "verdict": None}
@@ -363,6 +480,45 @@ def build_status() -> dict:
                 "full_call": b.get("eer_pct"),
                 "full_call_ci": b.get("ci95_pct"),
             })
+
+    # docs/21: live dose table straight off the training logs (no scoring
+    # needed, so the curve is visible hours before the ITW numbers exist),
+    # plus the verdict once adjudication has written one.
+    #
+    # Endpoints are prepended from constants: they were never run by this
+    # sweep, so they are absent from docs21_status.json -- but a dose table
+    # without them is unreadable, since the whole point is the shape of the
+    # curve across 0.0 -> 1.0.
+    doses = []
+    for dose in sorted(DOCS21_ENDPOINT_DEV):
+        for seed in sorted(DOCS21_ENDPOINT_DEV[dose]):
+            e = DOCS21_ENDPOINT_DEV[dose][seed]
+            doses.append({
+                "dose": dose, "seed": seed, "status": "reused",
+                "epoch": e["epoch"], "dev_mindcf": e["dev_mindcf"],
+                "dev_eer": e["dev_eer"],
+            })
+    doses += [{
+        "dose": s.get("dose"),
+        "seed": s.get("seed"),
+        "status": s["status"],
+        "epoch": (s.get("best") or {}).get("epoch"),
+        "dev_mindcf": (s.get("best") or {}).get("dev_mindcf"),
+        "dev_eer": (s.get("best") or {}).get("dev_eer"),
+    } for s in d21_train]
+    # Endpoints and trained doses are collected separately, so sort by dose or
+    # the table reads 0.0, 1.0, 0.25, 0.5 -- which hides the shape of the
+    # curve, the one thing this table exists to show.
+    doses.sort(key=lambda x: (float(x["dose"]), int(x["seed"])))
+    results["d21_doses"] = doses
+
+    d21_adj_all = sorted((REPO / "reports").glob("docs21_adjudication_*.json"),
+                         key=lambda p: p.stat().st_mtime)
+    if d21_adj_all:
+        d21_rep = read_json(d21_adj_all[-1])
+        results["docs21_verdict"] = d21_rep.get("verdict")
+        results["docs21_detail"] = d21_rep.get("verdict_detail")
+        results["docs21_missing"] = d21_rep.get("missing") or []
 
     return {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

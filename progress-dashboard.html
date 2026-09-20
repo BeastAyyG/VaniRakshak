@@ -54,6 +54,11 @@
   .verdict{display:inline-block; padding:4px 12px; border-radius:6px; font-weight:700; font-size:13px; letter-spacing:.04em}
   .v-FAIL{background:rgba(248,81,73,.16); color:var(--fail)}
   .v-PASS{background:rgba(63,185,80,.16); color:var(--ok)}
+  /* docs/21 verdicts are not pass/fail: AT_0 / AT_1 / INTERIOR_* / UNRESOLVED
+     are all valid outcomes, so they get a neutral badge rather than being
+     coloured as though one of them were a failure. */
+  .v-AT_0,.v-AT_1,.v-INTERIOR_025,.v-INTERIOR_050,.v-UNRESOLVED{
+    background:rgba(88,166,255,.16); color:var(--acc)}
   .v-UNRESOLVED{background:rgba(210,153,34,.16); color:var(--run)}
 
   .note{color:var(--faint); font-size:12px; margin-top:12px; line-height:1.6}
@@ -114,6 +119,27 @@
       <code>--no-codec-augment</code>. Same seeds and recipe, one variable.
       The augmenter costs on <b>both</b> domains; it is not a trade-off, so
       the recommendation is to ship arm B.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>docs/21 — augmentation dose-response</h2>
+    <div id="verdict21"></div>
+    <table id="d21table">
+      <thead><tr>
+        <th>Dose</th><th class="n">Seed</th><th class="n">Best ep</th>
+        <th class="n">Dev minDCF</th><th class="n">Dev EER</th><th>Status</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note">
+      Dose 0.0 is docs/20 arm B and dose 1.0 is the G4 control — both
+      <b>reused, not retrained</b>. Dev figures come straight off the training
+      logs, so the curve is visible hours before any In-the-Wild scoring
+      exists. The <b>primary criterion is ITW <code>full_call</code></b>, not
+      these dev numbers. Valid verdicts are <code>AT_0</code>,
+      <code>AT_1</code>, <code>INTERIOR_025</code>, <code>INTERIOR_050</code>
+      or <code>UNRESOLVED</code> — none is a "failure".
     </div>
   </div>
 
@@ -224,6 +250,24 @@ async function refresh(){
         <td class="n">${fmt(a.full_call,3)}%<span class="smeta">${ci(a.full_call_ci)}</span></td>
         <td class="n">${fmt(a.pooled,3)}%</td>
         <td class="n">${fmt(a.mindcf,4)}</td>
+      </tr>`).join("");
+
+    const v21 = document.getElementById("verdict21");
+    if(res.docs21_verdict){
+      v21.innerHTML = `<span class="verdict v-${res.docs21_verdict}">${res.docs21_verdict}</span>`
+        + ` <span class="smeta">${res.docs21_detail||""}</span>`;
+    } else {
+      v21.innerHTML = `<span class="smeta">training — verdict pending</span>`;
+    }
+
+    document.querySelector("#d21table tbody").innerHTML = (res.d21_doses||[]).map(x=>
+      `<tr>
+        <td>${x.dose}</td>
+        <td class="n">${x.seed}</td>
+        <td class="n">${x.epoch ?? "—"}</td>
+        <td class="n">${fmt(x.dev_mindcf,4)}</td>
+        <td class="n">${fmt(x.dev_eer,3)}%</td>
+        <td>${x.status}</td>
       </tr>`).join("");
 
     document.querySelector("#oodtable tbody").innerHTML = (res.ood||[]).map(o=>
