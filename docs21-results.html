@@ -1,0 +1,138 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>VaniRakshak &mdash; docs/21 augmentation dose-response</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2129; --line:#30363d;
+  --tx:#e6edf3; --mut:#8b949e; --good:#3fb950; --bad:#f85149;
+  --acc:#58a6ff; --warn:#d29922; --on:#f85149; --off:#3fb950;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+h1{font-size:30px;margin:0 0 6px;letter-spacing:-.4px}
+h2{font-size:20px;margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h3{font-size:15px;margin:24px 0 10px;color:var(--mut);font-weight:600;
+  text-transform:uppercase;letter-spacing:.06em}
+p{margin:10px 0}
+.sub{color:var(--mut);font-size:14px;margin:0}
+.badge{display:inline-block;padding:5px 14px;border-radius:999px;font-weight:700;
+  font-size:13px;letter-spacing:.06em}
+.badge.pass{background:rgba(63,185,80,.15);color:var(--good);
+  border:1px solid rgba(63,185,80,.4)}
+.badge.fail{background:rgba(248,81,73,.15);color:var(--bad);
+  border:1px solid rgba(248,81,73,.4)}
+.hero{background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);border-radius:14px;padding:28px 30px;margin:28px 0}
+.hero .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.callout{border-left:3px solid var(--acc);background:var(--panel);
+  padding:16px 20px;border-radius:0 10px 10px 0;margin:20px 0}
+.callout.warn{border-left-color:var(--warn)}
+.callout.bad{border-left-color:var(--bad)}
+.callout.good{border-left-color:var(--good)}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;
+  letter-spacing:.05em;border-bottom:1px solid var(--line)}
+tbody tr:hover{background:rgba(88,166,255,.05)}
+tr.win td{color:var(--good);font-weight:600}
+td.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.card .k{font-size:13px;color:var(--mut);margin-bottom:8px}
+.card .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.card .d{font-size:12px;color:var(--mut);margin-top:10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.bar{position:relative;height:22px;background:var(--panel2);border-radius:5px;
+  margin:3px 0;overflow:visible}
+.bar .fill{position:absolute;top:0;height:100%;border-radius:5px;opacity:.28}
+.bar .val{position:absolute;top:0;height:100%;border-radius:5px}
+.bar .ci{position:absolute;top:8px;height:6px;background:var(--tx);opacity:.75}
+.bar .lbl{position:absolute;top:3px;left:8px;font-size:12px;line-height:16px;
+  color:var(--tx);white-space:nowrap}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;margin:16px 0}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--mut);margin-bottom:14px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px}
+code{background:var(--panel2);padding:2px 6px;border-radius:4px;font-size:13px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+ul{margin:10px 0;padding-left:22px}li{margin:6px 0}
+.foot{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);
+  color:var(--mut);font-size:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+</style></head><body><div class='wrap'>
+<h1>Is there a useful amount of codec augmentation?</h1>
+<p class='sub'>VaniRakshak &middot; docs/21 &middot; pre-registered 2026-09-20, adjudicated 2026-09-21 &middot; 4 doses &times; 2 seeds, endpoints reused</p>
+<div class='hero'><div class='row'>
+<span class='badge pass'>AT_0</span>
+<span style='color:var(--mut)'>dose 0.0 beats 1.0 on seeds [42, 43]</span>
+</div>
+<div class='callout good' style='margin-top:20px'><strong>No interior optimum. Augmentation is simply harmful.</strong><br>No dose beats &ldquo;off&rdquo; on both seeds with non-overlapping intervals. The dose knob was built to allow an interior answer and the data declined to give one &mdash; which is why the criterion was written that way rather than as a search for a better setting.</div>
+</div>
+<h2>Primary: ITW <code>full_call</code> EER (95 % CI)</h2>
+<p>The condition docs/20 established as the honest one &mdash; <code>clean</code> has been the flattering one all along.</p>
+<table><thead><tr><th>Dose</th>
+<th>seed 42</th>
+<th>seed 43</th>
+<th>vs dose 0.0</th></tr></thead><tbody>
+<tr class='win'><td><b>0.0</b></td>
+<td class='num'>33.979% <span class='mono'>[33.45, 34.56]</span></td>
+<td class='num'>35.921% <span class='mono'>[35.39, 36.47]</span></td>
+<td class='num'>&mdash;</td>
+</tr>
+<tr><td><b>0.25</b></td>
+<td class='num'>37.796% <span class='mono'>[37.27, 38.39]</span></td>
+<td class='num'>35.774% <span class='mono'>[35.27, 36.33]</span></td>
+<td class='num'>+3.8 / -0.1 pp</td>
+</tr>
+<tr><td><b>0.5</b></td>
+<td class='num'>45.828% <span class='mono'>[45.30, 46.37]</span></td>
+<td class='num'>39.861% <span class='mono'>[39.30, 40.37]</span></td>
+<td class='num'>+11.8 / +3.9 pp</td>
+</tr>
+<tr><td><b>1.0</b></td>
+<td class='num'>44.541% <span class='mono'>[43.97, 45.09]</span></td>
+<td class='num'>38.304% <span class='mono'>[37.79, 38.87]</span></td>
+<td class='num'>+10.6 / +2.4 pp</td>
+</tr>
+</tbody></table>
+<div class='chart'><h3>Every dose, every seed</h3>
+<div class='legend'><span><i style='background:var(--off)'></i>dose 0.0 (best)</span><span><i style='background:var(--on)'></i>any augmentation</span></div>
+<div class="bar"><div class="fill" style="left:0;width:69.1%;background:var(--off)"></div><div class="val" style="left:0;width:69.1%;background:var(--off)"></div><div class="ci" style="left:68.0%;width:2.3%"></div><span class="lbl">dose 0.0 &amp;middot; seed 42 &nbsp; 33.979%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:73.1%;background:var(--off)"></div><div class="val" style="left:0;width:73.1%;background:var(--off)"></div><div class="ci" style="left:72.0%;width:2.2%"></div><span class="lbl">dose 0.0 &amp;middot; seed 43 &nbsp; 35.921%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:76.9%;background:var(--on)"></div><div class="val" style="left:0;width:76.9%;background:var(--on)"></div><div class="ci" style="left:75.8%;width:2.3%"></div><span class="lbl">dose 0.25 &amp;middot; seed 42 &nbsp; 37.796%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:72.8%;background:var(--on)"></div><div class="val" style="left:0;width:72.8%;background:var(--on)"></div><div class="ci" style="left:71.7%;width:2.2%"></div><span class="lbl">dose 0.25 &amp;middot; seed 43 &nbsp; 35.774%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:93.2%;background:var(--on)"></div><div class="val" style="left:0;width:93.2%;background:var(--on)"></div><div class="ci" style="left:92.2%;width:2.2%"></div><span class="lbl">dose 0.5 &amp;middot; seed 42 &nbsp; 45.828%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:81.1%;background:var(--on)"></div><div class="val" style="left:0;width:81.1%;background:var(--on)"></div><div class="ci" style="left:80.0%;width:2.2%"></div><span class="lbl">dose 0.5 &amp;middot; seed 43 &nbsp; 39.861%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:90.6%;background:var(--on)"></div><div class="val" style="left:0;width:90.6%;background:var(--on)"></div><div class="ci" style="left:89.5%;width:2.3%"></div><span class="lbl">dose 1.0 &amp;middot; seed 42 &nbsp; 44.541%</span></div>
+<div class="bar"><div class="fill" style="left:0;width:77.9%;background:var(--on)"></div><div class="val" style="left:0;width:77.9%;background:var(--on)"></div><div class="ci" style="left:76.9%;width:2.2%"></div><span class="lbl">dose 1.0 &amp;middot; seed 43 &nbsp; 38.304%</span></div>
+</div>
+<h2>The curve is not monotone &mdash; and that is the interesting part</h2>
+<div class='callout warn'>Secondary criterion: <strong>not met</strong>. EER rises to a peak at dose <b>0.50</b> and then <em>improves</em> at 1.0, on both seeds. Dose 1.0 beats dose 0.50 with non-overlapping intervals on both seeds (45.09 &lt; 45.30 and 38.87 &lt; 39.30), so this is a real effect, not noise.</div>
+<p class='mono'>seed 42: 0.0:33.979 -&gt; 0.25:37.796 -&gt; 0.5:45.828 -&gt; 1.0:44.541</p>
+<p class='mono'>seed 43: 0.0:35.921 -&gt; 0.25:35.774 -&gt; 0.5:39.861 -&gt; 1.0:38.304</p>
+<p>Plausible reading: at full strength the model can still learn an invariance to the distortions; at half strength it gets a noisier, less consistent input distribution and pays the cost without gaining the invariance. <strong>Either commit to the augmentation or don't do it &mdash; the middle is the worst place to be.</strong></p>
+<p>Recorded as measured. It does not change the verdict: the best point on the curve is still 0.0.</p>
+<h2>Recorded (not pass/fail): in-domain</h2>
+<table><thead><tr><th>Dose</th><th>Seed</th><th>eval pooled EER</th><th>A19</th><th>A20</th></tr></thead><tbody>
+<tr><td>0.0</td><td class='num'>42</td><td class='num'>9.241%</td><td class='num'>7.594%</td><td class='num'>8.970%</td></tr>
+<tr><td>0.0</td><td class='num'>43</td><td class='num'>9.635%</td><td class='num'>12.568%</td><td class='num'>10.000%</td></tr>
+<tr><td>0.25</td><td class='num'>42</td><td class='num'>10.301%</td><td class='num'>13.690%</td><td class='num'>16.957%</td></tr>
+<tr><td>0.25</td><td class='num'>43</td><td class='num'>8.822%</td><td class='num'>13.356%</td><td class='num'>15.435%</td></tr>
+<tr><td>0.5</td><td class='num'>42</td><td class='num'>11.226%</td><td class='num'>17.647%</td><td class='num'>18.162%</td></tr>
+<tr><td>0.5</td><td class='num'>43</td><td class='num'>11.927%</td><td class='num'>15.615%</td><td class='num'>21.119%</td></tr>
+<tr><td>1.0</td><td class='num'>42</td><td class='num'>15.437%</td><td class='num'>22.353%</td><td class='num'>29.300%</td></tr>
+<tr><td>1.0</td><td class='num'>43</td><td class='num'>12.400%</td><td class='num'>17.861%</td><td class='num'>21.168%</td></tr>
+</tbody></table>
+<div class='callout warn'>In-domain is <strong>not monotone either, and is far flatter</strong> than out-of-domain. Dose 0.25 seed 43 (8.822 %) is nominally the best in-domain number in the entire table &mdash; better than dose 0.0 seed 42 (9.241 %). Selecting on in-domain pooled EER would pick 0.25, which is one of the two <em>worst</em> points out-of-domain. This is the same lesson as docs/18 and docs/20, and it is why the criterion was written on ITW <code>full_call</code>.</div>
+<h2>Conclusion</h2>
+<div class='callout good'><strong>Remove or permanently disable the codec/telephony augmenter. Do not tune it.</strong><br>docs/20 could only say &ldquo;this on/off setting is worse on&rdquo;. docs/21 says the entire dose axis is worthless &mdash; including the points nobody had tried. That is a stronger and more actionable finding, and it is the reason this experiment was worth ~14 h of GPU.</div>
+<p><strong>Not re-run to chase a different answer</strong> (ground rule 5). Published as measured.</p>
+<div class='foot'>
+Generated 2026-09-21 00:28:25 by <code>scripts/build_docs21_site.py</code> &mdash; every number read from the adjudication report, none hand-typed.<br>
+Source: <code>docs21_adjudication_20260921_002607.json</code> &middot; bootstrap: 2,000-rep percentile, seed 1234 &middot; n = 19,963 bonafide / 11,816 spoof (ITW), 4,058 / 15,936 (eval slice).
+</div></div></body></html>

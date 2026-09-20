@@ -72,7 +72,8 @@ Scored on all 31,779 In-the-Wild rows and the 20k ASVspoof 5 eval slice,
 `full_call` for the same reason as docs/20: `clean` has been the flattering
 one.
 
-- [ ] **Primary — is the optimum interior?** Verdict is one of:
+- [x] **Primary — is the optimum interior?** -> **AT_0** (measured 2026-09-21).
+      Verdict is one of:
   - `INTERIOR_25` / `INTERIOR_50` — that dose beats **both** endpoints
     (0.0 and 1.0) with **non-overlapping 95 % intervals, on both seeds**;
   - `AT_0` — no dose beats 0.0 on both seeds (0.0 remains the choice);
@@ -84,7 +85,8 @@ one.
   already points that way; this must be able to confirm it rather than
   being constructed to rescue augmentation.
 
-- [ ] **Secondary — monotonicity.** Does ITW `full_call` EER rise
+- [x] **Secondary — monotonicity.** -> **Not monotone** (measured 2026-09-21);
+      the curve peaks at dose 0.50 and improves at 1.0. Did ITW `full_call` EER rise
   monotonically with dose? Judged on the per-seed ordering across
   0.0 → 0.25 → 0.50 → 1.0, requiring the trend to hold on **both** seeds.
   Recorded either way; a non-monotone result is informative, not a failure.
@@ -124,6 +126,72 @@ python scripts/docs21_runner.py --strengths 0.25 0.5 --seeds 42 43
 # adjudicate against the criteria above (reuses existing reports)
 python scripts/adjudicate_docs21.py
 ```
+
+## Measured — adjudicated 2026-09-21 00:26, VERDICT **AT_0**
+
+Report: `reports/docs21_adjudication_20260921_002607.json`. All four
+intermediate runs completed (`all_ok=True`); both endpoints reused.
+
+### Primary: ITW `full_call` EER (95 % CI)
+
+| Dose | seed 42 | seed 43 |
+|---|---|---|
+| **0.0** (arm B) | **33.979** [33.45, 34.56] | **35.921** [35.39, 36.47] |
+| 0.25 | 37.796 [37.27, 38.39] | 35.774 [35.27, 36.33] |
+| 0.50 | 45.828 [45.30, 46.37] | 39.861 [39.30, 40.37] |
+| **1.0** (G4 control) | 44.541 [43.97, 45.09] | 38.304 [37.79, 38.87] |
+
+**No dose beats 0.0 on both seeds with non-overlapping intervals**, so the
+optimum is at the endpoint and the verdict is `AT_0`. Dose 0.0 beats dose 1.0
+on both seeds (33.979 vs 44.541; 35.921 vs 38.304), disjoint in both cases.
+
+### Secondary: monotonicity — **FAILED, and informatively so**
+
+The curve is **not monotone**. It rises to a peak at dose 0.50 and then
+*improves* at 1.0:
+
+- seed 42: 33.979 → 37.796 → **45.828** → 44.541
+- seed 43: 35.921 → 35.774 → **39.861** → 38.304
+
+Dose 1.0 beats dose 0.50 with **non-overlapping intervals on both seeds**
+(45.09 < 45.30 and 38.87 < 39.30). That is a real effect, not noise.
+
+Reading: full augmentation is *better than half* augmentation. A plausible
+mechanism is that at full strength the model can still learn an invariance to
+the distortions, whereas at half strength it sees a noisier, less consistent
+input distribution and gets the cost without the invariance. Either commit to
+the augmentation or don't do it — the middle is the worst place to be.
+
+This is recorded as measured. It does not change the verdict: the best point
+on the curve is still 0.0.
+
+### Recorded (not pass/fail): in-domain
+
+| Dose | eval pooled s42 / s43 | A19 s42 / s43 | A20 s42 / s43 |
+|---|---|---|---|
+| 0.0 | 9.241 / 9.635 | 7.594 / 12.568 | 8.970 / 10.000 |
+| 0.25 | 10.301 / 8.822 | 13.690 / 13.356 | 16.957 / 15.435 |
+| 0.50 | 11.226 / 11.927 | 17.647 / 15.615 | 18.162 / 21.119 |
+| 1.0 | 15.437 / 12.400 | 22.353 / 17.861 | 29.300 / 21.168 |
+
+In-domain is *not* monotone either and is much flatter than out-of-domain —
+dose 0.25 seed 43 (8.822) is nominally the best in-domain number in the whole
+table, better than dose 0.0 seed 42 (9.241). This is the same lesson as
+docs/18 and docs/20: **in-domain pooled EER does not rank these models**,
+which is why the criterion was written on ITW `full_call`.
+
+### Conclusion
+
+**Augmentation is simply harmful. There is no interior optimum and no useful
+partial dose.** The dose knob exists now and the answer it gives is "off".
+
+Consequence for the codebase: the codec/telephony augmenter should be
+*removed or permanently disabled*, not tuned. That is a different action from
+docs/20's finding — docs/20 could only say "this on/off setting is worse on",
+docs/21 says the entire dose axis is worthless, including the points nobody
+had tried.
+
+Ground rule 5 applies: published as measured, not re-run.
 
 ## Run plan — executed 2026-09-20
 
