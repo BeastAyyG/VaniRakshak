@@ -7,6 +7,29 @@ this repo's convention (docs/10) of fixing the bar in advance.
 Pre-registered *before* the G4 verdict is known, deliberately. If it were
 written afterwards it would be fitted to the outcome.
 
+> **⚠️ Design review, 2026-09-21 — as written, this experiment is
+> underpowered.** Not a change to its criteria (still fixed, still
+> unaltered) but a note that its *design* no longer meets the bar this repo
+> now knows applies.
+>
+> docs/21 measured out-of-domain seed spread at **up to 8.260 pp** — and
+> showed that a two-seed estimate of that spread was 4.3× too small
+> (1.942 → 8.260 pp once a third seed landed). This pre-registration
+> specifies **two seeds**. An OOD effect smaller than ~8 pp cannot be
+> distinguished from seed noise at that power, so a null result here would
+> be uninterpretable rather than informative.
+>
+> Also note the confound flagged in §"Why this criterion is now the primary
+> one": swapping the frontend changes `in_dim` (768 → 1024) and breaks
+> `--init-weights`, which is a **second variable** and therefore already
+> violates ground rule 3.
+>
+> **Recommendation before running:** either (a) raise to ≥4 seeds per arm,
+> or (b) restrict the criterion to a paired within-seed comparison, which
+> is the only OOD comparison this repo has shown to be trustworthy. Both
+> are changes to the design, not to the bar, so they belong in a fresh
+> pre-registration rather than an edit to this one.
+
 ## Hypothesis
 
 Speech DF Arena (docs/17 §0) ranks the XLSR family roughly **twice as good**

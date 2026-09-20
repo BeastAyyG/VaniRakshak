@@ -94,7 +94,7 @@ const ci=c=>(c&&c.length===2)?` [${c[0].toFixed(2)}, ${c[1].toFixed(2)}]`:"";
 // here: Windows SO_REUSEADDR lets the new process bind while the OLD one
 // keeps answering, so a "restart" can silently keep serving old code. New
 // instances therefore get a new port, and the page tries them all.
-const API_PORTS = [8792, 8794];
+const API_PORTS = [8792, 8794, 8796];
 
 // Served by the dashboard itself -> the relative path works. Opened as a
 // static file or through a preview proxy on another port -> a relative

@@ -1,5 +1,27 @@
 # Project: WavLM Layer 5 AASIST Anti-Spoofing Countermeasure
 
+> **⚠️ STALE — do not use this file for status.** The milestone table below
+> still says M1 IN_PROGRESS / M2–M4 PLANNED and describes online codec
+> augmentation as part of the training pipeline. Both are out of date.
+>
+> **Current status lives in `docs/17`–`docs/21`** (in this repo). Summary:
+>
+> - **Codec/telephony augmentation is OFF** by default in `ml/train_cm.py`
+>   and should be removed. docs/20 measured it as a net loss on *both*
+>   domains; docs/21 swept the dose axis and found **no interior optimum
+>   (`AT_0`)**. See docs/03's deprecation banner.
+> - **Ship `data/cm_docs20_armb_s42_cal.pt`** (arm B seed 42, calibrated).
+>   It is wired as the backend default and verified by
+>   `scripts/verify_cm_deployment.py`. Confirmed best of three arm-B seeds on
+>   the deployment distribution (docs/20 §"Which arm B seed to deploy").
+> - **Select on the deployment distribution (ITW / telephony), never on
+>   in-domain pooled EER.** Three separate experiments have now shown
+>   in-domain ranking is actively misleading.
+> - **Out-of-domain seed spread is up to 8.26 pp**, so only *paired,
+>   within-seed* OOD comparisons are trustworthy (docs/10).
+> - Layer 5 vs 12: `--merge-layers 12` is mandatory for comparability
+>   (docs/10); `layer_index` is not the operative setting.
+
 ## Architecture
 - **Corpus & Audio Streaming Layer**: Audio loaded on-the-fly from `A:\cm-corpus\asvspoof5\flac_T\` (train), `flac_D\` (dev), and `flac_E_eval\` (20k eval benchmark slice in `data/eval_benchmark/eval_slice_20k.tsv`). Zero feature arrays written to Drive A to respect the ~7.96 GB free space budget.
 - **Frontend Layer**: `microsoft/wavlm-base-plus` extracting intermediate Transformer representation at index 5 (`outputs.hidden_states[5]`), capturing fine spectro-temporal artifacts prior to higher-layer semantic smoothing (Pan et al., Interspeech 2024, R10).

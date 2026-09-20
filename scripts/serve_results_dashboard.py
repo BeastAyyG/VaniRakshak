@@ -32,7 +32,23 @@ HTML = REPO / "results-dashboard.html"
 SCRIPTS = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import importlib  # noqa: E402
+
+import ood_comparison  # noqa: E402
 from ood_comparison import REGISTRY, load  # noqa: E402
+
+
+def fresh_registry():
+    """Reload the checkpoint registry so newly measured checkpoints appear
+    without restarting the server.
+
+    REGISTRY is module-level, so a long-lived process keeps showing whatever
+    existed at startup -- which is exactly how seed 44 stayed invisible after
+    it was scored. Reloading is cheap (the module is tiny) and removes the
+    need to bounce onto a new port every time a report lands.
+    """
+    importlib.reload(ood_comparison)
+    return ood_comparison.REGISTRY, ood_comparison.load
 
 SEEDS = (42, 43)
 
@@ -174,8 +190,9 @@ def build_results() -> dict:
 
     # out-of-domain across every checkpoint
     ood = []
-    for label, codec, _rb, c_name, f_name in REGISTRY:
-        c, f = load(c_name), load(f_name)
+    reg, load_ci = fresh_registry()
+    for label, codec, _rb, c_name, f_name in reg:
+        c, f = load_ci(c_name), load_ci(f_name)
         if not c and not f:
             continue
         ood.append({

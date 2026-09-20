@@ -203,6 +203,27 @@ has the **best in-domain pooled EER of the three seeds (8.107 %)** and the
 **worst out-of-domain (42.239 %)**. Ranked in-domain it is the model you
 would ship; ranked out-of-domain it is the one you would throw away.
 
+### Which arm B seed to deploy — three seeds, answered
+
+The third seed could have undermined the shipping choice. It did not: it
+confirmed it.
+
+| seed | dev minDCF | dev EER | eval pooled | A19 | A20 | ITW `clean` | ITW `full_call` |
+|---|---|---|---|---|---|---|---|
+| **42** | **0.7105** | **6.728** | 9.241 | **7.594** | 8.970 | **17.277** | **33.979** |
+| 43 | 0.7843 | 7.297 | 9.635 | 12.568 | 10.000 | 21.107 | 35.921 |
+| 44 | 0.7812 | 6.796 | **8.107** | 9.091 | **7.391** | 24.871 | 42.239 |
+
+**Seed 42 wins 5 of 7**, including the selection metric (ITW `full_call`),
+both dev metrics, and ITW `clean`. It loses only eval pooled and A20, both to
+seed 44 — the same seed that is by far the worst out-of-domain. Selecting on
+the deployment distribution, as docs/18/20/21 all conclude we must, gives
+seed 42 unambiguously.
+
+`data/cm_docs20_armb_s42_cal.pt` is therefore the correct deployed
+checkpoint, and the third seed retroactively justifies that choice rather
+than disturbing it.
+
 G4 s43's In-the-Wild figures were measured to fill the gap docs/19 flagged
 (`reports/eer_ci_g4_s43_ITW{,_full_call}.json`).
 
