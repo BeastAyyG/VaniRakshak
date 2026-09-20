@@ -1,7 +1,8 @@
 # 21 — Pre-registration: augmentation dose-response
 
-**Status: pre-registered 2026-09-20. NOT RUN.** Criteria are fixed before any
-result exists and are not adjustable afterwards.
+**Status: pre-registered 2026-09-20; RUN and ADJUDICATED 2026-09-21 00:26 —
+VERDICT `AT_0`.** Criteria were fixed before any result existed and were not
+adjusted afterwards. See "Measured" below.
 
 ## The question
 
