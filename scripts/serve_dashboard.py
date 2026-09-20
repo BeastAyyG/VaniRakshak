@@ -355,11 +355,15 @@ def build_status() -> dict:
         "epochs_done": 0, "epoch_frac": 0.0, "best": None, "early_stop": False,
         "finished_at": "2026-09-19 16:21:49", "log": None,
     }]
+    # Seeds are read from the status file, not hardcoded: extra seeds (44+)
+    # are launched as later invocations and would otherwise be invisible
+    # while training -- the dashboard would sit at 100% with a run in flight.
+    d20_seeds = sorted(int(s) for s in (d20.get("seeds") or {})
+                       if str(s).isdigit()) or [42, 43]
     arm_b = [
-        build_stage("Docs20 arm B seed 42", "docs20", 42, d20,
-                    LOG_DIR / "docs20-s42.log"),
-        build_stage("Docs20 arm B seed 43", "docs20", 43, d20,
-                    LOG_DIR / "docs20-s43.log"),
+        build_stage(f"Docs20 arm B seed {s}", "docs20", s, d20,
+                    LOG_DIR / f"docs20-s{s}.log")
+        for s in d20_seeds
     ]
     stages20 += arm_b
     d20_adj = sorted((REPO / "reports").glob("docs20_adjudication_*.json"),
@@ -382,7 +386,8 @@ def build_status() -> dict:
     # 4 runs (each ~3.7 h measured, not the 2.5-3.5 h first assumed).
     train_p = sum(s["progress"] for s in stages[:4]) / 4.0
     g4_p = train_p * 0.93 + finalize["progress"] * 0.07
-    d20_train_p = sum(s["progress"] for s in arm_b) / 2.0
+    d20_train_p = (sum(s["progress"] for s in arm_b) / len(arm_b)
+                   if arm_b else 0.0)
     d20_p = d20_train_p * 0.9 + stages20[-1]["progress"] * 0.1
     d21_p = ((sum(s["progress"] for s in d21_train) / len(d21_train)) * 0.9
              + d21[-1]["progress"] * 0.1) if d21_train else 0.0
