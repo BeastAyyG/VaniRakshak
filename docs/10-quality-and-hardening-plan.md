@@ -55,12 +55,18 @@ seeds (5 configs: the four docs/21 doses plus G4 RawBoost):
 
 | Metric class | n | mean spread | max spread | vs 0.770 pp |
 |---|---|---|---|---|
-| pooled in-domain | 5 | **1.260 pp** | 3.037 pp | 1.6× |
-| per-attack (A19/A20) | 10 | **2.865 pp** | 8.132 pp | 3.7× |
-| ITW `clean` | 3 | **4.976 pp** | 7.794 pp | 6.5× |
-| ITW `full_call` | 5 | **3.995 pp** | 6.237 pp | 5.2× |
+| pooled in-domain | 5 | **1.487 pp** | 3.037 pp | 1.9× |
+| per-attack (A19/A20) | 10 | **3.023 pp** | 8.132 pp | 3.9× |
+| ITW `clean` | 3 | **6.230 pp** | 7.794 pp | 8.1× |
+| ITW `full_call` | 5 | **5.259 pp** | **8.260 pp** | 6.8× |
 
 Full data: `reports/seed_spread_by_metric_class.json`.
+
+**Two seeds materially under-estimated this.** With arm B seed 44 measured,
+arm B's own ITW `full_call` spread went from a two-seed estimate of
+**1.942 pp** to a three-seed **8.260 pp** — the two-seed figure was 4.3× too
+small. A spread computed from two points is one noisy sample, not a
+measurement. Treat every two-seed spread above as a lower bound.
 
 ### Two different quantities — do not conflate them
 
@@ -79,7 +85,7 @@ questions need asking, and today only the first one is.
 |---|---|
 | pooled in-domain | keep **0.770 pp** (measured on 5 seeds in G3 — better evidence than these 2-seed pairs) |
 | per-attack | **1.92 pp** (= √2 × 1.36 pp half-width — already the de-facto rule via docs/19's non-overlap requirement) |
-| out-of-domain | **provisional 4.0 pp**, to be re-measured once ≥3 seeds exist |
+| out-of-domain | **~8.0 pp** (observed max 8.26 pp on 3 seeds). An earlier draft of this proposal said 4.0 pp; that was based on two seeds and is 2× too small |
 
 ### Would adopting this change any adjudicated verdict? — Yes, and that is why it is a proposal
 
@@ -87,8 +93,9 @@ Both docs/20 and docs/21 were judged on **non-overlapping bootstrap
 intervals**, not on the 0.770 pp floor, so neither verdict is invalid. But
 under a 4 pp OOD floor:
 
-- **docs/20 seed 43**: margin **+2.383 pp** — *below* the proposed OOD floor
-  (observed OOD spread 1.9–6.2 pp). Seed 42 (+10.562 pp) clears it easily.
+- **docs/20 seed 43**: margin **+2.383 pp** — *well below* the proposed OOD
+  floor (observed OOD spread up to 8.26 pp). Seed 42 (+10.562 pp) clears it.
+  Under a strict floor the two-seed criterion would not have passed.
 - **docs/21**: the `AT_0` verdict rests on the same 0.0-vs-1.0 gaps
   (+10.562 / +2.383 pp), with the same seed-43 exposure.
 

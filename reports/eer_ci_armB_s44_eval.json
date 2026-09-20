@@ -1,0 +1,35 @@
+{
+  "checkpoint": "data\\cm_docs20_armb_s44.pt",
+  "reps": 2000,
+  "seed": 1234,
+  "n_bonafide": 4058,
+  "pooled": {
+    "n_spoof": 15936,
+    "eer_pct": 8.107,
+    "ci95_pct": [
+      7.624,
+      8.609
+    ],
+    "half_width_pp": 0.493
+  },
+  "attacks": {
+    "A19": {
+      "n_spoof": 935,
+      "eer_pct": 9.091,
+      "ci95_pct": [
+        8.132,
+        10.053
+      ],
+      "half_width_pp": 0.948
+    },
+    "A20": {
+      "n_spoof": 920,
+      "eer_pct": 7.391,
+      "ci95_pct": [
+        6.506,
+        8.587
+      ],
+      "half_width_pp": 1.053
+    }
+  }
+}

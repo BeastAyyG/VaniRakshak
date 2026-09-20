@@ -37,6 +37,7 @@ REGISTRY: list[tuple[str, str, str, str | None, str | None]] = [
     ("arm A s43 (codec on)",    "on",   "off", "eer_ci_armA_control_s43_ITW_clean.json","eer_ci_armA_control_s43_ITW_full_call.json"),
     ("arm B s42 (codec off)",   "off",  "off", "eer_ci_armB_s42_ITW_clean.json",        "eer_ci_armB_s42_ITW_full_call.json"),
     ("arm B s43 (codec off)",   "off",  "off", "eer_ci_armB_s43_ITW_clean.json",        "eer_ci_armB_s43_ITW_full_call.json"),
+    ("arm B s44 (codec off)",   "off",  "off", "eer_ci_armB_s44_ITW_clean.json",        "eer_ci_armB_s44_ITW_full_call.json"),
 ]
 
 PRIMARY = "full_call"   # docs/20 writes its primary criterion on full_call

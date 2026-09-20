@@ -1,124 +1,323 @@
 {
+  "seeds_considered": [
+    42,
+    43,
+    44
+  ],
   "by_class": {
     "pooled_in_domain": {
-      "pairs": [
+      "configs": [
         {
           "label": "dose 0.0 (arm B)",
-          "spread_pp": 0.394
+          "seeds": [
+            42,
+            43,
+            44
+          ],
+          "values": [
+            9.241,
+            9.635,
+            8.107
+          ],
+          "spread_pp": 1.528
         },
         {
           "label": "dose 0.25",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            10.301,
+            8.822
+          ],
           "spread_pp": 1.479
         },
         {
           "label": "dose 0.50",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            11.226,
+            11.927
+          ],
           "spread_pp": 0.701
         },
         {
           "label": "dose 1.0 (G4 control)",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            15.437,
+            12.4
+          ],
           "spread_pp": 3.037
         },
         {
           "label": "G4 RawBoost",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            11.212,
+            10.522
+          ],
           "spread_pp": 0.69
         }
       ],
       "n": 5,
-      "mean": 1.26,
+      "mean": 1.487,
       "max": 3.037
     },
     "per_attack": {
-      "pairs": [
+      "configs": [
         {
           "label": "dose 0.0 (arm B) A19",
+          "seeds": [
+            42,
+            43,
+            44
+          ],
+          "values": [
+            7.594,
+            12.568,
+            9.091
+          ],
           "spread_pp": 4.974
         },
         {
           "label": "dose 0.0 (arm B) A20",
-          "spread_pp": 1.03
+          "seeds": [
+            42,
+            43,
+            44
+          ],
+          "values": [
+            8.97,
+            10.0,
+            7.391
+          ],
+          "spread_pp": 2.609
         },
         {
           "label": "dose 0.25 A19",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            13.69,
+            13.356
+          ],
           "spread_pp": 0.334
         },
         {
           "label": "dose 0.25 A20",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            16.957,
+            15.435
+          ],
           "spread_pp": 1.522
         },
         {
           "label": "dose 0.50 A19",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            17.647,
+            15.615
+          ],
           "spread_pp": 2.032
         },
         {
           "label": "dose 0.50 A20",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            18.162,
+            21.119
+          ],
           "spread_pp": 2.957
         },
         {
           "label": "dose 1.0 (G4 control) A19",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            22.353,
+            17.861
+          ],
           "spread_pp": 4.492
         },
         {
           "label": "dose 1.0 (G4 control) A20",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            29.3,
+            21.168
+          ],
           "spread_pp": 8.132
         },
         {
           "label": "G4 RawBoost A19",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            16.264,
+            15.623
+          ],
           "spread_pp": 0.641
         },
         {
           "label": "G4 RawBoost A20",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            17.324,
+            14.786
+          ],
           "spread_pp": 2.538
         }
       ],
       "n": 10,
-      "mean": 2.865,
+      "mean": 3.023,
       "max": 8.132
     },
     "itw_clean": {
-      "pairs": [
+      "configs": [
         {
           "label": "dose 0.0 (arm B)",
-          "spread_pp": 3.83
+          "seeds": [
+            42,
+            43,
+            44
+          ],
+          "values": [
+            17.277,
+            21.107,
+            24.871
+          ],
+          "spread_pp": 7.594
         },
         {
           "label": "dose 1.0 (G4 control)",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            40.555,
+            32.761
+          ],
           "spread_pp": 7.794
         },
         {
           "label": "G4 RawBoost",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            35.308,
+            38.611
+          ],
           "spread_pp": 3.303
         }
       ],
       "n": 3,
-      "mean": 4.976,
+      "mean": 6.23,
       "max": 7.794
     },
     "itw_full_call": {
-      "pairs": [
+      "configs": [
         {
           "label": "dose 0.0 (arm B)",
-          "spread_pp": 1.942
+          "seeds": [
+            42,
+            43,
+            44
+          ],
+          "values": [
+            33.979,
+            35.921,
+            42.239
+          ],
+          "spread_pp": 8.26
         },
         {
           "label": "dose 0.25",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            37.796,
+            35.774
+          ],
           "spread_pp": 2.022
         },
         {
           "label": "dose 0.50",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            45.828,
+            39.861
+          ],
           "spread_pp": 5.967
         },
         {
           "label": "dose 1.0 (G4 control)",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            44.541,
+            38.304
+          ],
           "spread_pp": 6.237
         },
         {
           "label": "G4 RawBoost",
+          "seeds": [
+            42,
+            43
+          ],
+          "values": [
+            44.99,
+            41.181
+          ],
           "spread_pp": 3.809
         }
       ],
       "n": 5,
-      "mean": 3.995,
-      "max": 6.237
+      "mean": 5.259,
+      "max": 8.26
     }
   },
   "current_single_floor_pp": 0.77,

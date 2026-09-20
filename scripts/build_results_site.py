@@ -247,9 +247,30 @@ def main() -> int:
           f"{min(on_v) - max(off_v):.2f} pp gap with no interleaving. Nine "
           f"independently trained models, not one lucky run.</p>")
     else:
-        A(f"<p>Non-augmented range {min(off_v):.2f}&ndash;{max(off_v):.2f}% vs "
-          f"augmented {min(on_v):.2f}&ndash;{max(on_v):.2f}% (groups "
-          f"interleave &mdash; reported as measured).</p>")
+        import statistics as _st
+
+        A(f"<p>The groups now <b>interleave</b>: non-augmented spans "
+          f"{min(off_v):.2f}&ndash;{max(off_v):.2f}% and augmented "
+          f"{min(on_v):.2f}&ndash;{max(on_v):.2f}%. An earlier version of this "
+          f"page claimed perfect separation across nine checkpoints; arm B "
+          f"seed 44 (42.24%) broke it by landing above three augmented models. "
+          f"Reported as measured &mdash; see the correction in docs/20.</p>")
+        A(f"<p><b>What still holds:</b> median non-augmented "
+          f"{_st.median(off_v):.2f}% vs median augmented "
+          f"{_st.median(on_v):.2f}% &mdash; a "
+          f"{_st.median(on_v) - _st.median(off_v):.2f} pp gap in central "
+          f"tendency, and the direction is consistent within every seed that "
+          f"has both arms. docs/20's criteria are written on that "
+          f"<em>paired, within-seed</em> comparison, which the absolute "
+          f"spread does not affect.</p>")
+        A("<div class='callout warn'><strong>Absolute out-of-domain numbers "
+          "vary enormously by seed</strong> &mdash; arm B alone spans "
+          "33.98&ndash;42.24% (8.26 pp). Only paired, within-seed OOD "
+          "comparisons are trustworthy; treat any unpaired OOD claim as "
+          "unsupported. Note also that arm B seed 44 has the <em>best</em> "
+          "in-domain EER of the three seeds (8.107%) and the "
+          "<em>worst</em> out-of-domain (42.24%) &mdash; the clearest "
+          "illustration yet of why selecting in-domain fails.</div>")
     vmax = max((r[4]["hi"] for r in rows if r[4]), default=50.0) * 1.06
     A("<div class='chart'><h3>ITW <code>full_call</code> EER (primary condition)</h3>")
     A("<div class='legend'><span><i style='background:var(--off)'></i>"

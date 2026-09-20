@@ -190,6 +190,27 @@
         "n_bonafide": 19963,
         "n_spoof": 11816
       }
+    },
+    {
+      "label": "arm B s44 (codec off)",
+      "codec_augment": "off",
+      "rawboost": "off",
+      "clean": {
+        "report": "eer_ci_armB_s44_ITW_clean.json",
+        "eer_pct": 24.871,
+        "lo": 24.385,
+        "hi": 25.322,
+        "n_bonafide": 19963,
+        "n_spoof": 11816
+      },
+      "full_call": {
+        "report": "eer_ci_armB_s44_ITW_full_call.json",
+        "eer_pct": 42.239,
+        "lo": 41.664,
+        "hi": 42.832,
+        "n_bonafide": 19963,
+        "n_spoof": 11816
+      }
     }
   ],
   "matched_pairs": [
