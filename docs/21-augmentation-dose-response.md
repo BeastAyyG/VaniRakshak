@@ -124,3 +124,54 @@ python scripts/docs21_runner.py --strengths 0.25 0.5 --seeds 42 43
 # adjudicate against the criteria above (reuses existing reports)
 python scripts/adjudicate_docs21.py
 ```
+
+## Run plan — executed 2026-09-20
+
+Launched 10:47 IST as one chained command:
+
+```bash
+python scripts/docs21_runner.py --strengths 0.25 --seeds 42 43 \
+  && python scripts/docs21_runner.py --strengths 0.5 --seeds 42 43 \
+  && python scripts/adjudicate_docs21.py
+```
+
+Doses are chained (not one invocation with `--strengths 0.25 0.5`) so each
+dose is observable and stoppable on its own boundary, and so a failure at
+dose 0.25 does not consume 6 more hours of GPU before anyone sees it.
+`docs21_runner.py` merges into an existing status file rather than resetting
+it, precisely because of this chaining.
+
+### Pre-flight (all verified before launch)
+
+| Check | Result |
+|---|---|
+| GPU | RTX 5060 Ti, 17.1 GB VRAM free |
+| Disk | 39.8 GB (C:), 252.3 GB (A:) |
+| Endpoints 0.0 / 1.0 | all four present |
+| Manifests | ITW + eval slice present |
+| Backup dir `C:\vr-save\ckpt` | exists |
+
+### Phases and gates
+
+| Phase | Work | Gate |
+|---|---|---|
+| 1 | dose 0.25, seeds 42→43 | 2 checkpoints + backups |
+| 2 | dose 0.50, seeds 42→43 | 2 checkpoints + backups |
+| 3 | score ITW `full_call` + eval, 2,000-rep bootstrap | 8 reports |
+| 4 | adjudicate | verdict JSON |
+| 5 | write up, regenerate site, commit, push | suite green |
+
+### Stopping early
+
+Each run writes its checkpoint at every improving epoch and is copied to
+`C:\vr-save\ckpt` on success, so a stop costs at most the progress since the
+last improvement. If a dose is missing, the verdict is `UNRESOLVED` with the
+missing doses named in the report. **Not re-run to chase a result**
+(ground rule 5) — a partial curve is reported as a partial curve.
+
+### Concurrency
+
+Sequential, not parallel. Measured earlier: concurrent eval jobs during
+training added ~2 min/epoch. Two trainings would contend for the same GPU
+and both get slower, and the runs must stay comparable to the endpoints,
+which were trained alone.

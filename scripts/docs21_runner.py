@@ -160,6 +160,20 @@ def main() -> int:
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "runs": {},
     }
+
+    # Merge, do not reset. Doses are launched as separate invocations (one per
+    # strength) so they can be chained and observed between runs; starting
+    # from an empty "runs" would silently discard the earlier dose's status
+    # and make a completed run look like it never happened.
+    if STATUS.exists():
+        try:
+            prev = json.loads(STATUS.read_text(encoding="utf-8"))
+            state["runs"] = prev.get("runs", {})
+            state["created_at"] = prev.get("created_at", state["created_at"])
+            log(f"resuming status with {len(state['runs'])} prior run(s)")
+        except Exception as exc:  # noqa: BLE001 - corrupt status is not fatal
+            log(f"could not read prior status ({exc}); starting fresh")
+
     write_status(state)
 
     ok = True
