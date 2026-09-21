@@ -99,11 +99,18 @@ under a 4 pp OOD floor:
 - **docs/21**: the `AT_0` verdict rests on the same 0.0-vs-1.0 gaps
   (+10.562 / +2.383 pp), with the same seed-43 exposure.
 
-So docs/20's PASS is safe on its own pre-registered terms, and is
-corroborated independently by the **perfect separation of all nine
-checkpoints** (non-augmented 33.9–35.9 %, augmented 38.3–45.0 %) plus both
-seeds agreeing in direction. But its *weakest link* is precisely this: the
-seed-43 margin is not large relative to seed-level noise.
+So docs/20's PASS is safe on its own pre-registered terms, and both seeds
+agree in direction. (This paragraph originally also cited "the perfect
+separation of all nine checkpoints" as independent corroboration — **that
+claim was withdrawn** once arm B seed 44 measured 42.24 % and landed above
+three augmented checkpoints. The groups interleave; the corrected numbers and
+what still holds are in docs/20.) Its *weakest link* remains precisely this:
+the seed-43 margin is not large relative to seed-level noise.
+
+What *does* still corroborate it independently is the gap in central
+tendency across all ten checkpoints — median non-augmented **34.95 %** vs
+median augmented **42.86 %** — together with the direction holding within
+every seed that has both arms.
 
 That is the honest reason this is **proposed and not applied** — retroactively
 tightening a floor to re-judge a finished experiment is exactly what
