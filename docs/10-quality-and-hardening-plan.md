@@ -877,6 +877,19 @@ calibration.
 non-target maximum; hardcoding it reproduces the original defect one enrollment
 later. The point is that the threshold follows the anchor.
 
+**Status 2026-09-25 — implemented; ECAPA criteria still to be graded.**
+`anchor.load_anchor` maps the anchor's `nontarget_scores.max` through the anchor's
+own logistic and `config.resolve_risk_config` uses that value unless
+`VR_IMPOSTOR_BLOCK_BELOW` is set. One correction to the text above: 0.328 is a
+**raw cosine**, while `asv_consistency` (which the override compares against) is
+the **calibrated** logistic output that the demo figures in the table above are
+reported in. The consistent threshold is therefore the *calibrated* non-target
+max: **≈ 0.208 for ECAPA** (still inside 0.135 < t < 0.610) and **≈ 0.394 for
+the stub**. Under the stub, `integration_check.py` now passes 25/25 including a
+new "demo_04 BLOCKs on every window" check. The ECAPA rows above are unchecked
+until run on the dev box (the cloud session could not download ECAPA weights).
+See `docs/14-master-plan.md` §7.
+
 ---
 
 ## What not to do

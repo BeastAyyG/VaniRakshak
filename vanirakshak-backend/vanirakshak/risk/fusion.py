@@ -10,8 +10,9 @@ time, and emits a 0-100 risk score + ALLOW/CHALLENGE/BLOCK tier.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional
+from typing import Deque, Dict, List, Optional
 
 import numpy as np
 
@@ -69,6 +70,8 @@ class RiskDecision:
     raw_window: WindowResult
     ema_risk: float
     features: Dict[str, float]
+    # Which deterministic rule forced BLOCK, if any: "impostor" | "clone".
+    override: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -87,9 +90,33 @@ class RiskFusionEngine:
         self.risk_cfg = risk_cfg or settings.risk
         self.fusion_cfg = fusion_cfg or settings.fusion
         self._ema: float | None = None
+        self._clone_llrs: Deque[float] = deque(maxlen=max(1, int(getattr(self.risk_cfg, "clone_min_windows", 1))))
 
     def reset(self) -> None:
         self._ema = None
+        self._clone_llrs.clear()
+
+    def _clone_rule_fires(self, window: WindowResult) -> bool:
+        k = getattr(self.risk_cfg, "clone_cm_llr_max", None)
+        if k is None:
+            return False
+        # Only a real comparison against an enrolled voice can show "matches the
+        # voiceprint"; the unenrolled 0.5 placeholder says nothing either way.
+        if not window.asv_enrolled or window.asv_score < getattr(self.risk_cfg, "clone_asv_min", 0.0):
+            self._clone_llrs.clear()
+            return False
+        self._clone_llrs.append(float(window.cm_score))
+        if len(self._clone_llrs) < self._clone_llrs.maxlen:
+            return False
+        return float(np.mean(self._clone_llrs)) <= k
+
+    def _force_block(self, risk: float) -> float:
+        # Raise the score to the BLOCK line as well, so the reported risk and
+        # the reported tier agree. A tier of BLOCK at risk 67 would contradict
+        # the published thresholds and make the dashboard unreadable.
+        floor = float(self.risk_cfg.challenge_threshold)
+        self._ema = max(self._ema if self._ema is not None else risk, floor)
+        return max(risk, floor)
 
     def update(
         self,
@@ -117,15 +144,18 @@ class RiskFusionEngine:
         # the interlock even if the weighted fusion lands short of BLOCK. Only
         # applies when an anchor actually produced the score: an unenrolled ASV
         # returns the neutral 0.5, which is never below the threshold.
+        override: Optional[str] = None
         cutoff = getattr(self.risk_cfg, "impostor_block_below", 0.0)
         if cutoff > 0.0 and window.asv_score < cutoff:
-            # Raise the score to the BLOCK line as well, so the reported risk and
-            # the reported tier agree. A tier of BLOCK at risk 67 would contradict
-            # the published thresholds and make the dashboard unreadable.
-            floor = float(self.risk_cfg.challenge_threshold)
-            risk = max(risk, floor)
-            self._ema = max(self._ema if self._ema is not None else risk, floor)
+            risk = self._force_block(risk)
             tier = "BLOCK"
+            override = "impostor"
+
+        # Deterministic clone override — see RiskConfig.clone_cm_llr_max.
+        if self._clone_rule_fires(window) and override is None:
+            risk = self._force_block(risk)
+            tier = "BLOCK"
+            override = "clone"
 
         return RiskDecision(
             risk=round(risk, 2),
@@ -134,4 +164,5 @@ class RiskFusionEngine:
             raw_window=window,
             ema_risk=round(self._ema if self._ema is not None else risk, 2),
             features={**window.features, "semantic_risk": round(float(max(0.0, min(1.0, semantic_risk))), 4)},
+            override=override,
         )

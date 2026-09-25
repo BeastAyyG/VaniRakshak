@@ -332,6 +332,21 @@ days, go to STOP-A.
 
 ---
 
+**Status 2026-09-25 (no criterion changed).** Phase 1 code is built:
+1.1 clone rule, 1.2 voice-scored challenge (response windows scored by CM and
+ASV, optional re-arm), 1.3 `operating_threshold`, 1.4 session simulator
+(`vanirakshak/risk/simulate.py`, replays through the real `CallSession`), and 1.5
+fusion pin (`tests/test_decision_layer.py`). A trigger-persistence setting
+(`VR_CHALLENGE_TRIGGER_CONSECUTIVE`) was added because one-window triggering
+alone cannot meet P1-F. Every threshold ships **off** and is chosen on dev by
+`scripts/calibrate_decision_layer.py`, whose input
+`scripts/score_checkpoint_eval.py --dump-scores` now writes. P1-S, P1-F and P1-T
+are **not yet graded**; that is step 1 of `docs/14-master-plan.md` §6. The
+challenge-response audio needs no new message type (the answer arrives on the
+same stream), so 1.2's "new challenge-response audio message" was not needed.
+The PROTOCOL §3 amendment is written. P1-C additionally needs server-side ASR
+of the response (docs/14 W2): today `response_text` is client-supplied.
+
 ## Phase 2 — Measure what already exists (one GPU scoring session, ~4–8 GPU-h)
 
 No training. Every question that can be answered from existing checkpoints is

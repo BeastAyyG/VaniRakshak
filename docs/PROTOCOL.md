@@ -94,7 +94,8 @@ Emitted once per analysis window (4.04 s sliding window, 1.0 s hop).
     "channel_anomaly": 0.12,
     "prosody_unnatural": 0.3,
     "snr_db": 18.4,
-    "codec_guess": "wideband"
+    "codec_guess": "wideband",
+    "tier_override": null
   },
   "trigger_challenge": true,
   "interlock_active": false,
@@ -126,6 +127,14 @@ Emitted once per analysis window (4.04 s sliding window, 1.0 s hop).
 
 `challenge` is `null` unless a challenge is active. `semantic` is **always**
 present — see §3.1 for its populated shape once ASR actually runs.
+
+**`metrics.tier_override`** (`null` | `"impostor"` | `"clone"`): which
+deterministic rule forced `tier` to `BLOCK` on this window, if any.
+`"impostor"` is `VR_IMPOSTOR_BLOCK_BELOW`; `"clone"` is the clone rule
+(`VR_CLONE_CM_LLR_MAX`, docs/13 §1.1): the claimed identity is enrolled, the
+voice matches it (ASV ≥ `VR_CLONE_ASV_MIN`), and the mean CM LLR over the last
+`VR_CLONE_MIN_WINDOWS` such windows says synthetic. `risk_score` is raised to
+the BLOCK line in both cases, so score and tier never disagree.
 
 **`metrics.asv_evaluated`** (bool): whether ASV ran a real biometric
 comparison for this window (`asv.consistency_score`'s `is_enrolled` result).
@@ -171,6 +180,24 @@ only, with no voice biometrics, so it cannot override strong acoustic
 evidence (`risk >= 70` or `asv < 0.10`). The challenge is consumed on first
 grading — a second grade returns `no_active_challenge`. **Do not build
 client logic that assumes a pass un-blocks the interlock.**
+
+**Amendment (docs/13 §1.2) — voice-scored and re-armable challenge.** Text
+grading alone is passable by a live voice-conversion attacker who reads the
+digits. The server therefore also grades the response **audio**: every window
+it scores between issuing the challenge and grading it. No new message is
+needed — the caller answers on the same stream. The REST grade response
+carries an `acoustic` block (`docs/API_SPEC.md`), and a text-correct answer
+fails when the response windows' mean CM LLR is ≤ `VR_CHALLENGE_CM_LLR_MAX`
+(`response_voice_synthetic`), their mean ASV is below `VR_CHALLENGE_ASV_MIN`
+(`response_voice_mismatch`), or fewer than `VR_CHALLENGE_MIN_WINDOWS` were
+scored while `VR_CHALLENGE_REQUIRE_AUDIO=1` (`no_response_audio`). With
+`VR_CHALLENGE_MAX_PER_SESSION` > 1, a challenge **re-arms** after a pass once
+the tier has dropped back to `ALLOW` and re-enters `CHALLENGE`; a client must
+therefore accept more than one `trigger_challenge` per session. With
+`VR_CHALLENGE_TRIGGER_CONSECUTIVE` = M, a challenge is issued only after M
+consecutive `CHALLENGE`-tier windows. Every one of these defaults to the
+original one-shot, text-only behaviour until its threshold is chosen on dev
+data (`scripts/calibrate_decision_layer.py`).
 
 ### 3.1 `semantic` — parallel ASR + keyword context signal (advisory)
 
@@ -336,6 +363,15 @@ alert payload it already received.
 | `VR_ASV_BACKEND` | `stub` | `ecapa` swaps in real ECAPA-TDNN embeddings (`asv_ecapa.py`); changes the `metrics` distribution and the anchor file loaded (`data/anchor_asv_embedding_ecapa.json`) |
 | `VR_CM_BACKEND` | `stub` | `wavlm` swaps in real self-supervised features (`cm_wavlm.py`) for the countermeasure score |
 | `VR_IMPOSTOR_BLOCK_BELOW` | `0.10` | A **deterministic tier override**: when `metrics.asv_consistency` falls below this, `tier` is forced to `"BLOCK"` regardless of `risk_score` (`risk/fusion.py`'s impostor override). A client deriving its own tier from `risk_score` alone will disagree with the server in exactly this case — see §5 on why the client shouldn't be doing that anyway. |
+| `VR_CLONE_CM_LLR_MAX` | *(unset — off)* | Clone rule (§3 `tier_override`): BLOCK when an enrolled, matching voice's mean CM LLR over `VR_CLONE_MIN_WINDOWS` windows is at or below this. Choose it on dev with `scripts/calibrate_decision_layer.py`, never by hand. |
+| `VR_CLONE_ASV_MIN` | `VR_IMPOSTOR_BLOCK_BELOW` | ASV a window needs to count toward the clone rule |
+| `VR_CLONE_MIN_WINDOWS` | `3` | Consecutive qualifying windows the clone rule averages |
+| `VR_CHALLENGE_CM_LLR_MAX` | *(unset — off)* | Voice-scored challenge: mean response-window CM LLR at or below this fails the challenge |
+| `VR_CHALLENGE_ASV_MIN` | *(unset — off)* | Voice-scored challenge: mean response-window ASV below this fails the challenge |
+| `VR_CHALLENGE_MIN_WINDOWS` | `2` | Response windows the acoustic check needs |
+| `VR_CHALLENGE_REQUIRE_AUDIO` | `0` | `1` fails a challenge graded with fewer than `VR_CHALLENGE_MIN_WINDOWS` response windows |
+| `VR_CHALLENGE_MAX_PER_SESSION` | `1` | Challenges per session; > 1 re-arms after a pass (see §3 amendment) |
+| `VR_CHALLENGE_TRIGGER_CONSECUTIVE` | `1` | Consecutive `CHALLENGE`-tier windows before a challenge is issued |
 | `VR_ANCHOR_EMBEDDING` | *(backend-default path)* | Overrides which anchor JSON is loaded, bypassing the `VR_ASV_BACKEND`-keyed default |
 | `VR_FUSION_PRESET` | *(unset)* | `demo` applies a preset fusion-weight override tuned for the shipped demo clips |
 | `VR_SAMPLE_RATE` | `16000` | Processing sample rate in Hz — independent of the handshake's `sample_rate`, which is per-connection |

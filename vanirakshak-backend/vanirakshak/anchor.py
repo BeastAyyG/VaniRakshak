@@ -90,6 +90,13 @@ def load_anchor(
                 "mid": float(cal["mid"]),
                 "scale": float(cal["scale"]),
             }
+            # G8 (docs/10): one global impostor constant is scale-wrong across
+            # backends. The anchor's own highest non-target score, mapped through
+            # the same logistic, is the line no enrolment-time impostor crossed.
+            nt_max = (cal.get("nontarget_scores") or {}).get("max")
+            if nt_max is not None:
+                z = (float(nt_max) - float(cal["mid"])) / float(cal["scale"])
+                pipeline.asv.impostor_threshold = float(1.0 / (1.0 + np.exp(-z)))
 
         state.update(
             {
@@ -97,6 +104,7 @@ def load_anchor(
                 "enrolled": True,
                 "source_clips": len(payload.get("source_clips", [])),
                 "calibrated": bool(cal),
+                "impostor_threshold": pipeline.asv.impostor_threshold,
                 "error": None,
             }
         )
