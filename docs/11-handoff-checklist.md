@@ -4,6 +4,10 @@ Exact locations for the work that remains. Read
 `docs/10-quality-and-hardening-plan.md` first — its **Ground rules** section is
 binding, and every criterion below was fixed in advance there.
 
+For the whole picture — what the product can credibly claim, the threat model,
+every open gap and the order to close them — start with
+`docs/14-master-plan.md`.
+
 **Base branch: `main`.** The repository is private. The old
 `fix/protocol-interlock-reconciliation` branch was squash-merged as PR #1
 (`4f7e13a`) on 2026-09-13 and is finished: do not commit to it or cut work from

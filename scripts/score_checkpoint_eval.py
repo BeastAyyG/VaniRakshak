@@ -20,13 +20,19 @@ Usage:
     python scripts/score_checkpoint_eval.py \
         --checkpoint S42=data/cm_scratch_S42.pt \
         --checkpoint B42=data/cm_scratch_B42.pt \
-        --out reports/cm_from_scratch_benchmark.json
+        --out reports/cm_from_scratch_benchmark.json \
+        --dump-scores C:/vr-out/p2/dev
+
+``--dump-scores DIR`` also writes ``DIR/<label>.npz`` (raw_llr, label,
+attack, row_index, manifest_sha256) — the input to
+``scripts/calibrate_decision_layer.py``.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 import time
@@ -79,6 +85,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--max-missing-frac", type=float, default=0.05,
                     help="Abort if more than this fraction of utterances fail to read.")
+    ap.add_argument("--dump-scores", type=Path, default=None,
+                    help="Directory for per-utterance <label>.npz score dumps (must not exist per label).")
     args = ap.parse_args()
 
     models: Dict[str, Path] = {}
@@ -181,6 +189,7 @@ def main() -> int:
         layer_index = -1 if layer_index is None else int(layer_index)
         print(f"  frontend layer: {layer_index}")
 
+        all_scores: List[float] = []
         bon_scores: List[float] = []
         spf_scores: List[float] = []
         atk_scores: Dict[str, List[float]] = {}
@@ -196,6 +205,7 @@ def main() -> int:
                 llrs = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
                 for s, y, a in zip(llrs, y_b, a_b):
                     score = float(s)
+                    all_scores.append(score)
                     if y == 1:
                         bon_scores.append(score)
                     else:
@@ -232,6 +242,22 @@ def main() -> int:
             "metrics": res,
             "per_attack_eer": per_atk,
         }
+        if args.dump_scores is not None:
+            dump = args.dump_scores / f"{label}.npz"
+            if dump.exists():
+                raise SystemExit(f"{dump} exists; refusing to overwrite a score dump")
+            args.dump_scores.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(
+                dump,
+                raw_llr=np.asarray(all_scores, dtype=np.float32),
+                label=labels_arr.astype(np.int8),
+                attack=np.asarray(attacks),
+                row_index=np.arange(len(all_scores), dtype=np.int64),
+                manifest_sha256=np.asarray(hashlib.sha256(args.manifest.read_bytes()).hexdigest()),
+            )
+            print(f"  dumped per-utterance scores -> {dump}")
+            results["models"][label]["score_dump"] = str(dump)  # type: ignore[index]
+
         del model, wavlm
         if device == "cuda":
             torch.cuda.empty_cache()
