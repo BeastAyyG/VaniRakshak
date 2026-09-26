@@ -45,7 +45,8 @@ format, not this file.
     "channel_anomaly": 0.12,
     "prosody_unnatural": 0.3,
     "snr_db": 18.4,
-    "codec_guess": "wideband"
+    "codec_guess": "wideband",
+    "tier_override": null
   },
   "trigger_challenge": true,
   "interlock_active": false,
@@ -296,15 +297,24 @@ Returns `{"session_id": "call-..."}`.
 Grade a challenge response. Body: `{"response_text": "...", "response_latency_ms": 1200}`.
 
 ```json
-{ "ok": true, "reason": "ok", "confidence": 0.6, "blocked": false }
+{
+  "ok": true, "reason": "ok", "confidence": 0.6, "blocked": false,
+  "acoustic": { "windows": 3, "checked": true, "mean_cm_llr": 2.41, "mean_asv": 0.93, "verdict": "pass" }
+}
 ```
+
+`acoustic` grades the response *audio*: the windows the stream scored while
+the challenge was outstanding (docs/PROTOCOL.md §3, "voice-scored
+challenge"). A text-correct answer still fails with `reason` set to
+`response_voice_synthetic`, `response_voice_mismatch` or `no_response_audio`
+when the configured thresholds say so.
 
 `404` if `sid` doesn't match an active session; `{"ok": false, "reason": "no_active_challenge"}`
 if the session has no challenge outstanding (including after a challenge has
 already been graded — each challenge is single-use). Every graded response
 (pass or fail) is recorded in the audit chain. **A failed challenge always
 escalates the session to `BLOCK`, permanently. A passed challenge never
-un-blocks or re-arms** (see PROTOCOL.md §3 "Challenge outcomes and the
+un-blocks, and re-arms only when `VR_CHALLENGE_MAX_PER_SESSION` > 1** (see PROTOCOL.md §3 "Challenge outcomes and the
 interlock"): `blocked` in the response reflects the session's one-way latch,
 not a reversible state.
 

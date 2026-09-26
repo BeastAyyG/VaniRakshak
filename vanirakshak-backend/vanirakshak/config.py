@@ -6,9 +6,11 @@ both import from this module so a single env var moves every layer.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 
 def _env(name: str, default: str) -> str:
@@ -28,6 +30,20 @@ def _env_float(name: str, default: float) -> float:
         return float(_env(name, str(default)))
     except ValueError:
         return default
+
+
+def _env_optional_float(name: str) -> Optional[float]:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _env_bool(name: str) -> bool:
+    return _env(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)
@@ -56,11 +72,51 @@ class RiskConfig:
     # fused score. Set to <= 0 to disable.
     impostor_block_below: float = _env_float("VR_IMPOSTOR_BLOCK_BELOW", 0.10)
 
+    # Deterministic clone override (docs/13 §1.1). A clone's signature is
+    # "matches the enrolled voice AND sounds synthetic"; the additive fusion
+    # scores a better clone (higher ASV) as LOWER risk, so no CM can BLOCK it.
+    # Fires when the claimed identity is enrolled, ASV >= clone_asv_min, and
+    # the mean CM LLR over the last clone_min_windows consecutive qualifying
+    # windows is <= clone_cm_llr_max. Disabled (None) until clone_cm_llr_max
+    # is set from dev-bonafide percentiles (scripts/calibrate_decision_layer.py):
+    # docs/13 forbids a threshold not chosen on dev data.
+    clone_cm_llr_max: Optional[float] = _env_optional_float("VR_CLONE_CM_LLR_MAX")
+    clone_asv_min: float = _env_float("VR_CLONE_ASV_MIN", _env_float("VR_IMPOSTOR_BLOCK_BELOW", 0.10))
+    clone_min_windows: int = max(1, _env_int("VR_CLONE_MIN_WINDOWS", 3))
+
     # Window aggregation mode for one-shot file analysis (/analyze/audio).
     # Options: 'last' (default, evaluates final rolling window),
     #          'max' (peak risk / anomaly across all evaluated windows),
     #          'top_k' (average of top k windows, or top-k max pooling).
     analyze_pooling: str = _env("VR_ANALYZE_POOLING", "last").lower()
+
+
+@dataclass(frozen=True)
+class ChallengeConfig:
+    """Voice-scored challenge (docs/13 §1.2).
+
+    Text grading alone is passable by a live voice-conversion attacker who
+    simply reads the digits. The windows the stream scores between issue and
+    grade are the caller's response audio, so their CM and ASV evidence is
+    checked too. Every threshold is disabled (None) until set from dev data.
+    """
+
+    # Mean CM LLR over the response windows at or below this fails the challenge.
+    cm_llr_max: Optional[float] = _env_optional_float("VR_CHALLENGE_CM_LLR_MAX")
+    # Mean ASV over enrolled response windows below this fails the challenge.
+    asv_min: Optional[float] = _env_optional_float("VR_CHALLENGE_ASV_MIN")
+    # Minimum response windows the acoustic check needs.
+    min_windows: int = max(1, _env_int("VR_CHALLENGE_MIN_WINDOWS", 2))
+    # Fail a challenge graded with fewer than min_windows of response audio.
+    require_audio: bool = _env_bool("VR_CHALLENGE_REQUIRE_AUDIO")
+    # Challenges one session may issue. 1 keeps the one-shot gate
+    # (docs/PROTOCOL.md §3); >1 re-arms after a PASS once the tier has dropped
+    # back to ALLOW and re-enters CHALLENGE.
+    max_per_session: int = max(1, _env_int("VR_CHALLENGE_MAX_PER_SESSION", 1))
+    # Consecutive CHALLENGE-tier windows before a challenge is issued. 1 is
+    # the original behaviour; one borderline 4 s window then challenges the
+    # whole call, which puts genuine per-call friction near 100 % (docs/13 P1-F).
+    trigger_consecutive: int = max(1, _env_int("VR_CHALLENGE_TRIGGER_CONSECUTIVE", 1))
 
 
 @dataclass(frozen=True)
@@ -214,6 +270,7 @@ class Settings:
     audit: AuditConfig = field(default_factory=AuditConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     semantic: SemanticConfig = field(default_factory=SemanticConfig)
+    challenge: ChallengeConfig = field(default_factory=ChallengeConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")
@@ -240,3 +297,15 @@ class Settings:
 
 
 settings = Settings()
+
+
+def resolve_risk_config(risk: RiskConfig, anchor_impostor_threshold: Optional[float]) -> RiskConfig:
+    """Apply the anchor-derived impostor threshold (G8) unless the operator
+    pinned ``VR_IMPOSTOR_BLOCK_BELOW``; the clone rule's ASV floor follows it
+    unless ``VR_CLONE_ASV_MIN`` is pinned."""
+    if anchor_impostor_threshold is None or os.environ.get("VR_IMPOSTOR_BLOCK_BELOW"):
+        return risk
+    updates = {"impostor_block_below": float(anchor_impostor_threshold)}
+    if not os.environ.get("VR_CLONE_ASV_MIN"):
+        updates["clone_asv_min"] = float(anchor_impostor_threshold)
+    return dataclasses.replace(risk, **updates)

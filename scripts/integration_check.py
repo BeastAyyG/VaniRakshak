@@ -386,22 +386,23 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
         audio = (rng.normal(0, 0.02, sr * 6) * 32767).astype(np.int16)
     frame = 320  # 20 ms, like the AudioWorklet
 
-    try:
-        from websockets.sync.client import connect
+    from websockets.sync.client import connect
 
+    def stream(pcm: np.ndarray, session_id: str, context: Dict[str, Any]):
         verdicts: List[Dict[str, Any]] = []
         ack: Dict[str, Any] = {}
         with connect(url, open_timeout=10) as ws:
             ws.send(
                 json.dumps(
                     {
-                        "session_id": "integration-check",
+                        "session_id": session_id,
                         "sample_rate": sr,
                         "caller_id": "integration-check",
                         "claimed_identity": anchor_id,
                         "transaction_value_inr": 0,
                         "origin_country": "IN",
                         "prior_fraud_score": 0,
+                        **context,
                     }
                 )
             )
@@ -417,8 +418,8 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
                         verdicts.append(parsed)
             except TimeoutError:
                 pass
-            for i in range(0, audio.size, frame):
-                ws.send(audio[i : i + frame].tobytes())
+            for i in range(0, pcm.size, frame):
+                ws.send(pcm[i : i + frame].tobytes())
                 try:
                     msg = ws.recv(timeout=0.05)
                     if isinstance(msg, str):
@@ -434,6 +435,29 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
                         verdicts.append(json.loads(msg))
                 except TimeoutError:
                     break
+        return verdicts, ack
+
+    def _challenges(vs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [vv for vv in vs if vv.get("trigger_challenge") and vv.get("challenge")]
+
+    challenge_fixture = "demo_04_impostor.wav"
+    try:
+        verdicts, ack = stream(audio, "integration-check", {})
+        challenge_verdicts = _challenges(verdicts)
+        genuine = DEMO_DIR / "demo_01_genuine.wav"
+        if not challenge_verdicts and genuine.is_file():
+            # The anchor-derived impostor threshold (G8) BLOCKs demo_04 from its
+            # first window, so it no longer passes through CHALLENGE. A genuine
+            # voice on a high-risk transaction does, and that is the realistic
+            # challenge case anyway.
+            with _wave.open(str(genuine), "rb") as w:
+                g_audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+            g_verdicts, _ = stream(
+                g_audio[: sr * 8], "integration-check-challenge",
+                {"transaction_value_inr": 500000, "prior_fraud_score": 1.0},
+            )
+            challenge_verdicts = _challenges(g_verdicts)
+            challenge_fixture = "demo_01_genuine.wav + high-risk transaction context"
     except Exception as e:
         checks.record("websocket stream", False, f"{type(e).__name__}: {e}")
         return
@@ -497,9 +521,13 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
         + (f" MISSING={semantic_key_mismatches}" if semantic_key_mismatches else ""),
     )
 
-    # challenge object: this fixture (demo_04_impostor.wav) reliably fires a
-    # CHALLENGE before escalating to BLOCK, so this is not conditional.
-    challenge_verdicts = [vv for vv in verdicts if vv.get("trigger_challenge") and vv.get("challenge")]
+    # challenge object: not conditional — a run where no fixture fires a
+    # challenge fails here rather than silently skipping the shape check.
+    checks.record(
+        "a challenge fired on the WS path",
+        bool(challenge_verdicts),
+        f"fixture={challenge_fixture}",
+    )
     if challenge_verdicts:
         ch = challenge_verdicts[0]["challenge"]
         missing_ch = [k for k in CHALLENGE_KEYS if k not in ch]
@@ -519,8 +547,6 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
             + ("" if digits_ok else " BAD_DIGITS_TYPE")
             + ("" if full_has_words else " expected_full missing word tokens"),
         )
-    else:
-        print("    NOTE: no challenge fired this run — demo_04_impostor.wav usually triggers one on its first window.")
 
     # VR_IMPOSTOR_BLOCK_BELOW override: a deterministic tier-forcing rule that
     # docs/PROTOCOL.md documents but a client deriving its own tier from
@@ -528,9 +554,13 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
     # process's own config actually governs the server that produced `verdicts`.
     if not live:
         sys.path.insert(0, str(BACKEND_ROOT))
-        from vanirakshak.config import settings  # type: ignore
+        from vanirakshak.config import resolve_risk_config, settings  # type: ignore
+        from vanirakshak.server.app import PIPELINE  # type: ignore
 
-        threshold = settings.risk.impostor_block_below
+        # The effective threshold: anchor-derived (G8) unless the env pins it.
+        threshold = resolve_risk_config(
+            settings.risk, getattr(PIPELINE.asv, "impostor_threshold", None)
+        ).impostor_block_below
         override_violations = [
             (i, vv.get("metrics", {}).get("asv_consistency"), vv.get("tier"))
             for i, vv in enumerate(verdicts)
@@ -543,6 +573,20 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
             not override_violations,
             f"checked {len(verdicts)} verdicts" + (f" VIOLATIONS={override_violations}" if override_violations else ""),
         )
+        # G8 criterion: the impostor clip is decisively not the anchor, so the
+        # override must hold on every window, not just some (docs/10 G8).
+        if "demo_04" in str(src):
+            not_impostor = [
+                (i, vv.get("metrics", {}).get("asv_consistency"))
+                for i, vv in enumerate(verdicts)
+                if vv.get("tier") != "BLOCK"
+            ]
+            checks.record(
+                "demo_04_impostor BLOCKs on every window",
+                not not_impostor,
+                f"threshold={threshold:.3f} windows={len(verdicts)}"
+                + (f" NOT_BLOCKED={not_impostor}" if not_impostor else ""),
+            )
 
 
 def check_auth(live: bool, checks: Checks) -> None:

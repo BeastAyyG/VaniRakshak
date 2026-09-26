@@ -90,6 +90,7 @@ class CMModelAASIST:
 
     name: str = "aasist_missing_weights"
     eer_threshold: float = 0.0
+    operating_threshold: float = 0.0
     unfreeze_top_n: int = 0
     _frontend_state_dict: Optional[dict] = None
     _frontend_layer_indices: list = field(default_factory=list)
@@ -179,6 +180,11 @@ class CMModelAASIST:
 
         self._model = model
         self.eer_threshold = float(ckpt["eer_threshold"])
+        # docs/13 §1.3: centring at the dev EER point puts per-window genuine
+        # friction at the dev EER by construction. A dev-bonafide-percentile
+        # operating_threshold (scripts/calibrate_decision_layer.py) wins when present.
+        op = ckpt.get("operating_threshold")
+        self.operating_threshold = float(op) if op is not None else self.eer_threshold
         self.dev_eer = float(ckpt["dev_eer"])
         self.dev_min_dcf = float(ckpt["dev_min_dcf"])
         self.layer_index = int(ckpt.get("layer_index", ckpt.get("layer", -1)))
@@ -264,9 +270,9 @@ class CMModelAASIST:
             else:
                 feat = outputs.hidden_states[self.layer_index].to(torch.float32)  # (1, T, 768)
             _, logits = self._model(feat)
-            # LLR = genuine_logit (index 1) - spoof_logit (index 0) - eer_threshold + natural_offset
+            # LLR = genuine_logit (index 1) - spoof_logit (index 0) - operating_threshold + natural_offset
             raw_llr = float((logits[0, 1] - logits[0, 0]).item())
-            llr = raw_llr - self.eer_threshold + self.natural_offset
+            llr = raw_llr - self.operating_threshold + self.natural_offset
             return float(llr)
 
     @classmethod

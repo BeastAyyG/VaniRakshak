@@ -71,6 +71,10 @@ class ASVModel:
     # every speaker — target and impostor alike. The logistic below is fitted
     # to measured target vs non-target scores so the number means something.
     calibration: Optional[Dict[str, float]] = None
+    # G8: calibrated score of the anchor's worst (highest) non-target
+    # enrolment match. Set by anchor.load_anchor; None when the anchor carries
+    # no non-target scores.
+    impostor_threshold: Optional[float] = None
 
     @property
     def is_synthetic(self) -> bool:

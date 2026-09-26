@@ -114,5 +114,15 @@ def test_try_create_with_valid_checkpoint(tmp_path, monkeypatch):
     assert cm.dev_eer == 0.031
     assert cm.dev_min_dcf == 0.087
     assert cm.eer_threshold == 0.25
+    assert cm.operating_threshold == 0.25  # falls back to the EER point
     assert "aasist_l_wavlm" in cm.name
+
+    op_file = tmp_path / "test_aasist_op.pt"
+    payload["operating_threshold"] = 1.75
+    torch.save(payload, str(op_file))
+    monkeypatch.setenv("VR_CM_AASIST_WEIGHTS", str(op_file))
+    cm_op = CMModelAASIST.try_create()
+    assert cm_op is not None
+    assert cm_op.eer_threshold == 0.25
+    assert cm_op.operating_threshold == 1.75
 

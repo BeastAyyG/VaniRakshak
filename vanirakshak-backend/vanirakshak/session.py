@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from .config import AudioConfig, RiskConfig, FusionConfig, settings
+from .config import AudioConfig, ChallengeConfig, RiskConfig, FusionConfig, resolve_risk_config, settings
 from .privacy.audit import AuditLog
 from .privacy.buffer import SlidingAudioBuffer
 from .detectors.pipeline import DetectionPipeline
@@ -88,18 +88,33 @@ class CallSession:
         fusion_engine: Optional[RiskFusionEngine] = None,
         challenge_engine: Optional[ChallengeEngine] = None,
         audit: Optional[AuditLog] = None,
+        challenge_cfg: Optional[ChallengeConfig] = None,
     ) -> None:
         self.session_id = session_id
         self.context = context
         self.buffer = SlidingAudioBuffer(audio_cfg or settings.audio)
         self.pipeline = pipeline or DetectionPipeline()
-        self.fusion = fusion_engine or RiskFusionEngine(risk_cfg or settings.risk, fusion_cfg or settings.fusion)
+        if risk_cfg is None:
+            risk_cfg = resolve_risk_config(
+                settings.risk, getattr(getattr(self.pipeline, "asv", None), "impostor_threshold", None)
+            )
+        self.fusion = fusion_engine or RiskFusionEngine(risk_cfg, fusion_cfg or settings.fusion)
         self.challenge = challenge_engine or ChallengeEngine()
         self.audit = audit or AuditLog()
         self._active_challenge: Optional[Challenge] = None
         self._history: List[ChunkResult] = []
         self._triggered_challenge = False
         self._challenge_passed = False
+        self._challenge_cfg = challenge_cfg or settings.challenge
+        self._challenges_issued = 0
+        # Set once the tier drops back to ALLOW after a passed challenge; a
+        # re-arm needs that drop so a caller hovering in CHALLENGE isn't
+        # re-challenged every window.
+        self._rearm_ready = False
+        # (cm_llr, asv_score, asv_enrolled) of each window scored while a
+        # challenge is outstanding — the caller's response audio.
+        self._challenge_windows: List[Tuple[float, float, bool]] = []
+        self._challenge_streak = 0
         self._blocked = False
         self._sr = settings.audio.sample_rate
         # Parallel semantic (ASR + keyword) context signal — see
@@ -163,11 +178,27 @@ class CallSession:
         )
 
         # challenge logic
+        if self._active_challenge is not None:
+            self._challenge_windows.append((float(wr.cm_score), float(wr.asv_score), bool(wr.asv_enrolled)))
+        if decision.tier == "ALLOW" and self._challenge_passed:
+            self._rearm_ready = True
+        self._challenge_streak = self._challenge_streak + 1 if decision.tier == "CHALLENGE" else 0
         trigger = False
-        if (not self._triggered_challenge) and decision.tier == "CHALLENGE":
+        first = not self._triggered_challenge
+        rearm = (
+            self._rearm_ready
+            and not self._blocked
+            and self._active_challenge is None
+            and self._challenges_issued < self._challenge_cfg.max_per_session
+        )
+        if (first or rearm) and self._challenge_streak >= self._challenge_cfg.trigger_consecutive:
             ch = self.challenge.issue(lang="mixed")
             self._active_challenge = ch
             self._triggered_challenge = True
+            self._challenges_issued += 1
+            self._challenge_passed = False
+            self._rearm_ready = False
+            self._challenge_windows = []
             trigger = True
 
         # block logic: if BLOCK, latch
@@ -180,7 +211,10 @@ class CallSession:
             claimed_identity=self.context.claimed_identity,
             risk_score=decision.risk,
             tier=decision.tier,
-            features=decision.features,
+            features={
+                **decision.features,
+                **({f"override_{decision.override}": 1.0} if decision.override else {}),
+            },
         )
 
         cr = ChunkResult(
@@ -201,6 +235,7 @@ class CallSession:
                 "channel_anomaly": wr.channel_anomaly,
                 "prosody_unnatural": wr.prosody_unnatural,
                 "snr_db": wr.snr_db,
+                "tier_override": decision.override,
             },
             trigger_challenge=trigger,
             interlock_active=self._blocked,
@@ -231,6 +266,9 @@ class CallSession:
         if self._active_challenge is None:
             return {"ok": False, "reason": "no_active_challenge"}
         passed, reason, conf = self.challenge.grade(self._active_challenge, response_text, response_latency_ms)
+        acoustic = self._score_challenge_audio()
+        if passed and acoustic["verdict"] != "pass":
+            passed, reason, conf = False, acoustic["verdict"], 0.05
 
         # DECIDED (Option B — one-shot gate, not a recovery path): a pass
         # only prevents an escalation that hasn't happened yet; it never
@@ -241,12 +279,16 @@ class CallSession:
         # escalates to BLOCK permanently; pass leaves the latch as-is.
         # The challenge is consumed on first grading to prevent oracle
         # probing; a second grade returns `no_active_challenge`.
+        # AMENDED (docs/13 §1.2): the response audio's CM/ASV evidence is now
+        # scored too (_score_challenge_audio), and VR_CHALLENGE_MAX_PER_SESSION
+        # > 1 re-arms after a pass. A pass still never clears `_blocked`.
         if passed:
             self._challenge_passed = True
         else:
             # failed challenge => escalate to BLOCK
             self._blocked = True
         self._active_challenge = None
+        self._challenge_windows = []
 
         last = self._history[-1] if self._history else None
         self.audit.append(
@@ -259,6 +301,7 @@ class CallSession:
                 "challenge_passed": 1.0 if passed else 0.0,
                 "challenge_confidence": float(conf),
                 "response_latency_ms": float(response_latency_ms),
+                "challenge_response_windows": float(acoustic["windows"]),
             },
         )
         return {
@@ -266,7 +309,41 @@ class CallSession:
             "reason": reason,
             "confidence": conf,
             "blocked": self._blocked,
+            "acoustic": acoustic,
         }
+
+    def _score_challenge_audio(self) -> dict:
+        """Grade the response audio scored while the challenge was outstanding.
+
+        Verdict is ``"pass"`` unless a configured threshold is crossed:
+        ``response_voice_synthetic`` (mean CM LLR too low),
+        ``response_voice_mismatch`` (mean ASV of enrolled windows too low) or
+        ``no_response_audio`` (fewer than ``min_windows`` and audio required).
+        """
+        cfg = self._challenge_cfg
+        wins = self._challenge_windows
+        out: Dict[str, object] = {
+            "windows": len(wins),
+            "checked": False,
+            "mean_cm_llr": None,
+            "mean_asv": None,
+            "verdict": "pass",
+        }
+        if len(wins) < cfg.min_windows:
+            if cfg.require_audio:
+                out["verdict"] = "no_response_audio"
+            return out
+        out["checked"] = True
+        mean_llr = float(np.mean([w[0] for w in wins]))
+        out["mean_cm_llr"] = round(mean_llr, 4)
+        enrolled = [w[1] for w in wins if w[2]]
+        mean_asv = float(np.mean(enrolled)) if enrolled else None
+        out["mean_asv"] = round(mean_asv, 4) if mean_asv is not None else None
+        if cfg.cm_llr_max is not None and mean_llr <= cfg.cm_llr_max:
+            out["verdict"] = "response_voice_synthetic"
+        elif cfg.asv_min is not None and mean_asv is not None and mean_asv < cfg.asv_min:
+            out["verdict"] = "response_voice_mismatch"
+        return out
 
     @property
     def history(self) -> List[ChunkResult]:
