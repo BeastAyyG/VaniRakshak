@@ -71,6 +71,8 @@ class ASVModel:
     # every speaker — target and impostor alike. The logistic below is fitted
     # to measured target vs non-target scores so the number means something.
     calibration: Optional[Dict[str, float]] = None
+    # Per-user calibrations for dynamic enrollment (W5)
+    _user_calibrations: Dict[str, Dict[str, float]] = field(default_factory=dict)
     # G8: calibrated score of the anchor's worst (highest) non-target
     # enrolment match. Set by anchor.load_anchor; None when the anchor carries
     # no non-target scores.
@@ -129,7 +131,7 @@ class ASVModel:
         if not self.is_enrolled(user_id):
             return 0.5, False
         cos = self.similarity(user_id, x, sr)
-        cal = self.calibration
+        cal = self._user_calibrations.get(user_id) or self.calibration
         if cal and cal.get("scale"):
             # Logistic centred between the measured target and non-target
             # score clouds; ~1.0 = matches the enrolled voice, ~0.0 = does not.

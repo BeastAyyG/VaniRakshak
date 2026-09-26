@@ -151,7 +151,10 @@ def test_require_audio_fails_a_challenge_graded_without_response_audio():
     while cr is None:
         cr = sess.push_chunk(np.zeros(16000, dtype=np.int16))
     assert cr.trigger_challenge
-    res = sess.grade_challenge(" ".join(cr.challenge["expected_digits"]), 900)
+    # expected_digits was removed from cr.challenge (the wire dict) to prevent leaking
+    # to compromised clients (W2); access internal active_challenge for testing
+    digits = sess._active_challenge.expected_digits if sess._active_challenge else []
+    res = sess.grade_challenge(" ".join(digits), 900)
     assert res["ok"] is False and res["reason"] == "no_response_audio"
     assert res["acoustic"]["windows"] == 0 and sess.blocked
 

@@ -28,8 +28,8 @@ const CLAIMED_IDENTITY_FALLBACK = "narendra_modi";
 // --- CHALLENGE interlock helpers (mirror vanirakshak/challenge/engine.py) --
 type LocalChallenge = {
   phrase: string;
-  expected_digits: string[];
-  expected_full: string;
+  expected_digits?: string[];
+  expected_full?: string;
   instructions: string;
   issued_at_ms: number;
   seed: number;
@@ -55,14 +55,15 @@ function issueLocalChallenge(): LocalChallenge {
 
 // Mirrors ChallengeEngine.grade(): digit-order match + human latency window.
 function gradeChallengeLocally(
-  ch: { expected_digits: string[] },
+  ch: { phrase?: string; expected_digits?: string[] },
   responseText: string,
   latencyMs: number,
 ): { passed: boolean; reason: string } {
+  const targetDigits = ch.expected_digits ?? (ch.phrase ? (ch.phrase.match(/\d/g) || []) : []);
   const responseDigits = (responseText.match(/\d/g) || []) as string[];
   const correctOrder =
-    responseDigits.slice(0, ch.expected_digits.length).join("") ===
-    ch.expected_digits.join("");
+    responseDigits.slice(0, targetDigits.length).join("") ===
+    targetDigits.join("");
   const latencyOk = latencyMs >= 400 && latencyMs <= 4000;
   if (!correctOrder) return { passed: false, reason: "digit_order_mismatch" };
   if (!latencyOk) return { passed: false, reason: "latency_suspicious" };
@@ -488,8 +489,10 @@ export default function Home() {
               if (!challengePendingRef.current) {
                 const ch: LocalChallenge = {
                   phrase: telemetry.challenge.phrase,
-                  expected_digits: telemetry.challenge.expected_digits ?? [],
-                  expected_full: telemetry.challenge.expected_full ?? "",
+                  expected_digits:
+                    telemetry.challenge.expected_digits ??
+                    (telemetry.challenge.phrase.match(/\d/g) || []),
+                  expected_full: telemetry.challenge.expected_full ?? telemetry.challenge.phrase,
                   instructions:
                     telemetry.challenge.instructions ?? "Repeat ONLY the digits, in order, quickly.",
                   issued_at_ms: telemetry.challenge.issued_at_ms ?? Date.now(),

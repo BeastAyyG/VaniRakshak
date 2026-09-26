@@ -43,8 +43,6 @@ class Challenge:
     def to_dict(self) -> dict:
         return {
             "phrase": self.phrase,
-            "expected_digits": self.expected_digits,
-            "expected_full": self.expected_full,
             "instructions": self.instructions,
             "issued_at_ms": self.issued_at_ms,
             "seed": self.seed,

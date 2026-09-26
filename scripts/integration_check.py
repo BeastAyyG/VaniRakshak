@@ -78,11 +78,10 @@ WS_VERDICT_KEYS = [
 ]
 
 # Every key docs/PROTOCOL.md documents on a live challenge object
-# (challenge/engine.py::Challenge.to_dict). expected_digits is a list of
-# single-digit strings; expected_full is the full spoken phrase (a regression
-# guard for the bug where it used to be just the digits, e.g. "8 4" instead
-# of "mango 8 nadi 4").
-CHALLENGE_KEYS = ["phrase", "expected_digits", "expected_full", "instructions", "issued_at_ms", "seed"]
+# (challenge/engine.py::Challenge.to_dict). Note: expected_digits and expected_full
+# were removed from the wire format (docs/13 Amendment 1 & W2) to make the challenge
+# unforgeable by client scripts.
+CHALLENGE_KEYS = ["phrase", "instructions", "issued_at_ms", "seed"]
 
 # The `semantic` block's key set must be identical whether it's idle
 # (session.py::_SEMANTIC_IDLE), degraded (semantic/signal.py::_UNAVAILABLE_BASE),
@@ -531,21 +530,13 @@ def check_ws_stream(live: bool, base_url: str, checks: Checks) -> None:
     if challenge_verdicts:
         ch = challenge_verdicts[0]["challenge"]
         missing_ch = [k for k in CHALLENGE_KEYS if k not in ch]
-        digits_ok = isinstance(ch.get("expected_digits"), list) and all(
-            isinstance(d, str) and len(d) == 1 for d in ch.get("expected_digits", [])
-        )
-        # expected_full must be the full spoken phrase, not just the digits —
-        # i.e. it must contain every word token, not only the digit tokens.
-        full_has_words = bool(ch.get("expected_full")) and any(
-            w.isalpha() for w in str(ch.get("expected_full", "")).split()
-        )
+        phrase_ok = bool(ch.get("phrase")) and isinstance(ch.get("phrase"), str)
+        instructions_ok = bool(ch.get("instructions")) and isinstance(ch.get("instructions"), str)
         checks.record(
             "challenge object has full protocol shape",
-            not missing_ch and digits_ok and full_has_words,
-            f"phrase={ch.get('phrase')!r} expected_full={ch.get('expected_full')!r}"
-            + (f" MISSING={missing_ch}" if missing_ch else "")
-            + ("" if digits_ok else " BAD_DIGITS_TYPE")
-            + ("" if full_has_words else " expected_full missing word tokens"),
+            not missing_ch and phrase_ok and instructions_ok,
+            f"phrase={ch.get('phrase')!r} instructions={ch.get('instructions')!r}"
+            + (f" MISSING={missing_ch}" if missing_ch else ""),
         )
 
     # VR_IMPOSTOR_BLOCK_BELOW override: a deterministic tier-forcing rule that

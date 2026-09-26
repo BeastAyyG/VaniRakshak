@@ -160,12 +160,15 @@ note. `GET /v1/health`'s `models.asv_synthetic` carries the same value.
 **`challenge` field notes:**
 - `phrase` is comma-delimited word/digit tokens ending in a period, e.g.
   `"mango, 8, nadi, 4."` — not prefixed with `"Say:"`.
-- `expected_digits` is a `List[str]`, one character each.
-- `expected_full` is the full spoken phrase as space-separated tokens (words
-  *and* digits, e.g. `"mango 8 nadi 4"`) — not the digits alone.
 - `instructions` is always `"Now repeat ONLY the digits, in order, quickly."`
-  The caller is asked to repeat only the digits; grading only checks digit
-  order plus response latency, never the words.
+  The caller is asked to repeat only the digits; grading checks digit
+  order plus acoustic response evidence, never the words.
+- `issued_at_ms` (int): timestamp when the challenge was issued.
+- `seed` (int): deterministic seed used for generator provenance.
+- Note (docs/13 Amendment 1 & W2): `expected_digits` and `expected_full` are
+  no longer sent in the live WebSocket challenge dictionary to prevent leaking
+  the answer to client scripts. The internal `Challenge` object retains them
+  server-side for grading.
 
 **Challenge outcomes and the interlock — decided (one-shot gate):**
 Every graded challenge (`POST /v1/sessions/{id}/challenge`) is recorded in
@@ -382,6 +385,7 @@ alert payload it already received.
 | `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker` |
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
+| `VR_ENROLL_BYPASS_QA` | `0` | `1` bypasses enrolment audio quality assurance checks (voiced duration ≥ 3.0s, SNR ≥ 10 dB, CM score ≥ 0.0) |
 
 ## 9. Conformance test
 

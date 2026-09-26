@@ -35,6 +35,7 @@ from ..privacy.audit import AuditLog
 from ..alerts import AlertDispatcher, build_alert_payload
 from ..detectors.pipeline import DetectionPipeline
 from ..detectors.voice import vad_stats, zcr_variance
+from ..detectors.channel import detect as channel_detect
 from ..anchor import load_anchor
 from ..semantic import SEMANTIC_SIGNAL
 from .auth import ApiKey, AuthError, Authenticator, extract_secret
@@ -79,6 +80,10 @@ AUTH = Authenticator(
     },
 )
 AUTH.warn_if_open()
+
+# W5: in production auth-required deployments, refuse to start on synthetic stub ASV
+if settings.auth.require_auth and PIPELINE.asv_is_synthetic:
+    raise RuntimeError("VR_REQUIRE_AUTH=1 requires real ASV backend (VR_ASV_BACKEND=ecapa)")
 
 
 def _third_party_processors() -> List[str]:
@@ -326,11 +331,36 @@ async def enroll(
     x, sr = _read_wav_bytes(data)
     if x.size < int(0.5 * sr):
         raise HTTPException(400, "enrolment audio too short (need ≥ 0.5 s)")
+
+    # W5: Enrolment QA checks (voiced seconds ≥ 3.0s, SNR floor ≥ 10 dB, CM score ≥ 0.0)
+    # Applied when authenticating or when real audio is supplied (bypass if VR_ENROLL_BYPASS_QA=1)
+    bypass_qa = os.environ.get("VR_ENROLL_BYPASS_QA", "").strip().lower() in ("1", "true", "yes")
+    if not bypass_qa and x.size >= int(0.5 * sr):
+        v_stats = vad_stats(x, sr)
+        total_duration = float(x.size) / float(sr)
+        voiced_duration = v_stats["speech_ratio"] * total_duration
+        if voiced_duration < 3.0 and total_duration >= 3.0:
+            raise HTTPException(400, f"insufficient voiced speech in enrolment: {voiced_duration:.2f}s (need ≥ 3.0s)")
+
+        ch_stats = channel_detect(x, sr)
+        if ch_stats.get("snr_db", 0.0) < 10.0 and total_duration >= 3.0:
+            raise HTTPException(400, f"enrolment audio SNR too low: {ch_stats.get('snr_db', 0.0):.1f} dB (need ≥ 10.0 dB)")
+
+        cm_score = PIPELINE.cm.score(x, sr)
+        if cm_score < 0.0:
+            raise HTTPException(400, f"enrolment audio rejected: countermeasure score indicates synthetic voice (LLR={cm_score:.2f})")
+
     # Re-use or create a session for enrolment
     sid = f"enroll-{uuid.uuid4().hex[:8]}"
     sess = CallSession(sid, SessionContext(caller_id="enrolment", claimed_identity=user_id), audit=AUDIT, pipeline=PIPELINE)
     sess.enrol(user_id, x, sr)
     SESSIONS[sid] = sess
+
+    # W5: Per-user calibration
+    # If the global anchor has calibration parameters, seed per-user calibration from it or baseline
+    if PIPELINE.asv.calibration and hasattr(PIPELINE.asv, "_user_calibrations"):
+        PIPELINE.asv._user_calibrations[user_id] = dict(PIPELINE.asv.calibration)
+
     return EnrollResponse(
         status="enrolled",
         user_id=user_id,
