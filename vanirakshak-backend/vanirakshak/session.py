@@ -148,6 +148,9 @@ class CallSession:
     def is_enrolled(self, user_id: str) -> bool:
         return self.pipeline.is_enrolled(user_id)
 
+    def unenroll(self, user_id: str) -> bool:
+        return self.pipeline.unenroll(user_id)
+
     def push_chunk(self, pcm: np.ndarray) -> Optional[ChunkResult]:
         """Push a chunk of int16 / float32 mono PCM. Returns a result
         once a new hop-window has accumulated, else None.

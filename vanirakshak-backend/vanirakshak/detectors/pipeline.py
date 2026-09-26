@@ -109,6 +109,9 @@ class DetectionPipeline:
     def is_enrolled(self, user_id: str) -> bool:
         return self.asv.is_enrolled(user_id)
 
+    def unenroll(self, user_id: str) -> bool:
+        return self.asv.unenroll(user_id)
+
     def analyse(self, x: np.ndarray, sr: int, claimed_user: Optional[str] = None) -> WindowResult:
         llr = self.cm.score(x, sr)
         # squash LLR to a [0,1] "genuine" probability (calibrated)

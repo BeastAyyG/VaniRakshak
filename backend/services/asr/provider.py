@@ -95,9 +95,9 @@ def get_asr_provider(provider_name: Optional[str] = None, config: Optional[ASRCo
     elif selected in ("indicconformer", "indic_conformer", "indic"):
         from .indicconformer import IndicConformerASR
         return IndicConformerASR.get_instance(cfg)
-    elif selected in ("whisper", "faster_whisper", "existing_whisper"):
+    elif selected in ("whisper", "faster_whisper", "existing_whisper", "local", "local_whisper"):
         from .whisper_provider import ExistingWhisperASR
         return ExistingWhisperASR.get_instance(cfg)
     else:
-        raise ValueError(f"Unknown ASR provider '{selected}'. Supported: 'groq', 'indicconformer', 'whisper'")
+        raise ValueError(f"Unknown ASR provider '{selected}'. Supported: 'groq', 'indicconformer', 'whisper', 'local'")
 

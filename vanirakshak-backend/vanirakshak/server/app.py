@@ -2,6 +2,7 @@
 
 Endpoints (see ``docs/07-privacy-compliance-and-apis.md``):
   * ``POST /v1/enroll``           enrol a genuine voice (10-20s)
+  * ``DELETE /v1/enroll/{id}``     erase an enrolled voiceprint (DPDP Act 2023)
   * ``POST /v1/analyze``          one-shot WAV/FLAC → risk score
   * ``WS   /v1/stream``           real-time PCM stream → live verdicts
   * ``POST /v1/sessions/{id}/challenge``  grade a challenge response
@@ -199,6 +200,13 @@ class EnrollResponse(BaseModel):
     created_at: str
 
 
+class EnrollDeleteResponse(BaseModel):
+    status: str = "deleted"
+    user_id: str
+    erased_at: str
+    receipt_hash: str
+
+
 class EnrolledSpeakersResponse(BaseModel):
     enrolled: List[str]
     asv_backend: str
@@ -367,6 +375,38 @@ async def enroll(
         embedding_dimension=192,
         audio_retained=False,
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+
+
+@app.delete("/v1/enroll/{user_id}", response_model=EnrollDeleteResponse)
+@app.delete("/api/v1/enroll/{user_id}", response_model=EnrollDeleteResponse)
+def delete_enrollment(request: Request, user_id: str) -> EnrollDeleteResponse:
+    """DPDP Act 2023 Sec 12: Right to correction and erasure of personal biometric data.
+
+    Permanently erases the voiceprint embedding and per-user calibration for user_id.
+    Logs an immutable receipt to the cryptographic audit chain.
+    """
+    key = _guard(request, "enroll", "enroll", acting_as=user_id)
+    if not PIPELINE.is_enrolled(user_id):
+        raise HTTPException(404, f"enrolled voiceprint for user '{user_id}' not found")
+
+    PIPELINE.unenroll(user_id)
+
+    # Immutable receipt chained into DPDP audit log
+    ev = AUDIT.append(
+        session_id=f"erase-{uuid.uuid4().hex[:8]}",
+        caller_id=key.key_id if key else "direct_api",
+        claimed_identity=user_id,
+        risk_score=0.0,
+        tier="ERASED",
+        features={"biometric_erasure": 1.0, "dpdp_section": 12.0},
+    )
+
+    return EnrollDeleteResponse(
+        status="deleted",
+        user_id=user_id,
+        erased_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        receipt_hash=ev.receipt_hash,
     )
 
 

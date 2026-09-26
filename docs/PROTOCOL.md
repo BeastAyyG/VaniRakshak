@@ -386,6 +386,7 @@ alert payload it already received.
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
 | `VR_ENROLL_BYPASS_QA` | `0` | `1` bypasses enrolment audio quality assurance checks (voiced duration ≥ 3.0s, SNR ≥ 10 dB, CM score ≥ 0.0) |
+| `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block: `groq` (default, cloud), `local` / `local_whisper` (on-box faster-whisper, zero retention) |
 
 ## 9. Conformance test
 

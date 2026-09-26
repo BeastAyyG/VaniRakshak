@@ -88,6 +88,10 @@ export interface ForensicReportData {
     }[];
     reason?: string | null;
   } | null;
+  /**
+   * Deterministic tier override: "impostor" | "clone" | null (from session / risk fusion).
+   */
+  tier_override?: "impostor" | "clone" | string | null;
 }
 
 interface ForensicVerdictCardProps {
@@ -252,6 +256,24 @@ export default function ForensicVerdictCard({ report, onDownloadReport }: Forens
             <p className="mt-3.5 text-xs leading-relaxed text-[#a1a1a1] bg-[#121212] p-3.5 rounded-md border border-white/[0.06]">
               {verdictDescription}
             </p>
+
+            {report.tier_override && (
+              <div className="mt-3 flex items-start gap-2.5 rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                <ShieldAlert className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+                <div>
+                  <span className="font-semibold uppercase tracking-wider block text-rose-400">
+                    Deterministic Security Override: {report.tier_override}
+                  </span>
+                  <span className="mt-0.5 block leading-relaxed text-[#d4d4d4]">
+                    {report.tier_override === "clone"
+                      ? "BLOCK — Voice matches enrolled target identity but countermeasure acoustic anomaly indicates a synthetic neural clone."
+                      : report.tier_override === "impostor"
+                      ? "BLOCK — Voice decisively does not match enrolled profile (speaker similarity below security cutoff)."
+                      : `BLOCK — Deterministic interlock triggered (${report.tier_override}).`}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* 4-Vector Evidence Metrics Bar */}
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">

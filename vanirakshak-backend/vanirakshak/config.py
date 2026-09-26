@@ -238,7 +238,8 @@ class SemanticConfig:
         "1", "true", "yes", "on",
     )
     # Named so the compliance surface can disclose exactly who receives audio.
-    provider: str = "groq"
+    # Set VR_SEMANTIC_PROVIDER=local or whisper to use offline zero-retention ASR.
+    provider: str = _env("VR_SEMANTIC_PROVIDER", "groq")
 
 
 @dataclass(frozen=True)

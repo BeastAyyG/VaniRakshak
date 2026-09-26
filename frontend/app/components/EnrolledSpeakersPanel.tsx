@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Users, UserPlus, Loader2, Fingerprint } from "lucide-react";
+import { Users, UserPlus, Loader2, Fingerprint, Trash2 } from "lucide-react";
 
 interface EnrolledSpeakersPanelProps {
   backendUrl: string;
@@ -99,6 +99,25 @@ export default function EnrolledSpeakersPanel({
     }
   };
 
+  const handleErasure = async (userId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`DPDP Act 2023 Sec 12: Permanently erase biometric voiceprint for "${userId}"?`)) return;
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/enroll/${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        onEvent?.(`DPDP Biometric Erasure: Voiceprint for ${userId} permanently erased`, "info");
+        await refresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        onEvent?.(`Erasure failed: ${err.detail || "unknown"}`, "critical");
+      }
+    } catch {
+      onEvent?.("Erasure network error", "critical");
+    }
+  };
+
   const isRealBiometric = asvBackend === "ecapa_tdnn_voxceleb";
 
   return (
@@ -134,19 +153,32 @@ export default function EnrolledSpeakersPanel({
           <span className="text-xs text-[#666666]">No voices enrolled yet.</span>
         )}
         {enrolled.map((userId) => (
-          <button
+          <div
             key={userId}
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelectIdentity(userId)}
-            className={`rounded-full border px-3 py-1.5 font-mono text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[11px] transition ${
               userId === claimedIdentity
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
                 : "border-white/[0.12] bg-[#171717] text-[#a1a1a1] hover:border-white/[0.25] hover:text-white"
             }`}
           >
-            {userId.replace(/_/g, " ")}
-          </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelectIdentity(userId)}
+              className="cursor-pointer focus:outline-none"
+            >
+              {userId.replace(/_/g, " ")}
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(e) => handleErasure(userId, e)}
+              title={`Erase voiceprint for ${userId} (DPDP Act 2023)`}
+              className="rounded p-0.5 text-[#666666] hover:text-rose-400 transition cursor-pointer"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
         ))}
       </div>
 

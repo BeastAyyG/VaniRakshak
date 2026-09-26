@@ -158,6 +158,12 @@ export default function Home() {
   const [activeChallenge, setActiveChallenge] = useState<LocalChallenge | null>(null);
   const [challengeStatus, setChallengeStatus] = useState<"none" | "awaiting" | "passed" | "failed">("none");
   const [challengeResponseText, setChallengeResponseText] = useState<string>("");
+  const [challengeAcoustic, setChallengeAcoustic] = useState<{
+    verdict?: string;
+    windows?: number;
+    cm_mean?: number | null;
+    asv_mean?: number | null;
+  } | null>(null);
   // Latest server tier from the live stream (ALLOW / CHALLENGE / BLOCK).
   const [currentTier, setCurrentTier] = useState<string>("ALLOW");
 
@@ -551,6 +557,7 @@ export default function Home() {
               asv_synthetic: asvSynthetic,
               mean_speaker_sim: asv,
               semantic: telemetry.semantic ?? prev?.semantic ?? null,
+              tier_override: telemetry.metrics?.tier_override ?? prev?.tier_override ?? null,
               dpdp_compliance: {
                 receipt_sha256: telemetry.receipt_hash || "hash-chain-verified",
                 statutory_act: "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
@@ -716,6 +723,9 @@ export default function Home() {
           const data = await res.json();
           passed = Boolean(data.ok);
           reason = data.reason || "ok";
+          if (data.acoustic) {
+            setChallengeAcoustic(data.acoustic);
+          }
         } else {
           const g = gradeChallengeLocally(ch, text, latencyMs);
           passed = g.passed;
@@ -1158,10 +1168,26 @@ export default function Home() {
                 )}
 
                 {challengeStatus === "passed" && (
-                  <p className="text-sm text-emerald-400">✓ Digits correct and latency human-like. Caller re-authenticated — transaction may proceed.</p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-emerald-400">✓ Digits correct and latency human-like. Caller re-authenticated — transaction may proceed.</p>
+                    {challengeAcoustic && (
+                      <p className="font-mono text-xs text-emerald-500/80">
+                        Acoustic verdict: {challengeAcoustic.verdict} ({challengeAcoustic.windows ?? 0} windows analyzed
+                        {challengeAcoustic.cm_mean !== null && challengeAcoustic.cm_mean !== undefined ? `, CM LLR: ${challengeAcoustic.cm_mean.toFixed(2)}` : ""})
+                      </p>
+                    )}
+                  </div>
                 )}
                 {challengeStatus === "failed" && (
-                  <p className="text-sm text-rose-400">✗ Challenge failed. A pre-recording cannot answer a live phrase; response escalated to BLOCK.</p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-rose-400">✗ Challenge failed. A pre-recording cannot answer a live phrase; response escalated to BLOCK.</p>
+                    {challengeAcoustic && (
+                      <p className="font-mono text-xs text-rose-400/80">
+                        Acoustic verdict: {challengeAcoustic.verdict} ({challengeAcoustic.windows ?? 0} windows analyzed
+                        {challengeAcoustic.cm_mean !== null && challengeAcoustic.cm_mean !== undefined ? `, CM LLR: ${challengeAcoustic.cm_mean.toFixed(2)}` : ""})
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </section>

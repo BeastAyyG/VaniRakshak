@@ -114,6 +114,19 @@ class ASVModel:
     def is_enrolled(self, user_id: str) -> bool:
         return user_id in self._enrolments
 
+    def unenroll(self, user_id: str) -> bool:
+        """Erase an enrolled voiceprint and its per-user calibration (DPDP Act 2023).
+
+        Returns True if user_id was enrolled and removed, False otherwise.
+        """
+        removed = False
+        if user_id in self._enrolments:
+            del self._enrolments[user_id]
+            removed = True
+        if hasattr(self, "_user_calibrations") and user_id in self._user_calibrations:
+            del self._user_calibrations[user_id]
+        return removed
+
     def enrolled_user_ids(self) -> list[str]:
         """All enrolled user_ids — lets API/UI layers list enrolled family members
         without reaching into `_enrolments` directly."""
