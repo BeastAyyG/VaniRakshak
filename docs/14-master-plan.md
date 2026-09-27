@@ -6,6 +6,9 @@ It does not replace them. Every pre-registered criterion in `docs/10` and
 threat model and one sequence, records what this change closed, and names the
 gaps no earlier document owned.
 
+> **Status update, 2026-09-27:** see `docs/15-next-steps.md` for where each §6
+> step stands after Phase 2 (STOP-B) and Path A, and for the next steps in order.
+
 ---
 
 ## 1. What it is today (one paragraph, no spin)
