@@ -33,36 +33,78 @@ HINDI_WORDS = ["aam", "nadi", "kela", "suraj", "chai", "tara", "kitaab", "ghar"]
 ENGLISH_WORDS = ["mango", "river", "blue", "paper", "table", "green", "orange", "cloud"]
 DIGITS = list("0123456789")
 
-# Spoken forms an ASR engine may return for each digit. Hindi entries cover
-# common romanisations and Devanagari. "no" is left out on purpose (English
-# "no" is far likelier than a misspelt "nau").
+# Spoken forms an ASR engine may return for each digit: English, romanised
+# Hindi as Whisper actually spells it (docs/14 W2.c: "shuni", "punch",
+# "chae", "saat", "no" for nau), and Devanagari, which is matched through
+# _devanagari_key below rather than by exact spelling.
 _DIGIT_WORDS = {
-    "0": ["zero", "oh", "shunya", "shoonya", "sunya", "शून्य"],
-    "1": ["one", "ek", "एक"],
-    "2": ["two", "do", "दो"],
-    "3": ["three", "teen", "tin", "तीन"],
-    "4": ["four", "char", "chaar", "चार"],
-    "5": ["five", "paanch", "panch", "पांच", "पाँच"],
-    "6": ["six", "chhe", "chhah", "chah", "che", "छह", "छः", "छे"],
-    "7": ["seven", "saat", "sat", "सात"],
-    "8": ["eight", "aath", "ath", "आठ"],
-    "9": ["nine", "nau", "nao", "नौ"],
+    "0": ["zero", "oh", "shunya", "shoonya", "sunya", "shuni", "shunni", "shouni", "shuny", "sooni"],
+    "1": ["one", "ek", "ik", "ekk"],
+    "2": ["two", "do"],
+    "3": ["three", "teen", "tin", "deen", "dean", "theen"],
+    "4": ["four", "char", "chaar"],
+    "5": ["five", "paanch", "panch", "paach", "pach", "punch"],
+    "6": ["six", "chhe", "chhah", "chah", "che", "chae", "cheh"],
+    "7": ["seven", "saat", "sat", "satt", "saad", "saath"],
+    "8": ["eight", "aath", "ath", "aat"],
+    "9": ["nine", "nau", "nao", "no"],
 }
 _WORD_TO_DIGIT = {w: d for d, words in _DIGIT_WORDS.items() for w in words}
-_DEVANAGARI_NUMERALS = str.maketrans("०१२३४५६७८९", "0123456789")
+_DEVANAGARI_NUMERALS = str.maketrans("०१२३४५६७८९",
+                                     "0123456789")
 # \w alone drops Devanagari vowel signs (category Mn/Mc), splitting "पाँच".
 _TOKEN = re.compile(r"[\wऀ-ॿ]+")
 
+# Devanagari spelling varies a lot in ASR output for the same spoken word
+# (शून्य / शूने / शुने for 0, पांच / पाच for 5, साथ for सात). Rather
+# than list spellings, reduce a token to a consonant skeleton: drop vowel
+# signs, chandrabindu, nukta, virama and visarga; read anusvara as n; fold
+# independent vowels into three classes; merge aspirated and retroflex
+# consonants into their plain dental pairs and the sibilants into one.
+_DEVA_DROP = {chr(c) for c in range(0x093E, 0x094E)} | {"ँ", "़", "ः", "ॢ", "ॣ"}
+_DEVA_MAP = {
+    "ं": "न",                                     # anusvara -> n
+    "अ": "अ", "आ": "अ",               # a, aa
+    "इ": "ए", "ई": "ए", "ए": "ए", "ऐ": "ए",  # i, ii, e, ai
+    "उ": "ओ", "ऊ": "ओ", "ओ": "ओ", "औ": "ओ",  # u, uu, o, au
+    "ख": "क", "घ": "ग", "छ": "च", "झ": "ज",  # kh gh chh jh
+    "ठ": "त", "ढ": "द", "ट": "त", "ड": "द",  # Th Dh T D
+    "थ": "त", "ध": "द", "फ": "प", "भ": "ब",  # th dh ph bh
+    "ण": "न", "श": "स", "ष": "स",                    # N, sh, Sh
+}
+_DEVA_KEYS = {
+    "सनय": "0", "सन": "0",       # shunya
+    "एक": "1",       # ek
+    "द": "2",                                           # do
+    "तन": "3",                                    # teen
+    "चर": "4",                                    # char
+    "पनच": "5", "पच": "5",       # paanch
+    "चह": "6", "च": "6",                    # chhah, chhe
+    "सत": "7",                                    # saat
+    "अत": "8",                                    # aath
+    "न": "9",                    # nau
+}
+
+
+def _devanagari_key(tok: str) -> str:
+    key = "".join(_DEVA_MAP.get(c, c) for c in tok if c not in _DEVA_DROP)
+    # Collapse doubled letters (gemination): शुन्ने and शुने are one word.
+    return "".join(c for i, c in enumerate(key) if i == 0 or c != key[i - 1])
+
 
 def extract_digits(text: str) -> List[str]:
-    """Digits in *text*, in spoken order: numerals ("35", "३५") and number
-    words ("three five", "teen paanch", "तीन पांच")."""
+    """Digits in *text*, in spoken order: numerals ("35", Devanagari numerals)
+    and number words in English, romanised Hindi or Devanagari."""
     out: List[str] = []
     for tok in _TOKEN.findall((text or "").lower().translate(_DEVANAGARI_NUMERALS)):
         if tok.isdigit():
             out.extend(tok)
         elif tok in _WORD_TO_DIGIT:
             out.append(_WORD_TO_DIGIT[tok])
+        elif any("ऀ" <= c <= "ॿ" for c in tok):
+            d = _DEVA_KEYS.get(_devanagari_key(tok))
+            if d is not None:
+                out.append(d)
     return out
 
 

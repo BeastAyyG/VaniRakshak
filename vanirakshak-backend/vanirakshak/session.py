@@ -317,7 +317,11 @@ class CallSession:
         if self._challenge_audio_samples < int(0.3 * self._sr):
             return None, "no_response_audio", None
         audio = np.concatenate(self._challenge_audio)
-        text, err = self._transcriber.transcribe(audio, self._sr)
+        if hasattr(self._transcriber, "transcribe_candidates"):
+            cands, err = self._transcriber.transcribe_candidates(audio, self._sr)
+            text = None if cands is None else "\n".join(cands)
+        else:
+            text, err = self._transcriber.transcribe(audio, self._sr)
         if text is None:
             return None, "challenge_transcriber_unavailable", err
         return text, None, None
@@ -376,8 +380,13 @@ class CallSession:
                 if transcript is None:
                     passed, reason, conf = False, str(fail_code), 0.0
                 else:
-                    passed, reason, conf = self.challenge.grade(
-                        self._active_challenge, transcript, response_latency_ms, **band)
+                    # One reading per language the engine was told to expect
+                    # (one per line). Any reading holding the digits passes;
+                    # otherwise the first reading's failure is reported.
+                    graded = [self.challenge.grade(self._active_challenge, reading,
+                                                   response_latency_ms, **band)
+                              for reading in transcript.split("\n")]
+                    passed, reason, conf = next((g for g in graded if g[0]), graded[0])
         acoustic = self._score_challenge_audio()
         if passed and acoustic["verdict"] != "pass":
             passed, reason, conf = False, acoustic["verdict"], 0.05

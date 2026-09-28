@@ -1,0 +1,120 @@
+{
+  "operating_threshold": 4.706552124023438,
+  "subset_seed": 20260928,
+  "n": 20000,
+  "n_bonafide": 4000,
+  "per_attack_cap": 1000,
+  "gate_manifest_sha256": "0696d10b8721a077662cc277ebd185e2e04df34ff6309a24a5f4a17e2a9b5f7e",
+  "conditions": {
+    "clean": {
+      "bonafide_frr_pct": 7.98,
+      "per_attack_miss_pct": {
+        "A17": 0.8,
+        "A18": 2.4,
+        "A19": 35.3,
+        "A20": 49.9,
+        "A21": 7.5,
+        "A22": 15.4,
+        "A23": 4.3,
+        "A24": 31.6,
+        "A25": 15.3,
+        "A26": 6.7,
+        "A27": 20.8,
+        "A28": 58.2,
+        "A29": 0.7,
+        "A30": 9.4,
+        "A31": 21.32,
+        "A32": 30.8
+      },
+      "worst_attack": "A28",
+      "worst_miss_pct": 58.2,
+      "pcm_sha256": "a62025573817905c38451bce6c5829f73a56d7368464f9770151bab6e81b528e",
+      "parity_vs_phase2_dump": {
+        "max_abs_diff": 3.96387,
+        "p99_abs_diff": 1.16131
+      }
+    },
+    "g711u": {
+      "bonafide_frr_pct": 7.0,
+      "per_attack_miss_pct": {
+        "A17": 1.5,
+        "A18": 2.9,
+        "A19": 32.6,
+        "A20": 47.8,
+        "A21": 12.6,
+        "A22": 19.7,
+        "A23": 8.9,
+        "A24": 37.1,
+        "A25": 17.9,
+        "A26": 7.6,
+        "A27": 30.4,
+        "A28": 67.4,
+        "A29": 1.0,
+        "A30": 15.9,
+        "A31": 30.93,
+        "A32": 40.1
+      },
+      "worst_attack": "A28",
+      "worst_miss_pct": 67.4,
+      "pcm_sha256": "309f11aa4a101cbdc969ae4c21563e50b8843fbc55aff4fb389b040bff8a7988"
+    },
+    "amrnb_12k2": {
+      "bonafide_frr_pct": 8.7,
+      "per_attack_miss_pct": {
+        "A17": 1.3,
+        "A18": 3.4,
+        "A19": 37.1,
+        "A20": 52.3,
+        "A21": 10.3,
+        "A22": 18.8,
+        "A23": 9.6,
+        "A24": 30.4,
+        "A25": 17.5,
+        "A26": 9.5,
+        "A27": 31.3,
+        "A28": 63.6,
+        "A29": 1.1,
+        "A30": 16.3,
+        "A31": 28.23,
+        "A32": 40.3
+      },
+      "worst_attack": "A28",
+      "worst_miss_pct": 63.6,
+      "pcm_sha256": "0eacd3f00e794793e8a5c87fe7e8cc3d4111c5a77c02ab138b90ce19d12d9f3a"
+    },
+    "amrwb_12k65": {
+      "bonafide_frr_pct": 8.83,
+      "per_attack_miss_pct": {
+        "A17": 0.9,
+        "A18": 4.9,
+        "A19": 34.1,
+        "A20": 52.7,
+        "A21": 9.5,
+        "A22": 15.5,
+        "A23": 7.3,
+        "A24": 31.8,
+        "A25": 17.3,
+        "A26": 9.9,
+        "A27": 24.6,
+        "A28": 59.0,
+        "A29": 0.9,
+        "A30": 11.8,
+        "A31": 23.72,
+        "A32": 34.8
+      },
+      "worst_attack": "A28",
+      "worst_miss_pct": 59.0,
+      "pcm_sha256": "b4e48bedc73e9adeb1296a0a2e75718579bf57bfc452bfb0146e47bf499aeb6a"
+    }
+  },
+  "unreadable_rows": 3,
+  "stop_c": {
+    "rule": "docs/13 \u00a77: STOP-C if every candidate's worst narrowband miss is >= 50 %",
+    "narrowband_conditions": [
+      "g711u",
+      "amrnb_12k2"
+    ],
+    "incumbent_worst_narrowband_miss_pct": 67.4,
+    "triggered": true
+  }
+}

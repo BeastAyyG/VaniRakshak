@@ -173,3 +173,20 @@ over codecs (W2.c).
 hear Hindi digit words. Fix the engine (language hint, larger model or
 IndicConformer), then measure on real speech, before relying on the
 server-graded challenge with Hindi-speaking callers.
+
+### GPU box run (2026-09-28): T1, T2, STOP-C, Hindi ASR
+
+Run by `scripts/gpu_pipeline.py` (resumable, checkpointed per stage and per
+1,024-row shard) and watched on `scripts/gpu_dashboard.py`.
+
+| Item | Result | Evidence |
+|---|---|---|
+| **T1** | **P1-S pass** (+99.75 pp at the worst cell), **P1-F pass** (never rises). Genuine false-BLOCK 7.5–12 % per call on gate: **needs a decision before the clone rule goes live.** | docs/13 §11; `reports/t1_*_gate.json` |
+| **T2** | **P1-T pass** on CUDA fp16 and CPU fp32 with ECAPA + AASIST at the fitted point (28/29; the miss is a fixture that cannot reach the 3-window trigger) | `reports/t2_p1t_integration.json`; `vanirakshak-backend/examples/decision_layer_fitted.env` |
+| **D2 / STOP-C** | **Triggered**: worst narrowband miss 67.4 % (G.711, A28). No telephony claim for the incumbent family. | docs/13 §12; `reports/d2_telephony_stopc_incumbent.json` |
+| **W2.c Hindi** | small + forced hi/en + Devanagari normaliser: Hindi 25 % → 80.4 %, English 99.6 %, 0 % attacks accepted | docs/14 W2.c; `reports/w2c_hindi_asr_engines.json` |
+
+**Not done, and why:** CM training (W3) stays off, as STOP-B and STOP-C
+both require a `docs/16` pre-registration judged on D1/D2 audio first.
+IndicConformer needs gated Hugging Face access on your account. D1 needs
+consenting speakers.

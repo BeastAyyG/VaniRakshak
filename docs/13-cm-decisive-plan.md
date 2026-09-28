@@ -603,3 +603,61 @@ not a standalone detector; L1 rests on ASV plus the decision layer (docs/14 §2)
 
 Still open under this plan: Phase 1 grading (docs/14 §6 step 1, STOP-A clock)
 and STOP-C, which needs the real-codec set (docs/15 D2).
+
+## 11. Phase 1 result (recorded 2026-09-28) — P1-S, P1-F, P1-T pass
+
+Graded on the GPU box by `scripts/gpu_pipeline.py` (stages `t1_calibrate`,
+`t1_grade`, `t2_cuda`, `t2_cpu`). Thresholds were chosen on the **dev** dump
+(`C:\vr-out\p1\dev\incumbent.npz`, 140,950 rows) and measured on the **gate
+split** dump (`C:\vr-out\p2\gate\incumbent.npz`, 608,848 rows). Records:
+`reports/t1_decision_layer_calibration_gate.json`, `reports/t1_grade_gate.json`,
+`reports/t2_p1t_integration.json`. No criterion was changed.
+
+Chosen on dev: `operating_threshold` 4.7066 (5th percentile of dev bonafide),
+`VR_CLONE_CM_LLR_MAX` −2.4568 (`VR_CLONE_MIN_WINDOWS` 3),
+`VR_CHALLENGE_CM_LLR_MAX` 0.5757 (`VR_CHALLENGE_MIN_WINDOWS` 2),
+`VR_CHALLENGE_TRIGGER_CONSECUTIVE` 3.
+
+| Criterion | Result |
+|---|---|
+| **P1-S** (P(BLOCK \| spoof), worst attack, rise ≥ 30 pp at the worst ASV × channel cell) | **Pass.** +99.75 pp at the worst cell (ASV 0.80, wideband); at least +86 pp in every cell. |
+| **P1-F** (P(challenge within 60 s \| genuine) rises ≤ 5 pp) | **Pass.** It never rises. It falls by 74–95 pp in 6 of 8 cells and is unchanged (100 %) at ASV 0.80 narrowband. |
+| **P1-T** (real-backend integration check, CUDA fp16 and CPU fp32) | **Pass on both.** ECAPA and the AASIST CM at the fitted operating point were confirmed loaded. demo_01 ALLOW, demo_02 ALLOW, demo_04 BLOCK on every window. 28/29 checks: the miss is "a challenge fired on the WS path", whose 6-window fixture cannot reach the fitted 3-consecutive trigger. Not a P1-T condition. |
+
+**Not pre-registered, and material:** with the clone rule on, **7.5–12 % of
+genuine calls end in BLOCK** on the gate split. The dev budget was 1 % at ASV
+1.0. That is dev→eval shift in bonafide CM scores. Also, at ASV 0.80
+narrowband every genuine call is still challenged. Neither changes the grade.
+Both must be fixed or accepted by a person before the clone rule is switched
+on for real callers. Windows are still drawn i.i.d. per call (no speaker
+column), so these numbers are optimistic about multi-window averaging.
+
+STOP-A does not apply. L1 can now be claimed for the decision layer *as
+measured here*, with the false-BLOCK caveat above stated next to it.
+
+## 12. Telephony result (recorded 2026-09-28) — STOP-C triggered
+
+Measured by `scripts/gpu_pipeline.py` stage `d2_telephony`
+(`reports/d2_telephony_stopc_incumbent.json`). The incumbent was scored on a
+fixed subset of the gate split: 4,000 bonafide and up to 1,000 rows per
+attack, seed 20260928, 20,000 rows, 3 unreadable files excluded. Each row was
+scored clean and after a real codec round trip on the raw utterance (G.711
+mu-law via bit-exact `audioop`; AMR-NB 12.2k and AMR-WB 12.65k via ffmpeg
+`libopencore_amrnb` / `libvo_amrwbenc`), then windowed and normalised exactly
+as in Phase 2. Nothing was written to `C:` (transcoding in memory). The
+operating point is the T1 dev threshold (raw LLR 4.7066). Clean parity with
+the Phase 2 dump for the same rows: p99 |ΔLLR| 1.16, from fp16 batch shapes.
+
+| Channel | Bonafide FRR | Worst attack miss |
+|---|---|---|
+| clean | 7.98 % | A28 58.2 % |
+| G.711u | 7.00 % | A28 **67.4 %** |
+| AMR-NB 12.2k | 8.70 % | A28 63.6 % |
+| AMR-WB 12.65k | 8.83 % | A28 59.0 % |
+
+**STOP-C (§7) is triggered:** the only candidate's worst narrowband miss is
+67.4 % (≥ 50 %). The frozen WavLM + AASIST-L family is declared non-viable
+for PSTN, and **no telephony coverage claim may be made for it.** Most of the
+gap already exists on clean audio (A28 58.2 %). The codecs add 5–9 pp to it.
+Any new CM (docs/15 D3, `docs/16`) must be judged on these channels as its
+primary evaluation.

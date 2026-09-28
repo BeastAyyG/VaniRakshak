@@ -1,0 +1,516 @@
+{
+  "what": "Challenge ASR on TTS answers (edge-tts hi-IN / en-IN neural voices); a proxy for real callers, not a friction measurement",
+  "method": "one decode per language in the engine key with that language forced; pass if any reading holds the two digits in order. The Devanagari normaliser was designed from hi-IN-SwaraNeural failures; hi-IN-MadhurNeural was not inspected (held-out voice).",
+  "pairs": 40,
+  "voices": {
+    "hi-IN-SwaraNeural": "hi",
+    "hi-IN-MadhurNeural": "hi",
+    "en-IN-NeerjaNeural": "en",
+    "en-IN-PrabhatNeural": "en"
+  },
+  "channels": [
+    "clean",
+    "g711u",
+    "amrnb_12k2"
+  ],
+  "engines": {
+    "tiny/auto": {
+      "label": "faster-whisper/tiny/auto/cuda",
+      "hi_pass_pct": 25.0,
+      "en_pass_pct": 96.7,
+      "per_cell_pass_pct": {
+        "hi/clean": 32.5,
+        "en/clean": 97.5,
+        "hi/g711u": 25.0,
+        "en/g711u": 96.2,
+        "hi/amrnb_12k2": 17.5,
+        "en/amrnb_12k2": 96.2
+      },
+      "per_voice_pass_pct": {
+        "hi-IN-SwaraNeural": 25.8,
+        "hi-IN-MadhurNeural": 24.2,
+        "en-IN-NeerjaNeural": 95.0,
+        "en-IN-PrabhatNeural": 98.3
+      },
+      "attack_false_accept_pct": {
+        "tts_wrong_hi": 0.0,
+        "noise": 0.0,
+        "vocoder": 0.0
+      },
+      "ms_per_answer": 127.8,
+      "failed_examples": [
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "90",
+          "heard": "너? 시원해"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "車丁"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "44",
+          "heard": "Chad Chad"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "97",
+          "heard": "No, sad."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "20",
+          "heard": "너, 시원해"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "05",
+          "heard": "Shunni vach."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "30",
+          "heard": "ที่น ชุนนี่"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "16",
+          "heard": "1, 채"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "47",
+          "heard": "Chaud Saad"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "69",
+          "heard": "채널"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "21",
+          "heard": "до 1."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "31",
+          "heard": "Dean Egg."
+        }
+      ]
+    },
+    "tiny/hi,en": {
+      "label": "faster-whisper/tiny/hi,en/cuda",
+      "hi_pass_pct": 36.2,
+      "en_pass_pct": 97.9,
+      "per_cell_pass_pct": {
+        "hi/clean": 43.8,
+        "en/clean": 97.5,
+        "hi/g711u": 36.2,
+        "en/g711u": 97.5,
+        "hi/amrnb_12k2": 28.8,
+        "en/amrnb_12k2": 98.8
+      },
+      "per_voice_pass_pct": {
+        "hi-IN-SwaraNeural": 37.5,
+        "hi-IN-MadhurNeural": 35.0,
+        "en-IN-NeerjaNeural": 95.8,
+        "en-IN-PrabhatNeural": 100.0
+      },
+      "attack_false_accept_pct": {
+        "tts_wrong_hi": 0.0,
+        "noise": 0.0,
+        "vocoder": 0.0
+      },
+      "ms_per_answer": 126.0,
+      "failed_examples": [
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "90",
+          "heard": "No, Shurni. | No, shunny."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "Chen Bin. | Chet Dean."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "44",
+          "heard": "chad chad | Chad Chad"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "97",
+          "heard": "No, Sad. | No, sad."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "20",
+          "heard": "Do shune. | Do Shunny."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "05",
+          "heard": "Shunni vach. | Shunni Vach."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "30",
+          "heard": "Thin, shune. | Thin, shunny."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "47",
+          "heard": "Chaud Saad | Chad, Sad."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "31",
+          "heard": "Dean Egg. | Dean Egg."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "02",
+          "heard": "Shunny Do | Shunny Do."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "36",
+          "heard": "Dean Chen. | Dean Chen."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "10",
+          "heard": "1. Shunny | 1. Shunny"
+        }
+      ]
+    },
+    "small/hi,en": {
+      "label": "faster-whisper/small/hi,en/cuda",
+      "hi_pass_pct": 80.4,
+      "en_pass_pct": 99.6,
+      "per_cell_pass_pct": {
+        "hi/clean": 91.2,
+        "en/clean": 100.0,
+        "hi/g711u": 77.5,
+        "en/g711u": 100.0,
+        "hi/amrnb_12k2": 72.5,
+        "en/amrnb_12k2": 98.8
+      },
+      "per_voice_pass_pct": {
+        "hi-IN-SwaraNeural": 84.2,
+        "hi-IN-MadhurNeural": 76.7,
+        "en-IN-NeerjaNeural": 99.2,
+        "en-IN-PrabhatNeural": 100.0
+      },
+      "attack_false_accept_pct": {
+        "tts_wrong_hi": 0.0,
+        "noise": 0.0,
+        "vocoder": 0.0
+      },
+      "ms_per_answer": 422.2,
+      "failed_examples": [
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "64",
+          "heard": "च्या चार | Chachar"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "चट्टिं | Chatting."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "69",
+          "heard": "चेख नो | Check No."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "29",
+          "heard": "दोग नो | Do not."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "29",
+          "heard": "दोग नो | Do not."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "36",
+          "heard": "दीम चे | theme chat"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "67",
+          "heard": "च्या साथ | Chai Sat!"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "g711u",
+          "digits": "63",
+          "heard": "के भीं | Ke bim."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "g711u",
+          "digits": "44",
+          "heard": "चाड, चाड | Chod, Chod"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "g711u",
+          "digits": "43",
+          "heard": "चार तीम | 4. Theme"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "g711u",
+          "digits": "20",
+          "heard": "2. शूलने | Do, show me."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "g711u",
+          "digits": "31",
+          "heard": "भीन एक | Dean Egg."
+        }
+      ]
+    },
+    "medium/hi,en": {
+      "label": "faster-whisper/medium/hi,en/cuda",
+      "hi_pass_pct": 77.1,
+      "en_pass_pct": 96.2,
+      "per_cell_pass_pct": {
+        "hi/clean": 83.8,
+        "en/clean": 93.8,
+        "hi/g711u": 72.5,
+        "en/g711u": 97.5,
+        "hi/amrnb_12k2": 75.0,
+        "en/amrnb_12k2": 97.5
+      },
+      "per_voice_pass_pct": {
+        "hi-IN-SwaraNeural": 88.3,
+        "hi-IN-MadhurNeural": 65.8,
+        "en-IN-NeerjaNeural": 96.7,
+        "en-IN-PrabhatNeural": 95.8
+      },
+      "attack_false_accept_pct": {
+        "tts_wrong_hi": 0.0,
+        "noise": 0.0,
+        "vocoder": 0.0
+      },
+      "ms_per_answer": 845.4,
+      "failed_examples": [
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "चे धिन | Chaerin"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "36",
+          "heard": "धिन चे | Din Chae"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "चेटिंग | Chatting."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "20",
+          "heard": "दोशूने | Don't shoot me"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "30",
+          "heard": "दीन शूनी | "
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "15",
+          "heard": "एक बाच | "
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "51",
+          "heard": "बाज एक | But I..."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "37",
+          "heard": "दीन साथ | Dean is up."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "29",
+          "heard": "दोग नो | Dogna."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "29",
+          "heard": "दोग नो | Dogna."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "36",
+          "heard": "धीन चे | team check"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "49",
+          "heard": "चार्णो | chart no"
+        }
+      ]
+    },
+    "large-v3-turbo/hi,en": {
+      "label": "faster-whisper/large-v3-turbo/hi,en/cuda",
+      "hi_pass_pct": 78.3,
+      "en_pass_pct": 95.0,
+      "per_cell_pass_pct": {
+        "hi/clean": 82.5,
+        "en/clean": 97.5,
+        "hi/g711u": 82.5,
+        "en/g711u": 95.0,
+        "hi/amrnb_12k2": 70.0,
+        "en/amrnb_12k2": 92.5
+      },
+      "per_voice_pass_pct": {
+        "hi-IN-SwaraNeural": 90.0,
+        "hi-IN-MadhurNeural": 66.7,
+        "en-IN-NeerjaNeural": 93.3,
+        "en-IN-PrabhatNeural": 96.7
+      },
+      "attack_false_accept_pct": {
+        "tts_wrong_hi": 0.0,
+        "noise": 0.0,
+        "vocoder": 0.0
+      },
+      "ms_per_answer": 418.2,
+      "failed_examples": [
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "90",
+          "heard": "जुन्य | No. Sunni."
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "चे टीम | 채 띵"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "05",
+          "heard": "शोन्ने पाट | Shunni, Pat"
+        },
+        {
+          "voice": "hi-IN-SwaraNeural",
+          "channel": "clean",
+          "digits": "96",
+          "heard": "छो छे | no chê"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "63",
+          "heard": "छैतीं | Chatting."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "05",
+          "heard": "शुन्य बाच्च | Shunye Parch"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "69",
+          "heard": "चैक नो | Check not."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "15",
+          "heard": "एक बाच्च | Ich baue"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "51",
+          "heard": "बाच एक | Part 1"
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "29",
+          "heard": "दोग नो | Dog no."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "29",
+          "heard": "दोग नो | Dog no."
+        },
+        {
+          "voice": "hi-IN-MadhurNeural",
+          "channel": "clean",
+          "digits": "64",
+          "heard": "चाह चाहर | Check, John."
+        }
+      ]
+    }
+  },
+  "date": "2026-09-28",
+  "decision": "Default VR_CHALLENGE_ASR_MODEL=small with VR_CHALLENGE_ASR_LANGUAGES=hi,en: best Hindi and English pass rates, best on the held-out voice (hi-IN-MadhurNeural), half medium's latency. Larger models did not help.",
+  "full_readings": "C:/vr-out/w2c/engine_v2_*.json (per-clip engine output, for offline re-grading)"
+}
