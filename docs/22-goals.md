@@ -1,4 +1,4 @@
-# 17 — Goals: everything still open, by outcome
+# 22 — Goals: everything still open, by outcome
 
 Written 2026-09-28, after PRs #12, #15 and #14. Goal-wise, not time-wise:
 each goal says what "done" means, who can do it, and what it waits on.
@@ -7,7 +7,7 @@ each goal says what "done" means, who can do it, and what it waits on.
 **Owner key.** **You**: needs the owner's accounts, people, money or a
 legal/product decision. **Core**: design-sensitive engineering; do it with
 full context. **Agent**: small and self-contained; the task card in
-`docs/18-agent-tasks.md` is enough.
+`docs/23-agent-tasks.md` is enough.
 
 ## Where things stand
 
@@ -65,14 +65,16 @@ file for every speaker.
 ## G3 — A spoof detector that works on phone lines (W3, docs/15 D3)
 *Why:* STOP-C. Nothing may claim telephony coverage until this passes.
 **Owner:** Core. Waits on G2.
-- [ ] Write `docs/16`, the pre-registration, **before** any training: arms,
+- [x] Write `docs/16`, the pre-registration, **before** any training (done
+      2026-09-29; it also records that `ml/augment.py`'s codec branch clipped
+      normalised audio, which confounds docs/20–21). Arms,
       ≥ 3 seeds per arm, margins from those seeds, G2 eval as primary and
       ASVspoof 5 as secondary, STOP rules.
 - [ ] Arms to pre-register: encoder fine-tune (`--unfreeze-top-n`); larger
       SSL frontend (WavLM-Large / XLS-R-300M); codec + RawBoost augmentation
       tuned on dev; score fusion with the S42+S43 control.
-- [ ] Train on this GPU box, checkpointed and on the dashboard (add stages to
-      `scripts/gpu_pipeline.py`).
+- [ ] Train on this GPU box, checkpointed and on the dashboard: **running**
+      (`scripts/gpu_pipeline.py` stages `g2_*`, arms C and R, seeds 42/43/44).
 - [ ] Re-run T1 (thresholds) and STOP-C with the winner.
 
 **Done when** the worst narrowband miss is < 50 % on the G2 eval set, graded
@@ -95,8 +97,9 @@ speech over AMR-NB and G.711.
 
 ## G5 — Evaluation you can trust
 **Owner:** Core.
-- [ ] Speaker-grouped session simulation instead of i.i.d. windows (W1.b);
-      needs the G2 speaker column.
+- [ ] Speaker-grouped session simulation instead of i.i.d. windows (W1.b):
+      **running on ASVspoof 5** via its protocol speaker ids (stage
+      `g1_speaker_grouped`); repeat on G2 data when it exists.
 - [ ] Refit fusion weights with a **session-level** objective (W1.c); fixes
       "ASV 0.80 narrowband challenges every genuine call".
 - [ ] Ship a consented non-target cohort so per-user ASV calibration is
@@ -122,7 +125,7 @@ from real-condition audio.
 **Done when** a lawyer has signed off the consent flow and every claim.
 
 ## G7 — Runs as a product (W7)
-**Owner:** Core; Agent for the pieces in `docs/18`.
+**Owner:** Core; Agent for the pieces in `docs/23`.
 - [ ] Ingestion: SIP/RTP media fork for carriers/contact centres; Android
       uses the backend stream.
 - [ ] One detector: retire or clearly label the Android on-device heuristic.

@@ -1,6 +1,6 @@
-# 18 — Small tasks for any agent
+# 23 — Small tasks for any agent
 
-Self-contained cards from `docs/17-goals.md`. Each fits in one PR and needs no
+Self-contained cards from `docs/22-goals.md`. Each fits in one PR and needs no
 design decision. Before starting: read `AGENTS.md` and `CONTRIBUTING.md`;
 branch from `main` as `fix/…`, `feat/…` or `docs/…`; one card per PR.
 
@@ -104,7 +104,7 @@ at the right level; keep the messages.
 **Done:** no `print(` left in `vanirakshak-backend/vanirakshak/` outside
 `cli/`; tests pass.
 
-### A12 — Voiceprint retention purge (docs/17 G6)
+### A12 — Voiceprint retention purge (docs/22 G6)
 Add a retention setting in days (unset = keep forever; prefix it like
 `VR_ENROL_STORE_PATH`) to `EnrolmentConfig` in `config.py`. At start-up, and from
 a new purge script under `scripts/`, erase store records whose `created_at` is older than that, through
@@ -112,7 +112,7 @@ a new purge script under `scripts/`, erase store records whose `created_at` is o
 as `DELETE /v1/enroll`). Document the variable in PROTOCOL.md §8.
 **Done:** a test with a fake clock purges an old record and keeps a new one.
 
-### A13 — Label the Android heuristic honestly (docs/17 G7)
+### A13 — Label the Android heuristic honestly (docs/22 G7)
 In `vanirakshak-android`, the on-device `VaniLiveVoiceAnalyzer` produces an
 untrained "fake" score. Wherever it is shown to the user, label it
 "on-device heuristic — not a trained detector", and prefer the backend verdict
@@ -123,7 +123,7 @@ when one is available. No model or threshold changes.
 
 ## Not for a small agent
 
-These need full context or an owner decision (see `docs/17`): G1 step-up and
+These need full context or an owner decision (see `docs/22`): G1 step-up and
 shadow mode, `docs/16` and any CM training (G3), data collection and consent
 design (G2, G6), fusion refit and speaker-grouped simulation (G5), threshold
 changes of any kind.
