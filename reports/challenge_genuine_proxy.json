@@ -1,0 +1,244 @@
+{
+  "what": "genuine-answer PROXY: SAPI voices saying the right digits (docs/14 W2.c)",
+  "not_measured": "real people, real Hindi speech, AMR codecs",
+  "provider": "local",
+  "trials": 15,
+  "latency_band_ms": [
+    400,
+    4000
+  ],
+  "cm_check": "off (transcript and latency gates only)",
+  "date": "2026-09-28",
+  "cells": {
+    "Microsoft David Desktop / en / clean": {
+      "n": 15,
+      "pass_rate": 1.0,
+      "reasons": {
+        "ok": 15
+      },
+      "failed_examples": []
+    },
+    "Microsoft David Desktop / en / g711": {
+      "n": 15,
+      "pass_rate": 1.0,
+      "reasons": {
+        "ok": 15
+      },
+      "failed_examples": []
+    },
+    "Microsoft David Desktop / en / g711_snr15": {
+      "n": 15,
+      "pass_rate": 0.8,
+      "reasons": {
+        "ok": 12,
+        "digit_order_mismatch": 3
+      },
+      "failed_examples": [
+        {
+          "digits": "89",
+          "transcript": "8th 9",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 700
+        },
+        {
+          "digits": "61",
+          "transcript": "Swix 1",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 850
+        },
+        {
+          "digits": "87",
+          "transcript": "8th 7th",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 700
+        }
+      ]
+    },
+    "Microsoft David Desktop / hi_roman / clean": {
+      "n": 15,
+      "pass_rate": 0.0,
+      "reasons": {
+        "digit_order_mismatch": 15
+      },
+      "failed_examples": [
+        {
+          "digits": "61",
+          "transcript": "G,E,K",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "03",
+          "transcript": "瞬夜 停",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "89",
+          "transcript": "Odd. Now.",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        }
+      ]
+    },
+    "Microsoft David Desktop / hi_roman / g711": {
+      "n": 15,
+      "pass_rate": 0.0,
+      "reasons": {
+        "digit_order_mismatch": 15
+      },
+      "failed_examples": [
+        {
+          "digits": "61",
+          "transcript": "G,E,K",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "03",
+          "transcript": "深压 天",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "89",
+          "transcript": "Now",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        }
+      ]
+    },
+    "Microsoft David Desktop / hi_roman / g711_snr15": {
+      "n": 15,
+      "pass_rate": 0.0,
+      "reasons": {
+        "digit_order_mismatch": 15
+      },
+      "failed_examples": [
+        {
+          "digits": "61",
+          "transcript": "去EK",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "03",
+          "transcript": "神仰天",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "89",
+          "transcript": "are now.",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        }
+      ]
+    },
+    "Microsoft Zira Desktop / en / clean": {
+      "n": 15,
+      "pass_rate": 1.0,
+      "reasons": {
+        "ok": 15
+      },
+      "failed_examples": []
+    },
+    "Microsoft Zira Desktop / en / g711": {
+      "n": 15,
+      "pass_rate": 1.0,
+      "reasons": {
+        "ok": 15
+      },
+      "failed_examples": []
+    },
+    "Microsoft Zira Desktop / en / g711_snr15": {
+      "n": 15,
+      "pass_rate": 1.0,
+      "reasons": {
+        "ok": 15
+      },
+      "failed_examples": []
+    },
+    "Microsoft Zira Desktop / hi_roman / clean": {
+      "n": 15,
+      "pass_rate": 0.0,
+      "reasons": {
+        "digit_order_mismatch": 15
+      },
+      "failed_examples": [
+        {
+          "digits": "61",
+          "transcript": "3 EK",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        },
+        {
+          "digits": "03",
+          "transcript": "是你要惊",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        },
+        {
+          "digits": "89",
+          "transcript": "Awesome. Now.",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 700
+        }
+      ]
+    },
+    "Microsoft Zira Desktop / hi_roman / g711": {
+      "n": 15,
+      "pass_rate": 0.0,
+      "reasons": {
+        "digit_order_mismatch": 15
+      },
+      "failed_examples": [
+        {
+          "digits": "61",
+          "transcript": "3,2,3",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 750
+        },
+        {
+          "digits": "03",
+          "transcript": "是你要听",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        },
+        {
+          "digits": "89",
+          "transcript": "Oh, no.",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 700
+        }
+      ]
+    },
+    "Microsoft Zira Desktop / hi_roman / g711_snr15": {
+      "n": 15,
+      "pass_rate": 0.0,
+      "reasons": {
+        "digit_order_mismatch": 15
+      },
+      "failed_examples": [
+        {
+          "digits": "61",
+          "transcript": "HG、EK",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        },
+        {
+          "digits": "03",
+          "transcript": "神尼奥 禁",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 725
+        },
+        {
+          "digits": "89",
+          "transcript": "Oh, no.",
+          "reason": "digit_order_mismatch",
+          "latency_ms": 700
+        }
+      ]
+    }
+  }
+}

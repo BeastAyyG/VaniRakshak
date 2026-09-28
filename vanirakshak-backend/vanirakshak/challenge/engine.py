@@ -119,7 +119,15 @@ class ChallengeEngine:
             seed=self._seed,
         )
 
-    def grade(self, challenge: Challenge, response_text: str, response_latency_ms: int) -> Tuple[bool, str, float]:
+    def grade(
+        self,
+        challenge: Challenge,
+        response_text: str,
+        response_latency_ms: int,
+        *,
+        latency_min_ms: int = 400,
+        latency_max_ms: int = 4000,
+    ) -> Tuple[bool, str, float]:
         """Return (passed, reason, confidence).
 
         *passed* is True iff the spoken response looks like a human.
@@ -130,7 +138,7 @@ class ChallengeEngine:
         correct_order = response_digits[: len(challenge.expected_digits)] == challenge.expected_digits
 
         # 2. latency check: humans typically 600-1500 ms; TTS <300 or >1500
-        latency_ok = 400 <= response_latency_ms <= 4000
+        latency_ok = latency_min_ms <= response_latency_ms <= latency_max_ms
 
         # 3. crude TTS cue: TTS often answers *too fast* and *without filler
         filler = bool(re.search(r"\b(uh|um|hmm|the|then|ok|okay)\b", (response_text or "").lower()))

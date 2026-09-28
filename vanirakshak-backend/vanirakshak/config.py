@@ -129,6 +129,11 @@ class ChallengeConfig:
     # Drill mode only: grade digits from the client's ``response_text``.
     # Forgeable by construction; never enable it in a deployment.
     client_text_drill: bool = _env_bool("VR_CHALLENGE_CLIENT_TEXT_DRILL")
+    # Human response-latency band. Under server grading this is measured by
+    # the server as audio time from issue to voice onset in the response
+    # (docs/15 W2.b), not taken from the client's response_latency_ms.
+    latency_min_ms: int = _env_int("VR_CHALLENGE_LATENCY_MIN_MS", 400)
+    latency_max_ms: int = _env_int("VR_CHALLENGE_LATENCY_MAX_MS", 4000)
 
 
 @dataclass(frozen=True)
@@ -292,6 +297,12 @@ class EnrolmentConfig:
 
     store_path: str = _env("VR_ENROL_STORE_PATH", "")
     store_key: str = field(default=_env("VR_ENROL_STORE_KEY", ""), repr=False)
+    # Non-target speakers for per-user ASV calibration (docs/14 W5): the
+    # directory the anchor was calibrated against, 16-bit mono WAVs.
+    cohort_dir: str = _env(
+        "VR_ASV_COHORT_DIR",
+        str(Path(__file__).resolve().parent.parent.parent / "data" / "other_speakers"),
+    )
 
 
 @dataclass(frozen=True)
