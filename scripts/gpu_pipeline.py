@@ -608,6 +608,344 @@ def w2c_hindi_asr(ctx: Ctx) -> dict:
     return {"summary": str(W2C_DIR / "hindi_asr.json")}
 
 
+# --------------------------------------------------------------------------- G1: every head on telephony
+
+G1_DIR = OUT / "g1_heads"
+DEV_MANIFEST = Path("A:/cm-corpus/manifests/dev.tsv")
+DEV_BONAFIDE = 4000
+# Distinct weights only: *_cal and cm_aasist_op share weights with their base.
+G1_HEADS = ["cm_aasist", "pre_aug_cm_aasist", "cm_aasist_layer5", "cm_aasist_attm",
+            "cm_aasist_attm_uniform", "cm_aasist_meanpool",
+            "cm_docs20_armb_s42", "cm_docs20_armb_s43", "cm_docs20_armb_s44",
+            "cm_docs21_pct025_s42", "cm_docs21_pct025_s43",
+            "cm_docs21_pct050_s42", "cm_docs21_pct050_s43",
+            "cm_g4_control_s42", "cm_g4_control_s43",
+            "cm_g4_rawboost_s42", "cm_g4_rawboost_s43", "cm_aasist_ft4_s42"]
+
+
+def _dev_bonafide_paths() -> List[str]:
+    rows = []
+    with open(DEV_MANIFEST, encoding="utf-8") as f:
+        next(f)
+        for line in f:
+            p, lab = line.rstrip("\n").split("\t")[:2]
+            if lab == "bonafide":
+                rows.append(p)
+    rng = np.random.default_rng(SUBSET_SEED)
+    pick = np.sort(rng.choice(len(rows), min(DEV_BONAFIDE, len(rows)), replace=False))
+    return [rows[i] for i in pick]
+
+
+def _raw16_reader(sf, unreadable: set):
+    def raw16(p: str) -> np.ndarray:
+        try:
+            x, sr = sf.read(p, dtype="float32")
+        except Exception:
+            unreadable.add(p)
+            return np.zeros(64000, dtype=np.int16)
+        if x.ndim > 1:
+            x = x.mean(axis=1)
+        return (np.clip(x, -1, 1) * 32767).astype(np.int16)
+    return raw16
+
+
+def _degrade(ffmpeg: str, x16: np.ndarray, cond: str) -> np.ndarray:
+    if cond == "clean":
+        return x16
+    if cond == "g711u":
+        return _g711u(x16)
+    return _ffmpeg_roundtrip(ffmpeg, x16, cond)
+
+
+def g1_telephony_heads(ctx: Ctx) -> dict:
+    return _score_heads(ctx, G1_HEADS, G1_DIR)
+
+
+def _score_heads(ctx: Ctx, head_names: List[str], out_dir: Path) -> dict:
+    """Score checkpoints (by name under data/) on the STOP-C telephony
+    protocol: shared by G1 (existing heads) and docs/16 (new heads)."""
+    sys.path.insert(0, str(REPO))
+    sys.path.insert(0, str(REPO / "scripts"))
+    import soundfile as sf
+    import torch
+
+    from cm_frontend import is_finetuned, load_frontend_for
+    from ml.aasist_model import AASISTLHead
+    from ml.augment import prepare_audio_window
+    from ml.train_cm import select_wavlm_features
+
+    ffmpeg = _ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg with AMR encoders is required")
+    shard_dir = out_dir / "shards"
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # Frozen heads share one WavLM forward per batch; fine-tuned ones get their own.
+    heads, skipped, groups = {}, {}, {}
+    for name in head_names:
+        path = REPO / "data" / f"{name}.pt"
+        if not path.exists():
+            skipped[name] = "missing"
+            continue
+        ckpt = torch.load(str(path), map_location="cpu", weights_only=False)
+        merge = ckpt.get("merge_layers") or None
+        in_dim = 768 if ckpt.get("frontend", "microsoft/wavlm-base-plus") == "microsoft/wavlm-base-plus" else 1024
+        head = AASISTLHead(in_dim=in_dim, merge_layers=merge)
+        try:
+            head.load_state_dict(ckpt["state_dict"], strict=True)
+        except Exception as e:
+            skipped[name] = f"does not load into AASISTLHead: {type(e).__name__}"
+            continue
+        li = ckpt.get("layer_index")
+        heads[name] = (head.to(device).eval(), -1 if li is None else int(li), merge)
+        key = name if is_finetuned(ckpt) else "frozen"
+        groups.setdefault(key, (ckpt, []))[1].append(name)
+    ctx.log(f"heads: {len(heads)} loaded; skipped {skipped}; frontends: {list(groups)}")
+    frontends = {k: load_frontend_for(ck, device) for k, (ck, _) in groups.items()}
+
+    sub = _subset()
+    np.savez_compressed(out_dir / "subset.npz", **{k: v for k, v in sub.items()})
+    want = {int(r): i for i, r in enumerate(sub["row_index"])}
+    gate_paths: List[Optional[str]] = [None] * len(want)
+    with open(GATE_MANIFEST, encoding="utf-8") as f:
+        next(f)
+        for r, line in enumerate(f):
+            if r in want:
+                gate_paths[want[r]] = line.split("\t")[0]
+    dev_paths = _dev_bonafide_paths()
+    sets = {"dev_clean": (dev_paths, ["clean"]), "gate": (gate_paths, CONDITIONS)}
+
+    unreadable: set = set()
+    raw16 = _raw16_reader(sf, unreadable)
+
+    def model_window(x16: np.ndarray) -> np.ndarray:
+        w = prepare_audio_window(x16.astype(np.float32) / 32767.0, sr=16000,
+                                 target_duration=4.0, random_crop=False)
+        return np.asarray(w, dtype=np.float32)
+
+    jobs = [(s, cond, k) for s, (paths, conds) in sets.items() for cond in conds
+            for k in range((len(paths) + SHARD - 1) // SHARD)]
+    done = sum((shard_dir / f"{s}_{c}_{k:04d}.npz").exists() for s, c, k in jobs)
+    ctx.progress(done, len(jobs), "resuming" if done else "starting")
+    t0, n_scored = time.time(), 0
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        for s, cond, k in jobs:
+            out = shard_dir / f"{s}_{cond}_{k:04d}.npz"
+            if out.exists():
+                continue
+            paths = sets[s][0]
+            idx = list(range(k * SHARD, min(len(paths), (k + 1) * SHARD)))
+            audio = list(ex.map(lambda p: model_window(_degrade(ffmpeg, raw16(p), cond)),
+                                [paths[i] for i in idx]))
+            scores: Dict[str, list] = {name: [] for name in heads}
+            with torch.no_grad():
+                for b in range(0, len(audio), 32):
+                    batch = np.stack(audio[b:b + 32])
+                    for key, (_, names) in groups.items():
+                        wavlm, dtype = frontends[key]
+                        hs = wavlm(torch.from_numpy(batch).to(dtype).to(device), output_hidden_states=True)
+                        for name in names:
+                            head, li, merge = heads[name]
+                            _, logits = head(select_wavlm_features(hs, li, merge))
+                            scores[name].append((logits[:, 1] - logits[:, 0]).float().cpu().numpy())
+            bad = np.array([paths[i] in unreadable for i in idx])
+            tmp = shard_dir / f"{s}_{cond}_{k:04d}.tmp.npz"
+            np.savez(tmp, pos=np.array(idx), unreadable=bad,
+                     **{f"llr__{n}": np.concatenate(v) for n, v in scores.items()})
+            os.replace(tmp, out)
+            done += 1
+            n_scored += len(idx)
+            ctx.progress(done, len(jobs),
+                         f"{s} {cond} shard {k + 1}  ({n_scored / (time.time() - t0):.0f} utt/s)")
+    return _g1_summarise(ctx, sub, len(dev_paths), list(heads), skipped, out_dir)
+
+
+def _g1_load(set_name: str, cond: str, n: int, name: str, out_dir: Path = G1_DIR):
+    llr = np.full(n, np.nan)
+    bad = np.zeros(n, dtype=bool)
+    for f in sorted((out_dir / "shards").glob(f"{set_name}_{cond}_*.npz")):
+        z = np.load(f)
+        llr[z["pos"]] = z[f"llr__{name}"]
+        bad[z["pos"]] = z["unreadable"]
+    return llr, bad
+
+
+def _g1_summarise(ctx: Ctx, sub: dict, n_dev: int, names: List[str], skipped: dict,
+                  out_dir: Path = G1_DIR) -> dict:
+    label, attack = sub["label"], sub["attack"]
+    n = label.size
+    res: dict = {"what": "Every distinct CM checkpoint on the STOP-C telephony protocol (docs/13 §12)",
+                 "threshold": "per head: 5th percentile of its own raw LLR on a seeded dev-bonafide set",
+                 "n_gate": int(n), "n_dev_bonafide": n_dev, "skipped": skipped, "heads": {}}
+    for name in names:
+        dev, dbad = _g1_load("dev_clean", "clean", n_dev, name, out_dir)
+        tau = float(np.percentile(dev[~dbad], 5.0))
+        h: dict = {"operating_threshold": round(tau, 4), "conditions": {}}
+        for cond in CONDITIONS:
+            llr, bad = _g1_load("gate", cond, n, name, out_dir)
+            keep = ~bad
+            lab, atk, s = label[keep], attack[keep], llr[keep]
+            spoof = lab == 0
+            miss = {a: round(100 * float(np.mean(s[spoof & (atk == a)] >= tau)), 2)
+                    for a in sorted(set(atk[spoof]))}
+            h["conditions"][cond] = {
+                "bonafide_frr_pct": round(100 * float(np.mean(s[lab == 1] < tau)), 2),
+                "worst_attack": max(miss, key=miss.get),
+                "worst_miss_pct": max(miss.values()),
+                "mean_miss_pct": round(float(np.mean(list(miss.values()))), 2),
+                "per_attack_miss_pct": miss,
+            }
+        nb = max(h["conditions"][c]["worst_miss_pct"] for c in ("g711u", "amrnb_12k2"))
+        h["worst_narrowband_miss_pct"] = nb
+        h["passes_stop_c_bar"] = nb < 50.0
+        res["heads"][name] = h
+    ranking = sorted(res["heads"], key=lambda k: res["heads"][k]["worst_narrowband_miss_pct"])
+    res["ranking_by_worst_narrowband_miss"] = [
+        {"head": k,
+         "worst_narrowband_miss_pct": res["heads"][k]["worst_narrowband_miss_pct"],
+         "narrowband_mean_miss_pct": round(float(np.mean(
+             [res["heads"][k]["conditions"][c]["mean_miss_pct"] for c in ("g711u", "amrnb_12k2")])), 2),
+         "clean_worst_miss_pct": res["heads"][k]["conditions"]["clean"]["worst_miss_pct"],
+         "clean_frr_pct": res["heads"][k]["conditions"]["clean"]["bonafide_frr_pct"]}
+        for k in ranking]
+    (out_dir / "heads_telephony.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
+    for r in res["ranking_by_worst_narrowband_miss"][:6]:
+        ctx.log(f"{r['head']:24s} worst NB miss {r['worst_narrowband_miss_pct']:6.2f} %  "
+                f"NB mean {r['narrowband_mean_miss_pct']:6.2f} %  clean worst {r['clean_worst_miss_pct']:6.2f} %")
+    return {"summary": str(out_dir / "heads_telephony.json"), "best": ranking[0],
+            "any_passes": any(res["heads"][k]["passes_stop_c_bar"] for k in ranking)}
+
+
+# --------------------------------------------------------------------------- docs/16 (G2)
+
+G2_DIR = OUT / "g2"
+G2_COMMON = ["--merge-layers", "12", "--layer-index", "5", "--epochs", "10", "--batch-size", "64",
+             "--lr", "5e-4", "--weight-decay", "1e-4", "--patience", "5", "--max-dev-utts", "30000",
+             "--streaming-dev", "--workers", "24", "--p-codec", "0", "--p-noise", "0",
+             "--p-bandpass", "0", "--p-rir", "0", "--p-gain", "0"]
+G2_ARMS = {"C": ["--real-codec-p", "0"], "R": ["--real-codec-p", "0.5"]}
+
+
+def _g2_name(arm: str, seed: int) -> str:
+    return f"cm_docs16_{arm}_s{seed}"
+
+
+def _g2_train(ctx: Ctx, arm: str, seed: int) -> dict:
+    """One docs/16 run. A run is either complete (a .done marker next to the
+    checkpoint) or re-run from scratch (docs/16 §6: never resumed)."""
+    ckpt = REPO / "data" / f"{_g2_name(arm, seed)}.pt"
+    done = ckpt.with_suffix(".done.json")
+    if ckpt.exists() and done.exists():
+        ctx.log(f"{ckpt.name}: already complete")
+        return json.loads(done.read_text(encoding="utf-8"))
+    if ckpt.exists():
+        ckpt.unlink()  # partial run: docs/16 §6 says re-run, not resume
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    ctx.log(f"training {ckpt.name} at git {head}")
+    t0 = time.time()
+    p = ctx.run([PY, "ml/train_cm.py", *G2_COMMON, *G2_ARMS[arm], "--seed", str(seed),
+                 "--output", str(ckpt)], timeout=12 * 3600)
+    if p.returncode != 0 or not ckpt.exists():
+        raise RuntimeError(f"training {ckpt.name} failed; see log")
+    rec = {"checkpoint": str(ckpt), "arm": arm, "seed": seed, "git_head": head,
+           "wall_hours": round((time.time() - t0) / 3600, 2)}
+    done.write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    return rec
+
+
+def _g2_futility() -> Optional[dict]:
+    f = G2_DIR / "futility.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+
+def g2_train_s42(ctx: Ctx) -> dict:
+    out = {}
+    for i, arm in enumerate(("C", "R")):
+        ctx.progress(i, 2, f"training arm {arm} seed 42")
+        out[arm] = _g2_train(ctx, arm, 42)
+    ctx.progress(2, 2, "seed 42 trained")
+    return out
+
+
+def g2_futility(ctx: Ctx) -> dict:
+    """docs/16 §5: stop if R42 is not at least 1 pp better than C42."""
+    names = [_g2_name("C", 42), _g2_name("R", 42)]
+    res = _score_heads(ctx, names, G2_DIR / "s42")
+    heads = json.loads((G2_DIR / "s42" / "heads_telephony.json").read_text(encoding="utf-8"))["heads"]
+    c, r = (heads[n]["worst_narrowband_miss_pct"] for n in names)
+    stop = r > c - 1.0
+    rec = {"rule": "docs/16 §5: stop if worst-NB miss R42 > C42 - 1.0 pp",
+           "C42_worst_nb_miss_pct": c, "R42_worst_nb_miss_pct": r, "stop": stop,
+           "verdict_if_stop": "NO_EFFECT (early)"}
+    G2_DIR.mkdir(parents=True, exist_ok=True)
+    (G2_DIR / "futility.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    ctx.log(f"futility: C42 {c} %  R42 {r} %  -> {'STOP' if stop else 'continue'}")
+    return {**rec, "scoring": res}
+
+
+def g2_train_rest(ctx: Ctx) -> dict:
+    fut = _g2_futility()
+    if fut is None:
+        raise RuntimeError("g2_futility has not run")
+    if fut["stop"]:
+        ctx.log("cancelled by the docs/16 §5 futility rule")
+        return {"cancelled": True, "futility": fut}
+    runs = [(a, s) for s in (43, 44) for a in ("C", "R")]
+    out = {}
+    for i, (arm, seed) in enumerate(runs):
+        ctx.progress(i, len(runs), f"training arm {arm} seed {seed}")
+        out[f"{arm}{seed}"] = _g2_train(ctx, arm, seed)
+    ctx.progress(len(runs), len(runs), "all seeds trained")
+    return out
+
+
+def g2_eval(ctx: Ctx) -> dict:
+    fut = _g2_futility()
+    seeds = (42,) if fut and fut["stop"] else (42, 43, 44)
+    names = [_g2_name(a, s) for s in seeds for a in ("C", "R")]
+    return _score_heads(ctx, names, G2_DIR / "all")
+
+
+def g2_adjudicate(ctx: Ctx) -> dict:
+    fut = _g2_futility()
+    heads = json.loads((G2_DIR / "all" / "heads_telephony.json").read_text(encoding="utf-8"))["heads"]
+
+    def vals(arm: str, key) -> List[float]:
+        return [key(heads[n]) for n in heads if n.startswith(f"cm_docs16_{arm}_")]
+
+    nb = lambda h: h["worst_narrowband_miss_pct"]
+    cw = lambda h: h["conditions"]["clean"]["worst_miss_pct"]
+    cf = lambda h: h["conditions"]["clean"]["bonafide_frr_pct"]
+    C, R = vals("C", nb), vals("R", nb)
+    mean = lambda x: float(np.mean(x))
+    p1 = mean(R) <= mean(C) - 5.0 and max(R) < min(C)
+    p2 = mean(R) < 50.0
+    p3 = mean(vals("R", cw)) <= mean(vals("C", cw)) + 3.0 and mean(vals("R", cf)) <= mean(vals("C", cf)) + 2.0
+    if fut and fut["stop"]:
+        verdict = "NO_EFFECT (early, docs/16 §5)"
+    elif not p3:
+        verdict = "HARMS"
+    elif p1 and p2:
+        verdict = "ADOPT"
+    elif p1:
+        verdict = "IMPROVES_NOT_ENOUGH"
+    else:
+        verdict = "NO_EFFECT"
+    best_r = min((n for n in heads if n.startswith("cm_docs16_R_")), key=lambda n: nb(heads[n]))
+    rec = {"plan": "docs/16", "verdict": verdict,
+           "P16_1_effect": p1, "P16_2_stop_c_bar": p2, "P16_3_no_clean_regression": p3,
+           "worst_nb_miss_pct": {"C": C, "R": R, "C_mean": round(mean(C), 2), "R_mean": round(mean(R), 2)},
+           "clean_worst_miss_pct": {"C": vals("C", cw), "R": vals("R", cw)},
+           "clean_frr_pct": {"C": vals("C", cf), "R": vals("R", cf)},
+           "best_R_seed": best_r if verdict == "ADOPT" else None,
+           "futility": fut, "date": time.strftime("%Y-%m-%d")}
+    (G2_DIR / "verdict.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    ctx.log(f"docs/16 verdict: {verdict}  (worst NB miss C {rec['worst_nb_miss_pct']['C_mean']} % "
+            f"vs R {rec['worst_nb_miss_pct']['R_mean']} %)")
+    return rec
+
+
 # --------------------------------------------------------------------------- driver
 
 STAGES: Dict[str, Callable[[Ctx], dict]] = {
@@ -617,6 +955,12 @@ STAGES: Dict[str, Callable[[Ctx], dict]] = {
     "t2_cpu": t2_cpu,
     "d2_telephony": d2_telephony,
     "w2c_hindi_asr": w2c_hindi_asr,
+    "g1_telephony_heads": g1_telephony_heads,
+    "g2_train_s42": g2_train_s42,
+    "g2_futility": g2_futility,
+    "g2_train_rest": g2_train_rest,
+    "g2_eval": g2_eval,
+    "g2_adjudicate": g2_adjudicate,
 }
 
 
