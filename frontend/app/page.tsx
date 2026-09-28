@@ -472,6 +472,12 @@ export default function Home() {
             addEvent(`Stream session acknowledged (${telemetry.session_id})`, "info");
             return;
           }
+          // Server-ended session (docs/PROTOCOL.md §2): the claimed identity's
+          // enrolment was erased mid-call; the server closes the socket next.
+          if (telemetry.type === "session_closed") {
+            addEvent(`Stream ended by server (${telemetry.reason ?? "unknown reason"})`, "warning");
+            return;
+          }
           // Backend telemetry contract (docs/PROTOCOL.md)
           if (telemetry.risk_score !== undefined || telemetry.tier !== undefined) {
             const risk = Math.round(telemetry.risk_score ?? 0);

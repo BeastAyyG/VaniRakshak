@@ -124,6 +124,9 @@ class CallSession:
         self._transcriber = challenge_transcriber or CHALLENGE_TRANSCRIBER
         self._challenge_streak = 0
         self._blocked = False
+        # Set when the claimed identity's enrolment is erased mid-call
+        # (docs/15 N4): the session stops scoring and the stream is closed.
+        self._revoked: Optional[str] = None
         self._sr = settings.audio.sample_rate
         # Parallel semantic (ASR + keyword) context signal — see
         # vanirakshak/semantic/. Updated asynchronously by the WS layer
@@ -137,6 +140,22 @@ class CallSession:
     @property
     def blocked(self) -> bool:
         return self._blocked
+
+    @property
+    def revoked(self) -> Optional[str]:
+        """Why this session was ended by the server, or None while it is live."""
+        return self._revoked
+
+    def revoke(self, reason: str) -> None:
+        """End the session: no further windows are scored, buffered audio is
+        wiped, and any outstanding challenge is dropped."""
+        self._revoked = reason
+        self.buffer.wipe()
+        self._pending_window = None
+        self._active_challenge = None
+        self._challenge_windows = []
+        self._challenge_audio = []
+        self._challenge_audio_samples = 0
 
     @property
     def sr(self) -> int:
@@ -161,8 +180,11 @@ class CallSession:
 
     def push_chunk(self, pcm: np.ndarray) -> Optional[ChunkResult]:
         """Push a chunk of int16 / float32 mono PCM. Returns a result
-        once a new hop-window has accumulated, else None.
+        once a new hop-window has accumulated, else None (always None once
+        the session is revoked).
         """
+        if self._revoked is not None:
+            return None
         if self._active_challenge is not None:
             self._keep_response_audio(pcm)
         ready = self.buffer.push(pcm)

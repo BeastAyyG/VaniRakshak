@@ -127,6 +127,20 @@ class ASVModel:
             del self._user_calibrations[user_id]
         return removed
 
+    def get_enrolment(self, user_id: str) -> Optional[Tuple[np.ndarray, Optional[Dict[str, float]]]]:
+        """``(embedding, per-user calibration)`` for persistence, or None."""
+        if user_id not in self._enrolments:
+            return None
+        return self._enrolments[user_id], self._user_calibrations.get(user_id)
+
+    def restore_enrolment(
+        self, user_id: str, embedding: np.ndarray, calibration: Optional[Dict[str, float]] = None
+    ) -> None:
+        """Load a persisted enrolment (privacy/enrolment_store.py) without audio."""
+        self._enrolments[user_id] = np.asarray(embedding, dtype=np.float32)
+        if calibration:
+            self._user_calibrations[user_id] = dict(calibration)
+
     def enrolled_user_ids(self) -> list[str]:
         """All enrolled user_ids — lets API/UI layers list enrolled family members
         without reaching into `_enrolments` directly."""
