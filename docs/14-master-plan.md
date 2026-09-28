@@ -63,16 +63,19 @@ clone scored *lower* risk, and no CM could BLOCK it. That finding drove this cha
 
 ## 4. Scorecard
 
+Updated 2026-09-28 (docs/15 N3), after `56caf12`, `31ffa63` and docs/15 N1, N2, N4.
+
 | Component | State | Measured | Gap |
 |---|---|---|---|
-| Decision layer | Clone rule, voice-scored challenge, re-arm, trigger persistence, G8 threshold — **new** | Unit-pinned; stub integration 25/25 | Thresholds fitted on dev (training box) |
-| CM | AASIST-L on frozen WavLM-base+ | Eval EER 12.7–14.1 %, minDCF 0.80–0.92 | W3, W4 |
-| ASV | ECAPA available; stub default | ECAPA anchor: target LOO min 0.713 vs non-target max 0.328 (raw cosine) | W5: default, enrolment QA, per-user calibration |
-| Challenge | Phrase + digit order + latency; now also response audio | — | W2: server-side ASR; stop sending `expected_*` |
-| Semantic | Groq cloud ASR, opt-in | — | W6: local ASR |
+| Decision layer | Clone rule, voice-scored challenge, re-arm, trigger persistence, G8 threshold | Unit-pinned; stub integration 25/25 | **T1:** thresholds fitted on dev (training box); until then the clone rule and challenge CM gate are off |
+| CM | AASIST-L on frozen WavLM-base+; incumbent kept (docs/13 §10, STOP-B) | Eval EER 12.7–14.1 %, minDCF 0.80–0.92; Phase 2 worst misses A28 59.3 %, A20 47.9 %, A19 39.8 % | W4 data first, then a new pre-registration (docs/15 D3) |
+| ASV | ECAPA required under `VR_REQUIRE_AUTH=1`; stub default for the demo; enrolment QA; per-user calibration seeded from the anchor | ECAPA anchor: target LOO min 0.713 vs non-target max 0.328 (raw cosine) | Per-user calibration from a non-target cohort; multi-session enrolment; SASV evaluation |
+| Enrolment store | Encrypted on disk (`VR_ENROL_STORE_PATH`), survives restart; erasure reaches disk and live sessions | Restart and erasure tests | Key management and rotation |
+| Challenge | Digits graded from a **server-side local transcript**; `expected_*` off the wire; response CM/ASV scored | P1-C transcript gate: 4 attacks × 30 trials fail 100 %, TTS-correct control passes 100 % (`reports/challenge_p1c_harness.json`) | TTS of the right digits is stopped only by the response CM gate (T1/T2); latency is still client-reported |
+| Semantic | Opt-in; local ASR (`VR_SEMANTIC_PROVIDER=local`) keeps zero retention, Groq discloses the transfer | Provider tests | Latency of local ASR on the target CPU (W7) |
 | Fusion | Hand-set logistic weights (w_cm 1.5, w_asv 2.0) | Pinned by test | Refit on dev scores with a session-level objective (W1.3) |
 | Android | Own untrained Kotlin heuristic plus backend verify-speaker | — | W7: one detector, not two |
-| Compliance | Auth, audit chain, DPDP labels | — | W8: consent flow unimplemented (docs/09 P0-3) |
+| Compliance | Auth, audit chain, DPDP labels, erasure with receipt | — | W8: consent flow unimplemented (docs/09 P0-3) |
 
 ## 5. Workstreams — gap, fix, exit criterion, status
 
@@ -117,20 +120,30 @@ clone scored *lower* risk, and no CM could BLOCK it. That finding drove this cha
 
 ### W2 — Make the challenge unforgeable. *No GPU.*
 
-`POST /v1/sessions/{sid}/challenge` grades **`response_text` supplied by the
-client**. A compromised or scripted client can send the right digits. The phrase
-also already reveals the digits, so the protection comes entirely from the answer
-being spoken live, and only server-side ASR can check that.
+**Done (2026-09-28, docs/15 N2).** The phrase reveals the digits, so the
+protection comes entirely from the answer being spoken live.
 
-- Transcribe the response windows server-side with a **local** ASR. There is none
-  in the repo today: `vanirakshak_indic_conformer/` is Groq cloud Whisper despite
-  its name. Candidates are AI4Bharat IndicConformer and Whisper-small via OpenVINO,
-  run locally.
-- Grade digits from that transcript and ignore client text (keep it only for drills).
-- Stop sending `expected_digits` / `expected_full` (docs/13 Amendment 1). This
-  touches `page.tsx` and needs a PROTOCOL amendment.
-- **Exit:** a scripted client that sends the correct digits over silent or TTS
-  response audio fails the challenge in ≥ 90 % of trials (P1-C).
+- The session keeps the raw audio received after a challenge is issued and
+  transcribes it with a **local** engine (`challenge/transcribe.py`;
+  `VR_CHALLENGE_ASR_PROVIDER`, default faster-whisper; cloud providers refused).
+- Digits are graded from that transcript, in English, romanised Hindi or
+  Devanagari. Client `response_text` is ignored except under
+  `VR_CHALLENGE_CLIENT_TEXT_DRILL=1`. No transcript fails closed.
+- `expected_digits` / `expected_full` are off the wire (W2, `56caf12`).
+  PROTOCOL.md §3 Amendment 2 records the change.
+- **P1-C, transcript gate:** `scripts/challenge_forgery_harness.py` against real
+  faster-whisper. Correct `response_text` over silence, noise, a vocoder-like
+  signal, or TTS of the wrong digits failed 30/30 each. The positive control,
+  TTS of the right digits, passed 30/30, so the engine does hear digits.
+
+**Still open in W2:**
+- W2.a TTS that speaks the right digits passes the transcript, as it should.
+  Only the response-audio CM check (`VR_CHALLENGE_CM_LLR_MAX`) stops it, and
+  that is off until T1 fits it on dev.
+- W2.b `response_latency_ms` is still client-reported. Measure it server-side
+  from the response audio's voice onset.
+- W2.c Measure genuine pass rate (friction) on real Hindi and Hinglish answers
+  over phone codecs; whisper-tiny is the floor, not the target engine.
 
 ### W3 — A CM that generalises (docs/13 Phases 2–4, then docs/10 G3). *GPU.*
 
@@ -169,22 +182,27 @@ languages over AMR and G.711 phone lines. No amount of W3 closes that domain gap
 
 ### W5 — ASV that is real by default
 
-- **ECAPA as the default for any non-demo deployment.** Keep G7's decision for
-  the demo, but make `VR_REQUIRE_AUTH=1` deployments refuse to start on the stub
-  ASV.
-- **Per-user calibration.** `/v1/enroll`'d users currently inherit the anchor's
-  logistic (`asv.calibration` is global). Store a calibration per enrolment, using
-  leave-one-out target scores against a fixed cohort of non-target speakers.
-- **Enrolment QA:** a minimum of voiced seconds, an SNR floor, two or more sessions
-  or devices, and a rejection when the enrolment audio itself scores as synthetic
-  on the CM (anchor poisoning, T7).
+**Done in code (`56caf12`), and persisted (docs/15 N4):**
+- `VR_REQUIRE_AUTH=1` refuses to start on the stub ASV (`server/app.py` start-up guard).
+- Enrolment QA rejects under 3 s voiced, SNR under 10 dB, or a CM LLR under 0
+  (anchor poisoning, T7). The QA summary is stored with the enrolment.
+- Each enrolment gets its own calibration entry, stored in the encrypted
+  enrolment store with the embedding, so both survive a restart.
+
+**Still open in W5:**
+- The per-user calibration is **seeded from the anchor's logistic**, not fitted
+  per user. Fit it from leave-one-out target scores against a fixed cohort of
+  non-target speakers.
+- Enrolment from two or more sessions or devices.
 - **Spoof-aware ASV (SASV):** evaluate the ASV × CM combination on ASVspoof 5's
   SASV protocol, the metric that matches L1.
 
 ### W6 — Semantic layer without breaking zero retention
 
-Use local ASR (the same engine as W2) so transcripts never leave the box. Keep Groq
-only as an explicit opt-in (current behaviour). One local ASR serves both W2 and W6.
+**Done (docs/15 N1).** `VR_SEMANTIC_PROVIDER=local` runs the same on-box engine
+as W2 and keeps `zero_retention: true`. Groq stays an explicit opt-in that turns
+it off and names the processor. An unknown provider is reported as a transfer.
+Open: latency of local ASR per concurrent call (W7).
 
 ### W7 — Productisation
 
@@ -209,8 +227,11 @@ only as an explicit opt-in (current behaviour). One local ASR serves both W2 and
 
 - **Consent and notice** for both parties to the call (docs/09 P0-3): not
   implemented in the backend.
-- **Biometric data handling:** voiceprints are sensitive personal data. Define
-  retention, deletion (`DELETE /v1/enroll/{user}`) and export.
+- **Biometric data handling:** voiceprints are sensitive personal data.
+  Deletion is done (docs/15 N4): `DELETE /v1/enroll/{user}` erases memory and
+  the encrypted on-disk record, ends live sessions for that identity, and
+  returns an audited receipt. Enrolments carry a `consent_ref`. Still to
+  define: retention period, export, and store key rotation.
 - **Audit chain operations:** rotation, external anchoring of the head hash, and
   access logging.
 

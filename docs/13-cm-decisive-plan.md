@@ -571,3 +571,35 @@ change). Runs log a heartbeat and GPU temperature so a reboot is identifiable.
 | reproduction tolerance below one trial | minor | ≥ 3-trial tolerances, score-level parity |
 | sleep / Windows Update reboots | minor | user disables for the run window; heartbeat |
 | branch naming | minor | `docs/…`, `feat/…` prefixes only |
+
+---
+
+## 10. Phase 2 result (recorded 2026-09-28) — STOP-B
+
+Phase 2 was scored in commit `56caf12` (2026-09-26). The graded criteria are in
+`reports/cm_phase2_criteria.json`. The numbers below are copied from that file.
+Nothing in §6 or §7 was changed after the scores were seen.
+
+**C-2a failed on both screens** (equal-weight fusion on the gate split):
+
+| Screen | A28 gain (need ≥ 10.38 pp) | A19 vs incumbent | A20 vs incumbent | Worst-3 mean vs control | C-2a |
+|---|---|---|---|---|---|
+| S42 + layer5 | +12.47 pp ✓ | **+2.85 pp miss (new hole)** ✗ | −4.23 pp ✓ | 51.13 vs 51.84 ✓ | **fail** |
+| S43 + layer5 | +10.79 pp ✓ | **+20.23 pp miss (new hole)** ✗ | −0.59 pp ✓ | 57.49 vs 51.84 ✗ | **fail** |
+
+**Outcome under §7 STOP-B:** the incumbent stays. The layer-5 Phase 3 arm does
+not run, and no CM training follows from this plan.
+
+**C-2b (seed noise), for anything after this plan.** From-scratch seed SDs reach
+16.6 pp (A19), 19.9 pp (A27) and 24.8 pp (A20). The mechanically filled Phase 3
+margins on those attacks are 65–97 pp, which no run could meet. A single-seed
+CM comparison in this repo carries no information. Any later CM experiment
+needs three or more seeds per arm and its own pre-registration (docs/15 D3,
+`docs/16`).
+
+**Incumbent at the Phase 2 operating threshold (LLR 4.7066)**, worst attacks by
+miss rate: A28 59.3 %, A20 47.9 %, A19 39.8 %, and sealed A24 33.2 %. The CM is
+not a standalone detector; L1 rests on ASV plus the decision layer (docs/14 §2).
+
+Still open under this plan: Phase 1 grading (docs/14 §6 step 1, STOP-A clock)
+and STOP-C, which needs the real-codec set (docs/15 D2).
