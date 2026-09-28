@@ -52,6 +52,18 @@ REST (`POST /v1/sessions/{sid}/challenge`) should adopt the acked
 `session_id`; supplying your own id in the handshake still works and is
 echoed back unchanged.
 
+**Server-ended session (docs/15 N4).** If the `claimed_identity`'s enrolment
+is erased (`DELETE /v1/enroll/{id}`) while the stream is open, the server
+stops scoring it. On the client's next message it sends, instead of a verdict,
+
+```json
+{ "type": "session_closed", "session_id": "ws-a1b2c3d4", "reason": "biometric_erasure" }
+```
+
+and closes the socket with code `1000`. Like the ack, it has no
+`tier`/`risk_score`. The session is also gone from REST, so a challenge grade
+for it returns `404`.
+
 **`claimed_identity` fallback:** when omitted (or `""`), the server does not
 simply skip ASV — it falls back to the identity of whichever anchor is loaded
 (`GET /api/v1/health`'s `anchor.user_id`), so speaker verification runs by
@@ -409,6 +421,8 @@ alert payload it already received.
 | `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker` |
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
+| `VR_ENROL_STORE_PATH` | *(unset — in memory)* | Directory for the persistent, encrypted enrolment store (docs/15 N4). Unset: enrolments are lost on restart |
+| `VR_ENROL_STORE_KEY` | *(unset)* | 32-byte key, base64 or hex, sealing each record with AES-256-GCM. Required when `VR_ENROL_STORE_PATH` is set; the server refuses to start without it |
 | `VR_ENROLL_BYPASS_QA` | `0` | `1` bypasses enrolment audio quality assurance checks (voiced duration ≥ 3.0s, SNR ≥ 10 dB, CM score ≥ 0.0) |
 | `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block. Cloud: `groq` (default). Local, zero retention: `local` / `local_whisper` / `whisper` (on-box faster-whisper) and `indicconformer`. A local provider keeps `zero_retention: true` and an empty `third_party_audio_processors`. An unrecognised name is reported as a third-party transfer and the block degrades to `available: false`. |
 

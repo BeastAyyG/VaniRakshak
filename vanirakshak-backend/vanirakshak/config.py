@@ -284,6 +284,17 @@ class SemanticConfig:
 
 
 @dataclass(frozen=True)
+class EnrolmentConfig:
+    """Persistent enrolment store (docs/15 N4). Empty ``store_path`` keeps
+    enrolments in memory only, as before: a restart then forgets them. With a
+    path set, ``store_key`` (32 bytes, base64 or hex) is required and the
+    server refuses to start without it."""
+
+    store_path: str = _env("VR_ENROL_STORE_PATH", "")
+    store_key: str = field(default=_env("VR_ENROL_STORE_KEY", ""), repr=False)
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     """API-key auth. Disabled when ``api_keys`` is empty (see server/auth.py).
 
@@ -313,6 +324,7 @@ class Settings:
     auth: AuthConfig = field(default_factory=AuthConfig)
     semantic: SemanticConfig = field(default_factory=SemanticConfig)
     challenge: ChallengeConfig = field(default_factory=ChallengeConfig)
+    enrolment: EnrolmentConfig = field(default_factory=EnrolmentConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")
