@@ -126,3 +126,36 @@ cannot be claimed, and the clone rule cannot be switched on.
 - Not "unforgeable challenge" until N2 passes P1-C.
 - Not "blocks cloned voices" until T1 is graded and T2 switches the clone rule on.
 - Not any CM improvement from a single seed.
+
+---
+
+## 6. Progress (2026-09-28)
+
+Branch `feat/next-steps-n1-n4`, on top of this plan's commit `18bd253`.
+
+| # | Status | Evidence |
+|---|---|---|
+| N1 | **Done.** The provider reaches `ASRConfig`. A local provider keeps `zero_retention: true`; Groq or an unknown name reports a transfer. An unknown name also degrades the semantic block. | `tests/test_semantic_gate.py` (9 new) |
+| N2 | **Done. P1-C met for the transcript gate.** Digits are graded from a local server-side transcript; `response_text` is drill-only; no transcript fails closed. | `reports/challenge_p1c_harness.json`: silence, noise, vocoder-like, TTS-wrong-digits each fail 30/30 with correct `response_text`; TTS-right-digits control passes 30/30. `tests/test_challenge.py` |
+| N3 | **Done.** docs/14 §4 scorecard and W2, W5, W6, W8 updated; docs/13 §10 records STOP-B. | `scripts/check_docs.py`: no hard failures |
+| N4 | **Done.** AES-GCM enrolment store, reloaded at start-up; erasure removes the record and revokes live sessions (WS `session_closed`). | `tests/test_enrolment_store.py`: two-process restart test, live-session erasure test |
+
+Backend suite: `pytest vanirakshak-backend/tests` gives 145 passed (107 before this work).
+
+**Step 4 of docs/14 §6, now checked under ECAPA** (dev box, cached weights):
+`VR_ASV_BACKEND=ecapa python scripts/integration_check.py` gives 29/30. The
+P1-T conditions hold (demo_01 ALLOW, demo_02 ALLOW, demo_04 BLOCK on all 6
+windows at the anchor threshold 0.208). The one miss is demo_03 (splice):
+BLOCK at 73.7 against a hand-labelled CHALLENGE. That is the known "one tier
+hotter under real backends" gap noted in `config.py`. It is not a P1-T
+criterion. This is not T2: the fitted thresholds from T1 are still unset.
+
+**What this changes in §5:** "local, zero-retention transcription" can now be
+said of the semantic layer with `VR_SEMANTIC_PROVIDER=local`. Do not say
+"unforgeable challenge" yet. A TTS that says the right digits passes the
+transcript, and only the response CM gate stops it, which waits on T1 and T2.
+
+**Next, in order:** T1 (unchanged, still the most important item), then T2.
+Found while doing N2 and left open: challenge latency is still reported by the
+client (W2.b); measure genuine pass rate on real Hindi and Hinglish answers
+over codecs (W2.c).
