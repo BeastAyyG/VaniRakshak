@@ -24,14 +24,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "vanirakshak-backend"))
 
-from vanirakshak.privacy.enrolment_store import parse_key, rotate_key  # noqa: E402
+from vanirakshak.privacy.enrolment_store import KEY_ENV, NEW_KEY_ENV, parse_key, rotate_key  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--store", default=os.environ.get("VR_ENROL_STORE_PATH", ""))
     args = ap.parse_args()
-    old, new = os.environ.get("VR_ENROL_STORE_KEY", ""), os.environ.get("VR_ENROL_STORE_NEW_KEY", "")
+    old, new = os.environ.get(KEY_ENV, ""), os.environ.get(NEW_KEY_ENV, "")
     if not args.store or not old or not new:
         print("need --store (or VR_ENROL_STORE_PATH), VR_ENROL_STORE_KEY and VR_ENROL_STORE_NEW_KEY",
               file=sys.stderr)
