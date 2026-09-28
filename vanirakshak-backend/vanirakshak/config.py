@@ -124,6 +124,13 @@ class ChallengeConfig:
     # (LOCAL_ASR_PROVIDERS below): the challenge never ships audio abroad,
     # whatever the semantic layer does.
     asr_provider: str = _env("VR_CHALLENGE_ASR_PROVIDER", "local")
+    # Whisper model size and the languages detection may choose from
+    # (docs/14 W2.c). Free detection over ~99 languages heard Hindi digit
+    # words as Chinese; the default is set from scripts/gpu_pipeline.py's
+    # w2c_hindi_asr comparison.
+    asr_model: str = _env("VR_CHALLENGE_ASR_MODEL", "small")
+    asr_languages: str = _env("VR_CHALLENGE_ASR_LANGUAGES", "hi,en")
+    asr_device: str = _env("VR_CHALLENGE_ASR_DEVICE", "auto")
     # Response audio kept for transcription, from the moment of issue.
     response_max_seconds: float = _env_float("VR_CHALLENGE_RESPONSE_MAX_SECONDS", 20.0)
     # Drill mode only: grade digits from the client's ``response_text``.

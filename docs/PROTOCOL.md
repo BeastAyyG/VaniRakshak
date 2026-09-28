@@ -422,6 +422,9 @@ alert payload it already received.
 | `VR_CHALLENGE_MAX_PER_SESSION` | `1` | Challenges per session; > 1 re-arms after a pass (see §3 amendment) |
 | `VR_CHALLENGE_TRIGGER_CONSECUTIVE` | `1` | Consecutive `CHALLENGE`-tier windows before a challenge is issued |
 | `VR_CHALLENGE_ASR_PROVIDER` | `local` | Engine that transcribes challenge response audio (§3 Amendment 2). Local engines only (`local`, `whisper`, `indicconformer`); a cloud provider is refused and grading fails closed |
+| `VR_CHALLENGE_ASR_MODEL` | `small` | faster-whisper model size for the challenge engine (docs/14 W2.c). Chosen by the `w2c_hindi_asr` comparison in `scripts/gpu_pipeline.py` |
+| `VR_CHALLENGE_ASR_LANGUAGES` | `hi,en` | The answer is decoded once per listed language, with that language forced, and passes if any reading holds the digits in order (docs/14 W2.c). Free detection heard Hindi digits as Chinese, and detection limited to hi/en still picked English on two-word Hindi answers. Empty = one free-detection reading |
+| `VR_CHALLENGE_ASR_DEVICE` | `auto` | `cuda` when available, else `cpu` (int8) |
 | `VR_CHALLENGE_RESPONSE_MAX_SECONDS` | `20` | Response audio kept for transcription, from the moment the challenge is issued |
 | `VR_CHALLENGE_LATENCY_MIN_MS` | `400` | Lower bound of the human response-latency band (server-measured, issue to voice onset; §3 Amendment 3) |
 | `VR_CHALLENGE_LATENCY_MAX_MS` | `4000` | Upper bound of the same band |

@@ -67,8 +67,8 @@ Updated 2026-09-28 (docs/15 N3), after `56caf12`, `31ffa63` and docs/15 N1, N2, 
 
 | Component | State | Measured | Gap |
 |---|---|---|---|
-| Decision layer | Clone rule, voice-scored challenge, re-arm, trigger persistence, G8 threshold | Unit-pinned; stub integration 25/25 | **T1:** thresholds fitted on dev (training box); until then the clone rule and challenge CM gate are off |
-| CM | AASIST-L on frozen WavLM-base+; incumbent kept (docs/13 §10, STOP-B) | Eval EER 12.7–14.1 %, minDCF 0.80–0.92; Phase 2 worst misses A28 59.3 %, A20 47.9 %, A19 39.8 % | W4 data first, then a new pre-registration (docs/15 D3) |
+| Decision layer | Clone rule, voice-scored challenge, re-arm, trigger persistence, G8 threshold; **thresholds fitted on dev (2026-09-28)** | **P1-S pass** (+99.75 pp worst cell), **P1-F pass**, **P1-T pass** on CUDA and CPU (docs/13 §11) | Genuine false-BLOCK 7.5–12 % per call on gate (dev budget 1 %); ASV 0.80 narrowband still challenges every genuine call |
+| CM | AASIST-L on frozen WavLM-base+; incumbent kept (docs/13 §10, STOP-B) | Eval EER 12.7–14.1 %, minDCF 0.80–0.92; Phase 2 worst misses A28 59.3 %, A20 47.9 %, A19 39.8 %; **telephony: worst narrowband miss 67.4 % (G.711, A28) → STOP-C triggered** (docs/13 §12) | No telephony claim for this family. W4 data first, then a new pre-registration (docs/15 D3) judged on real codecs |
 | ASV | ECAPA required under `VR_REQUIRE_AUTH=1`; stub default for the demo; enrolment QA; per-user calibration seeded from the anchor | ECAPA anchor: target LOO min 0.713 vs non-target max 0.328 (raw cosine) | Per-user calibration from a non-target cohort; multi-session enrolment; SASV evaluation |
 | Enrolment store | Encrypted on disk (`VR_ENROL_STORE_PATH`), survives restart; erasure reaches disk and live sessions | Restart and erasure tests | Key management and rotation |
 | Challenge | Digits graded from a **server-side local transcript**; `expected_*` off the wire; response CM/ASV scored | P1-C transcript gate: 4 attacks × 30 trials fail 100 %, TTS-correct control passes 100 % (`reports/challenge_p1c_harness.json`) | TTS of the right digits is stopped only by the response CM gate (T1/T2); latency is still client-reported |
@@ -144,21 +144,29 @@ protection comes entirely from the answer being spoken live.
   from issue to voice onset in the response (PROTOCOL.md §3 Amendment 3). The
   client's number is only recorded. P1-C still holds with it
   (`reports/challenge_p1c_harness.json`; silence now fails as `no_voice_onset`).
-- W2.c **Proxy measured; real measurement still open.**
-  `challenge_forgery_harness.py --genuine-proxy` (`reports/challenge_genuine_proxy.json`),
-  two SAPI voices, 15 trials per cell, correct digits:
-  - English digit words: 100 % clean, 100 % through G.711, 80–100 % through
-    G.711 with noise at 15 dB SNR.
-  - Romanised Hindi digit words ("teen, paanch"): **0 % in every cell.**
-    whisper-tiny with automatic language detection hears "Char punch",
-    "Now, do." or Chinese.
-  The Hindi result comes from English voices reading Hindi words, so it is not
-  a friction number for real callers. It still shows the current engine
-  cannot be trusted with Hindi answers. **Until that changes, instruct callers
-  to answer in English digits, or run the challenge in drill mode for Hindi
-  deployments.** Fix candidates, in order: pass a language hint to the engine,
-  a larger Whisper model, IndicConformer as `VR_CHALLENGE_ASR_PROVIDER`. Then
-  measure on real Hindi and Hinglish answers from people (with D1 consent).
+- W2.c **Engine fixed for Hindi (2026-09-28); real-caller measurement still open.**
+  The first proxy (SAPI English voices reading romanised Hindi) passed 0 %.
+  Measured again on native voices (edge-tts hi-IN Swara/Madhur, en-IN
+  Neerja/Prabhat; clean, G.711, AMR-NB; `reports/w2c_hindi_asr_engines.json`):
+
+  | Engine | Hindi | English | ms/answer | Attacks accepted |
+  |---|---|---|---|---|
+  | tiny, free detection (before) | 25.0 % | 96.7 % | 128 | 0 % |
+  | tiny, hi+en forced | 36.2 % | 97.9 % | 126 | 0 % |
+  | **small, hi+en forced (new default)** | **80.4 %** | **99.6 %** | 422 | 0 % |
+  | medium, hi+en forced | 77.1 % | 96.2 % | 845 | 0 % |
+  | large-v3-turbo, hi+en forced | 78.3 % | 95.0 % | 418 | 0 % |
+
+  What changed: the answer is decoded once per expected language with that
+  language forced (detection picked English on two-word Hindi answers), any
+  reading with the digits passes, and Devanagari digit words are matched by
+  a consonant skeleton instead of exact spelling. That normaliser was built
+  from one voice's errors; the held-out voice scores 76.7 % with small. P1-C
+  still holds (`reports/challenge_p1c_harness_small_hien.json`). Still open:
+  about 1 in 5 Hindi answers fails, worst through AMR-NB (72.5 %);
+  IndicConformer (step 3) needs gated Hugging Face access; and the number
+  that matters, real people answering in Hindi over a phone line, needs D1
+  recordings.
 
 ### W3 — A CM that generalises (docs/13 Phases 2–4, then docs/10 G3). *GPU.*
 
@@ -271,8 +279,8 @@ Open: latency of local ASR per concurrent call (W7).
 
 | Step | What | Where | Gate |
 |---|---|---|---|
-| 1 | Score dumps: `score_checkpoint_eval.py --dump-scores` on dev + gate split, then `calibrate_decision_layer.py` | Training box (GPU only for scoring) | P1-S ≥ +30 pp at the worst cell; P1-F ≤ 50 % |
-| 2 | Set the fitted `VR_CLONE_CM_LLR_MAX`, `VR_CHALLENGE_CM_LLR_MAX`, `VR_CHALLENGE_TRIGGER_CONSECUTIVE`, `operating_threshold`; run `integration_check.py` on real backends | Dev box | P1-T |
+| 1 | Score dumps: `score_checkpoint_eval.py --dump-scores` on dev + gate split, then `calibrate_decision_layer.py` | Training box (GPU only for scoring) | P1-S ≥ +30 pp at the worst cell; P1-F ≤ 50 % — **done 2026-09-28, both pass** (docs/13 §11) |
+| 2 | Set the fitted `VR_CLONE_CM_LLR_MAX`, `VR_CHALLENGE_CM_LLR_MAX`, `VR_CHALLENGE_TRIGGER_CONSECUTIVE`, `operating_threshold`; run `integration_check.py` on real backends | Dev box | P1-T — **done 2026-09-28, pass on CUDA fp16 and CPU fp32** |
 | 3 | W2 server-side ASR challenge plus protocol amendment | Dev box | P1-C |
 | 4 | W5 per-user calibration, enrolment QA, ECAPA required under auth | Dev box | Integration check under `VR_ASV_BACKEND=ecapa` |
 | 5 | docs/13 Phase 2 (measure existing heads) | Training box | C-2a, C-2b |

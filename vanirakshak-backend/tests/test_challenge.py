@@ -295,3 +295,70 @@ def test_instant_answer_fails_server_latency():
     assert grade["ok"] is False
     assert grade["reason"] == "latency_suspicious"
     assert grade["latency_ms"] == 0
+
+
+def test_answer_is_decoded_once_per_expected_language():
+    """W2.c: detection on a two-word Hindi answer picks English and spells
+    "chhe teen" as "Chae deen". Each expected language is forced in turn."""
+    from vanirakshak.challenge.transcribe import _FasterWhisperDigits
+
+    class Seg:
+        def __init__(self, text):
+            self.text = text
+
+    class FakeModel:
+        def __init__(self):
+            self.languages = []
+
+        def transcribe(self, audio, language=None, **kw):
+            self.languages.append(language)
+            return [Seg({"hi": "छह तीन", "en": "Chae deen."}[language])], None
+
+    eng = _FasterWhisperDigits.__new__(_FasterWhisperDigits)
+    eng.model, eng.languages = FakeModel(), ["hi", "en"]
+    readings = eng.candidates(np.zeros(16000, dtype=np.float32))
+    assert eng.model.languages == ["hi", "en"]
+    assert [extract_digits(r) for r in readings] == [["6", "3"], ["6", "3"]]
+
+
+class ReadingsTranscriber(HeardTranscriber):
+    """Two readings, like the real engine: only the second has the digits."""
+
+    def transcribe_candidates(self, pcm_int16, sample_rate):
+        self.calls.append((pcm_int16.size, sample_rate))
+        return ["garbled", self.heard(self.sess)], None
+
+
+def test_any_reading_with_the_digits_passes():
+    sess = _session("readings", [BORDERLINE, GENUINE, GENUINE],
+                    transcriber=ReadingsTranscriber(_digits_said))
+    _issue(sess)
+    _answer_window(sess)
+    _answer_window(sess)
+    grade = sess.grade_challenge("", 1000)
+    assert grade["ok"] is True, grade
+    assert grade["transcript"].split("\n")[0] == "garbled"
+
+
+def test_no_reading_with_the_digits_fails():
+    wrong = ReadingsTranscriber(lambda s: " ".join(str((int(d) + 1) % 10) for d in s._grading_digits))
+    sess = _session("readings-wrong", [BORDERLINE, GENUINE, GENUINE], transcriber=wrong)
+    _issue(sess)
+    _answer_window(sess)
+    _answer_window(sess)
+    grade = sess.grade_challenge("", 1000)
+    assert grade["ok"] is False and grade["reason"] == "digit_order_mismatch"
+
+
+def test_devanagari_spelling_variants_parse():
+    """ASR spells the same spoken digit many ways; all must read as it."""
+    cases = {
+        "शूँनि दो": ["0", "2"],   # shoonni do
+        "शुने पाच": ["0", "5"],   # shune paach
+        "तीन साथ": ["3", "7"],          # teen saath
+        "चार तीं": ["4", "3"],          # char teen (anusvara)
+        "इक नों": ["1", "9"],                 # ik non
+        "आठ छह": ["8", "6"],                        # aath chhah
+    }
+    for text, digits in cases.items():
+        assert extract_digits(text) == digits, text

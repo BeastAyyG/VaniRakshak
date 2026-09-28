@@ -1,0 +1,62 @@
+{
+  "what": "docs/14 \u00a76 step 2 / docs/13 P1-T: integration_check.py with ECAPA + AASIST CM at the T1 operating point and fitted decision-layer thresholds",
+  "date": "2026-09-28",
+  "runs": {
+    "t2_cuda": {
+      "device": "cuda",
+      "checks_passed": 28,
+      "checks_total": 29,
+      "p1t": {
+        "demo_01_allow": true,
+        "demo_02_not_block": true,
+        "demo_04_block_every_window": true
+      },
+      "backends": {
+        "asv": "ecapa_tdnn_voxceleb",
+        "cm": "aasist_l_wavlm_dev_eer_0.164",
+        "cm_operating_threshold": "4.706552124023438"
+      },
+      "P1_T_pass": true,
+      "env": {
+        "VR_ASV_BACKEND": "ecapa",
+        "VR_CM_BACKEND": "aasist",
+        "VR_CM_AASIST_WEIGHTS": "C:\\vr-out\\t1\\cm_aasist_op.pt",
+        "VR_AUDIT_PATH": "C:\\vr-out\\pipeline\\t2_audit.jsonl",
+        "VR_CLONE_CM_LLR_MAX": "-2.4568",
+        "VR_CLONE_MIN_WINDOWS": "3",
+        "VR_CHALLENGE_CM_LLR_MAX": "0.5757",
+        "VR_CHALLENGE_MIN_WINDOWS": "2",
+        "VR_CHALLENGE_TRIGGER_CONSECUTIVE": "3"
+      }
+    },
+    "t2_cpu": {
+      "device": "cpu",
+      "checks_passed": 28,
+      "checks_total": 29,
+      "p1t": {
+        "demo_01_allow": true,
+        "demo_02_not_block": true,
+        "demo_04_block_every_window": true
+      },
+      "backends": {
+        "asv": "ecapa_tdnn_voxceleb",
+        "cm": "aasist_l_wavlm_dev_eer_0.164",
+        "cm_operating_threshold": "4.706552124023438"
+      },
+      "P1_T_pass": true,
+      "env": {
+        "VR_ASV_BACKEND": "ecapa",
+        "VR_CM_BACKEND": "aasist",
+        "VR_CM_AASIST_WEIGHTS": "C:\\vr-out\\t1\\cm_aasist_op.pt",
+        "VR_AUDIT_PATH": "C:\\vr-out\\pipeline\\t2_audit.jsonl",
+        "VR_CLONE_CM_LLR_MAX": "-2.4568",
+        "VR_CLONE_MIN_WINDOWS": "3",
+        "VR_CHALLENGE_CM_LLR_MAX": "0.5757",
+        "VR_CHALLENGE_MIN_WINDOWS": "2",
+        "VR_CHALLENGE_TRIGGER_CONSECUTIVE": "3",
+        "CUDA_VISIBLE_DEVICES": ""
+      }
+    }
+  },
+  "known_failure": "'a challenge fired on the WS path' (demo_01 + high-risk context): with the fitted VR_CHALLENGE_TRIGGER_CONSECUTIVE=3 the 6-window fixture no longer reaches 3 consecutive CHALLENGE windows. Not a P1-T condition."
+}

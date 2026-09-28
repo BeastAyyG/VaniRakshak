@@ -1,0 +1,99 @@
+{
+  "criteria": "docs/13 Phase 1: P1-S rise >= 30 pp at the worst ASV x channel cell; P1-F rise of P(challenge within 60 s | genuine) <= 5 pp",
+  "eval_source": "C:\\vr-out\\p2\\gate\\incumbent.npz",
+  "chosen": {
+    "operating_threshold": 4.706552124023438,
+    "op_percentile": 5.0,
+    "VR_CLONE_CM_LLR_MAX": -2.4568,
+    "VR_CLONE_MIN_WINDOWS": 3,
+    "clone_genuine_false_block_at_asv_1": 0.01,
+    "VR_CHALLENGE_CM_LLR_MAX": 0.5757,
+    "VR_CHALLENGE_MIN_WINDOWS": 2,
+    "VR_CHALLENGE_TRIGGER_CONSECUTIVE": 3
+  },
+  "worst_cell": "asv=0.80,channel=0.00",
+  "p1s_rise_at_worst_cell_pp": 99.75,
+  "p1s_min_rise_any_cell_pp": 86.0,
+  "P1_S_pass": true,
+  "P1_F_pass": true,
+  "p1f_max_rise_pp": 0.0,
+  "not_pre_registered": {
+    "genuine_block_by_end_after_max": 0.12,
+    "note": "Genuine false-BLOCK per call is not a docs/13 criterion. The dev budget (--max-false-block) is 1 % at ASV 1.0; eval values above it are dev->eval shift."
+  },
+  "cells": {
+    "asv=0.80,channel=0.00": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 0.9975,
+      "p1s_rise_pp": 99.75,
+      "genuine_challenge_60s_before": 0.995,
+      "genuine_challenge_60s_after": 0.0625,
+      "p1f_rise_pp": -93.25,
+      "genuine_block_by_end_after": 0.075
+    },
+    "asv=0.80,channel=0.25": {
+      "spoof_block_worst_attack_before": 0.14,
+      "spoof_block_worst_attack_after": 1.0,
+      "p1s_rise_pp": 86.0,
+      "genuine_challenge_60s_before": 1.0,
+      "genuine_challenge_60s_after": 1.0,
+      "p1f_rise_pp": 0.0,
+      "genuine_block_by_end_after": 0.12
+    },
+    "asv=0.90,channel=0.00": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 1.0,
+      "p1s_rise_pp": 100.0,
+      "genuine_challenge_60s_before": 0.9625,
+      "genuine_challenge_60s_after": 0.0175,
+      "p1f_rise_pp": -94.5,
+      "genuine_block_by_end_after": 0.075
+    },
+    "asv=0.90,channel=0.25": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 1.0,
+      "p1s_rise_pp": 100.0,
+      "genuine_challenge_60s_before": 1.0,
+      "genuine_challenge_60s_after": 0.715,
+      "p1f_rise_pp": -28.5,
+      "genuine_block_by_end_after": 0.0925
+    },
+    "asv=0.95,channel=0.00": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 1.0,
+      "p1s_rise_pp": 100.0,
+      "genuine_challenge_60s_before": 0.93,
+      "genuine_challenge_60s_after": 0.0025,
+      "p1f_rise_pp": -92.75,
+      "genuine_block_by_end_after": 0.075
+    },
+    "asv=0.95,channel=0.25": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 1.0,
+      "p1s_rise_pp": 100.0,
+      "genuine_challenge_60s_before": 1.0,
+      "genuine_challenge_60s_after": 0.51,
+      "p1f_rise_pp": -49.0,
+      "genuine_block_by_end_after": 0.0825
+    },
+    "asv=1.00,channel=0.00": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 0.9975,
+      "p1s_rise_pp": 99.75,
+      "genuine_challenge_60s_before": 0.8225,
+      "genuine_challenge_60s_after": 0.0,
+      "p1f_rise_pp": -82.25,
+      "genuine_block_by_end_after": 0.075
+    },
+    "asv=1.00,channel=0.25": {
+      "spoof_block_worst_attack_before": 0.0,
+      "spoof_block_worst_attack_after": 0.9975,
+      "p1s_rise_pp": 99.75,
+      "genuine_challenge_60s_before": 0.9975,
+      "genuine_challenge_60s_after": 0.2525,
+      "p1f_rise_pp": -74.5,
+      "genuine_block_by_end_after": 0.075
+    }
+  },
+  "assumption": "window scores drawn i.i.d. per call (no speaker column yet); optimistic"
+}

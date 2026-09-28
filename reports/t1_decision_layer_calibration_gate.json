@@ -1,0 +1,997 @@
+{
+  "source": "C:\\vr-out\\p1\\dev\\incumbent.npz",
+  "assumption": "window scores drawn i.i.d. per call (no speaker column yet); optimistic",
+  "fusion": {
+    "intercept": -1.6,
+    "w_cm": 1.5,
+    "w_asv": 2.0,
+    "w_prosody": 0.7,
+    "w_channel": 0.9,
+    "w_context": 0.5,
+    "w_semantic": 0.4
+  },
+  "chosen": {
+    "operating_threshold": 4.706552124023438,
+    "op_percentile": 5.0,
+    "VR_CLONE_CM_LLR_MAX": -2.4568,
+    "VR_CLONE_MIN_WINDOWS": 3,
+    "clone_genuine_false_block_at_asv_1": 0.01,
+    "VR_CHALLENGE_CM_LLR_MAX": 0.5757,
+    "VR_CHALLENGE_MIN_WINDOWS": 2,
+    "VR_CHALLENGE_TRIGGER_CONSECUTIVE": 3
+  },
+  "results": {
+    "dev": {
+      "before": {
+        "asv=0.80,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.7325,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.95,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.80,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 1.0,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.0125,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0125,
+            "p_block_by_end": 0.0125,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 0.8,
+            "A13": 0.085,
+            "A14": 1.0,
+            "A15": 0.8025,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.085
+        },
+        "asv=0.90,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.58,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.8675,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 0.9725,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 0.9725,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.90,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.9325,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.95,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.475,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.77,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 0.9375,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 0.9375,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.95,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.8875,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.99,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=1.00,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.3375,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.63,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 0.8475,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 0.8475,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=1.00,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.83,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.9775,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A09": 0.0,
+            "A10": 0.0,
+            "A11": 0.0,
+            "A12": 0.0,
+            "A13": 0.0,
+            "A14": 0.0,
+            "A15": 0.0,
+            "A16": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        }
+      },
+      "after": {
+        "asv=0.80,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.005,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.0175,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.03,
+            "p_block_within_120s": 0.01,
+            "p_block_by_end": 0.01,
+            "mean_challenges_per_call": 0.03,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8625,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8625
+        },
+        "asv=0.80,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 1.0,
+            "p_block_within_30s": 0.02,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.0225,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0275,
+            "p_block_by_end": 0.0275,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.9,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.9
+        },
+        "asv=0.90,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0025,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.0025,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.0025,
+            "p_block_within_120s": 0.01,
+            "p_block_by_end": 0.01,
+            "mean_challenges_per_call": 0.0025,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8625,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8625
+        },
+        "asv=0.90,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.2725,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.4925,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.715,
+            "p_block_within_120s": 0.0125,
+            "p_block_by_end": 0.0125,
+            "mean_challenges_per_call": 0.715,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8775,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8775
+        },
+        "asv=0.95,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0025,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.0025,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.0025,
+            "p_block_within_120s": 0.01,
+            "p_block_by_end": 0.01,
+            "mean_challenges_per_call": 0.0025,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8625,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8625
+        },
+        "asv=0.95,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.1375,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.2725,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.465,
+            "p_block_within_120s": 0.0125,
+            "p_block_by_end": 0.0125,
+            "mean_challenges_per_call": 0.465,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8725,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8725
+        },
+        "asv=1.00,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.0,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.0,
+            "p_block_within_120s": 0.01,
+            "p_block_by_end": 0.01,
+            "mean_challenges_per_call": 0.0,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8625,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8625
+        },
+        "asv=1.00,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.06,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.1275,
+            "p_block_within_60s": 0.005,
+            "p_challenge_within_120s": 0.2375,
+            "p_block_within_120s": 0.01,
+            "p_block_by_end": 0.01,
+            "mean_challenges_per_call": 0.2375,
+            "sessions_with_override": {
+              "clone": 4
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A09": 1.0,
+            "A10": 1.0,
+            "A11": 1.0,
+            "A12": 1.0,
+            "A13": 0.8675,
+            "A14": 1.0,
+            "A15": 1.0,
+            "A16": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.8675
+        }
+      }
+    },
+    "eval": {
+      "before": {
+        "asv=0.80,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.8525,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.995,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.80,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 1.0,
+            "p_block_within_30s": 0.02,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.02,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.02,
+            "p_block_by_end": 0.02,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 0.8775,
+            "A20": 0.4825,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 0.9275,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 0.14,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 0.9175
+          },
+          "spoof_p_block_worst_attack": 0.14
+        },
+        "asv=0.90,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.755,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.9625,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 0.9975,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 0.9975,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.90,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.9825,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.95,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.66,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.93,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 0.9975,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 0.9975,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=0.95,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.9675,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=1.00,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.5275,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.8225,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 0.9775,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 0.9775,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        },
+        "asv=1.00,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.9225,
+            "p_block_within_30s": 0.0,
+            "p_challenge_within_60s": 0.9975,
+            "p_block_within_60s": 0.0,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.0,
+            "p_block_by_end": 0.0,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {}
+          },
+          "spoof_p_block_by_end": {
+            "A17": 0.0,
+            "A18": 0.0,
+            "A19": 0.0,
+            "A20": 0.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 0.0,
+            "A24": 0.0,
+            "A25": 0.0,
+            "A26": 0.0,
+            "A27": 0.0,
+            "A28": 0.0,
+            "A29": 0.0,
+            "A30": 0.0,
+            "A31": 0.0,
+            "A32": 0.0
+          },
+          "spoof_p_block_worst_attack": 0.0
+        }
+      },
+      "after": {
+        "asv=0.80,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0325,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 0.0625,
+            "p_block_within_60s": 0.0175,
+            "p_challenge_within_120s": 0.1125,
+            "p_block_within_120s": 0.075,
+            "p_block_by_end": 0.075,
+            "mean_challenges_per_call": 0.1125,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 0.9975,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.9975
+        },
+        "asv=0.80,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 1.0,
+            "p_block_within_30s": 0.0625,
+            "p_challenge_within_60s": 1.0,
+            "p_block_within_60s": 0.0675,
+            "p_challenge_within_120s": 1.0,
+            "p_block_within_120s": 0.12,
+            "p_block_by_end": 0.12,
+            "mean_challenges_per_call": 1.0,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 1.0,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 1.0
+        },
+        "asv=0.90,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0125,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 0.0175,
+            "p_block_within_60s": 0.0175,
+            "p_challenge_within_120s": 0.035,
+            "p_block_within_120s": 0.075,
+            "p_block_by_end": 0.075,
+            "mean_challenges_per_call": 0.035,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 1.0,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 1.0
+        },
+        "asv=0.90,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.4475,
+            "p_block_within_30s": 0.02,
+            "p_challenge_within_60s": 0.715,
+            "p_block_within_60s": 0.035,
+            "p_challenge_within_120s": 0.9525,
+            "p_block_within_120s": 0.0925,
+            "p_block_by_end": 0.0925,
+            "mean_challenges_per_call": 0.9525,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 1.0,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 1.0
+        },
+        "asv=0.95,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 0.0025,
+            "p_block_within_60s": 0.0175,
+            "p_challenge_within_120s": 0.01,
+            "p_block_within_120s": 0.075,
+            "p_block_by_end": 0.075,
+            "mean_challenges_per_call": 0.01,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 1.0,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 1.0
+        },
+        "asv=0.95,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.2825,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 0.51,
+            "p_block_within_60s": 0.0225,
+            "p_challenge_within_120s": 0.79,
+            "p_block_within_120s": 0.0825,
+            "p_block_by_end": 0.0825,
+            "mean_challenges_per_call": 0.79,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 1.0,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 1.0
+        },
+        "asv=1.00,channel=0.00": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.0,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 0.0,
+            "p_block_within_60s": 0.0175,
+            "p_challenge_within_120s": 0.0,
+            "p_block_within_120s": 0.075,
+            "p_block_by_end": 0.075,
+            "mean_challenges_per_call": 0.0,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 0.9975,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.9975
+        },
+        "asv=1.00,channel=0.25": {
+          "genuine": {
+            "sessions": 400,
+            "p_challenge_within_30s": 0.14,
+            "p_block_within_30s": 0.0125,
+            "p_challenge_within_60s": 0.2525,
+            "p_block_within_60s": 0.0175,
+            "p_challenge_within_120s": 0.495,
+            "p_block_within_120s": 0.075,
+            "p_block_by_end": 0.075,
+            "mean_challenges_per_call": 0.495,
+            "sessions_with_override": {
+              "clone": 30
+            }
+          },
+          "spoof_p_block_by_end": {
+            "A17": 1.0,
+            "A18": 1.0,
+            "A19": 1.0,
+            "A20": 1.0,
+            "A21": 1.0,
+            "A22": 1.0,
+            "A23": 1.0,
+            "A24": 1.0,
+            "A25": 1.0,
+            "A26": 1.0,
+            "A27": 1.0,
+            "A28": 0.9975,
+            "A29": 1.0,
+            "A30": 1.0,
+            "A31": 1.0,
+            "A32": 1.0
+          },
+          "spoof_p_block_worst_attack": 0.9975
+        }
+      }
+    }
+  }
+}
