@@ -52,6 +52,18 @@ REST (`POST /v1/sessions/{sid}/challenge`) should adopt the acked
 `session_id`; supplying your own id in the handshake still works and is
 echoed back unchanged.
 
+**Server-ended session (docs/15 N4).** If the `claimed_identity`'s enrolment
+is erased (`DELETE /v1/enroll/{id}`) while the stream is open, the server
+stops scoring it. On the client's next message it sends, instead of a verdict,
+
+```json
+{ "type": "session_closed", "session_id": "ws-a1b2c3d4", "reason": "biometric_erasure" }
+```
+
+and closes the socket with code `1000`. Like the ack, it has no
+`tier`/`risk_score`. The session is also gone from REST, so a challenge grade
+for it returns `404`.
+
 **`claimed_identity` fallback:** when omitted (or `""`), the server does not
 simply skip ASV — it falls back to the identity of whichever anchor is loaded
 (`GET /api/v1/health`'s `anchor.user_id`), so speaker verification runs by
@@ -201,6 +213,27 @@ therefore accept more than one `trigger_challenge` per session. With
 consecutive `CHALLENGE`-tier windows. Every one of these defaults to the
 original one-shot, text-only behaviour until its threshold is chosen on dev
 data (`scripts/calibrate_decision_layer.py`).
+
+**Amendment 2 (docs/15 N2) — digits graded from the server's transcript.**
+The phrase shows the digits, so a scripted client could always send the right
+`response_text`. The server now keeps the raw audio it receives on the stream
+from the moment it issues a challenge (up to
+`VR_CHALLENGE_RESPONSE_MAX_SECONDS`), transcribes it with a **local** ASR
+engine (`VR_CHALLENGE_ASR_PROVIDER`, default `local` = faster-whisper; a cloud
+provider is refused), and grades digit order from that transcript. Spoken
+digits count in English, romanised Hindi and Devanagari, as do numerals.
+`response_text` is **ignored**, and is now optional in the request body.
+Grading **fails closed**: less than 0.3 s of response audio gives
+`no_response_audio`, and no usable local engine gives
+`challenge_transcriber_unavailable`; both escalate to `BLOCK` like any other
+failure. The grade response adds `grade_source` (`"server_asr"` or
+`"client_text_drill"`), `transcript` (what the server heard, or `null`) and
+`asr_error`. `GET /v1/health` reports the mode under `challenge_grading`.
+`VR_CHALLENGE_CLIENT_TEXT_DRILL=1` restores grading from `response_text` for
+drills and demos only. It is forgeable by construction. A TTS that speaks the
+right digits still passes the transcript; the response-audio CM check above
+is what stops it, once `VR_CHALLENGE_CM_LLR_MAX` is set. Measured by
+`scripts/challenge_forgery_harness.py` (`reports/challenge_p1c_harness.json`).
 
 ### 3.1 `semantic` — parallel ASR + keyword context signal (advisory)
 
@@ -360,7 +393,7 @@ alert payload it already received.
 | `VR_RATE_LIMIT_ENROLL` | `10` | Per-key requests/minute for `POST /v1/enroll`; tighter than analyze because it writes a voiceprint. `0` disables. |
 | `VR_ALERT_WEBHOOK_URL` | *(unset)* | Alert webhook target; unset disables dispatch |
 | `VR_FUSION_W_SEMANTIC` | `0.4` | Fusion weight for the ASR/keyword `semantic_risk` term (§3.1) |
-| `VR_SEMANTIC_ENABLED` | `0` | **Opt-in for the `semantic` block (G6).** Off by default because enabling it uploads each 4.04 s caller audio window to Groq, a third-party US-hosted service. When `1`, `GET /v1/health` reports `models.zero_retention: false` and `models.third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block reports `zero_retention_verified: false` with the same processor list. A `GROQ_API_KEY` alone does **not** enable it — that key is also used by the separate SACH and IndicConformer prototypes. |
+| `VR_SEMANTIC_ENABLED` | `0` | **Opt-in for the `semantic` block (G6).** Off by default because, with the default cloud provider, enabling it uploads each 4.04 s caller audio window to Groq, a third-party US-hosted service. When `1` with a cloud or unrecognised `VR_SEMANTIC_PROVIDER`, `GET /v1/health` reports `models.zero_retention: false` and `models.third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block reports `zero_retention_verified: false` with the same processor list. A `GROQ_API_KEY` alone does **not** enable it — that key is also used by the separate SACH and IndicConformer prototypes. |
 | `GROQ_API_KEY` | *(unset)* | Required, together with `VR_SEMANTIC_ENABLED=1`, for the `semantic` block to populate; either missing degrades it to `available: false` (see `requirements-asr.txt`) |
 | `GEMINI_API_KEY` | *(unset)* | Enables Gemini threat analysis & fact verification; required for the `verify-chunk` and `verify` endpoints (Sotto edition). Missing key raises `ValueError` in `get_gemini_client()`. |
 | `VR_ASV_BACKEND` | `stub` | `ecapa` swaps in real ECAPA-TDNN embeddings (`asv_ecapa.py`); changes the `metrics` distribution and the anchor file loaded (`data/anchor_asv_embedding_ecapa.json`) |
@@ -375,6 +408,9 @@ alert payload it already received.
 | `VR_CHALLENGE_REQUIRE_AUDIO` | `0` | `1` fails a challenge graded with fewer than `VR_CHALLENGE_MIN_WINDOWS` response windows |
 | `VR_CHALLENGE_MAX_PER_SESSION` | `1` | Challenges per session; > 1 re-arms after a pass (see §3 amendment) |
 | `VR_CHALLENGE_TRIGGER_CONSECUTIVE` | `1` | Consecutive `CHALLENGE`-tier windows before a challenge is issued |
+| `VR_CHALLENGE_ASR_PROVIDER` | `local` | Engine that transcribes challenge response audio (§3 Amendment 2). Local engines only (`local`, `whisper`, `indicconformer`); a cloud provider is refused and grading fails closed |
+| `VR_CHALLENGE_RESPONSE_MAX_SECONDS` | `20` | Response audio kept for transcription, from the moment the challenge is issued |
+| `VR_CHALLENGE_CLIENT_TEXT_DRILL` | `0` | `1` grades digits from the client's `response_text` instead. Drills and demos only: forgeable |
 | `VR_ANCHOR_EMBEDDING` | *(backend-default path)* | Overrides which anchor JSON is loaded, bypassing the `VR_ASV_BACKEND`-keyed default |
 | `VR_FUSION_PRESET` | *(unset)* | `demo` applies a preset fusion-weight override tuned for the shipped demo clips |
 | `VR_SAMPLE_RATE` | `16000` | Processing sample rate in Hz — independent of the handshake's `sample_rate`, which is per-connection |
@@ -385,8 +421,10 @@ alert payload it already received.
 | `VR_MODEL_PATH` | `ml/checkpoints/best_model.pt` | Overrides the checkpoint `ml_bridge.py` loads for `target_speaker` / `POST /v1/verify-speaker` |
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
+| `VR_ENROL_STORE_PATH` | *(unset — in memory)* | Directory for the persistent, encrypted enrolment store (docs/15 N4). Unset: enrolments are lost on restart |
+| `VR_ENROL_STORE_KEY` | *(unset)* | 32-byte key, base64 or hex, sealing each record with AES-256-GCM. Required when `VR_ENROL_STORE_PATH` is set; the server refuses to start without it |
 | `VR_ENROLL_BYPASS_QA` | `0` | `1` bypasses enrolment audio quality assurance checks (voiced duration ≥ 3.0s, SNR ≥ 10 dB, CM score ≥ 0.0) |
-| `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block: `groq` (default, cloud), `local` / `local_whisper` (on-box faster-whisper, zero retention) |
+| `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block. Cloud: `groq` (default). Local, zero retention: `local` / `local_whisper` / `whisper` (on-box faster-whisper) and `indicconformer`. A local provider keeps `zero_retention: true` and an empty `third_party_audio_processors`. An unrecognised name is reported as a third-party transfer and the block degrades to `available: false`. |
 
 ## 9. Conformance test
 

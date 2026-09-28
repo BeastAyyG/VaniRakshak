@@ -38,6 +38,7 @@ from ..detectors.pipeline import DetectionPipeline
 from ..detectors.voice import vad_stats, zcr_variance
 from ..detectors.channel import detect as channel_detect
 from ..anchor import load_anchor
+from ..privacy.enrolment_store import EnrolmentRecord, store_from_env
 from ..semantic import SEMANTIC_SIGNAL
 from .auth import ApiKey, AuthError, Authenticator, extract_secret
 
@@ -69,6 +70,33 @@ PIPELINE = DetectionPipeline()
 # the same pipeline and the two report comparable numbers.
 ANCHOR_STATE: Dict[str, object] = load_anchor(PIPELINE)
 
+
+def _load_enrolment_store():
+    """docs/15 N4: restore persisted enrolments into the running ASV model.
+
+    A record made by another ASV backend is skipped, not loaded: a stub
+    projection means nothing to ECAPA, and the reverse.
+    """
+    store = store_from_env(settings.enrolment.store_path, settings.enrolment.store_key)
+    state: Dict[str, object] = {"persistent": store is not None, "loaded": 0,
+                                "skipped_other_backend": 0, "unreadable": 0}
+    if store is None:
+        return None, state
+    report = store.load_all()
+    for rec in report.records:
+        if rec.asv_backend != PIPELINE.asv.name:
+            state["skipped_other_backend"] = int(state["skipped_other_backend"]) + 1
+            continue
+        PIPELINE.asv.restore_enrolment(rec.user_id, rec.embedding, rec.calibration)
+        state["loaded"] = int(state["loaded"]) + 1
+    state["unreadable"] = len(report.unreadable)
+    if report.unreadable:
+        print(f"[enrolment-store] {len(report.unreadable)} unreadable record(s) (wrong key?)")
+    return store, state
+
+
+ENROL_STORE, ENROL_STORE_STATE = _load_enrolment_store()
+
 # API-key auth. Disabled (and loudly warned about) when VR_API_KEYS is unset,
 # so the demo and integration_check keep working; enforced the moment keys
 # exist. See server/auth.py for the key format and scope model.
@@ -89,7 +117,7 @@ if settings.auth.require_auth and PIPELINE.asv_is_synthetic:
 
 def _third_party_processors() -> List[str]:
     """Who receives caller audio beyond this process (G6). Empty = nobody."""
-    return [settings.semantic.provider] if settings.semantic.enabled else []
+    return [settings.semantic.provider] if settings.semantic.uploads_audio else []
 
 
 def _guard(
@@ -205,6 +233,10 @@ class EnrollDeleteResponse(BaseModel):
     user_id: str
     erased_at: str
     receipt_hash: str
+    # docs/15 N4. None when no persistent store is configured.
+    store_record_erased: Optional[bool] = None
+    # Live sessions claiming this identity, ended by the erasure.
+    sessions_closed: List[str] = Field(default_factory=list)
 
 
 class EnrolledSpeakersResponse(BaseModel):
@@ -264,7 +296,9 @@ class SessionStartRequest(BaseModel):
 
 
 class ChallengeGradeRequest(BaseModel):
-    response_text: str
+    # Graded only under VR_CHALLENGE_CLIENT_TEXT_DRILL=1. Otherwise the server
+    # transcribes the response audio itself (docs/15 N2) and ignores this.
+    response_text: str = ""
     response_latency_ms: int
 
 
@@ -290,12 +324,13 @@ def health() -> dict:
             # what's actually running (synthetic stub vs real WavLM/ECAPA-TDNN).
             "wavlm_model": f"{PIPELINE.cm.name} / {PIPELINE.asv.name}",
             "vad_enabled": True,
-            # G6: false whenever the semantic layer is enabled, because it then
-            # uploads caller audio to a third party. Declared from config rather
+            # G6: false whenever the semantic layer is enabled with a cloud
+            # (or unrecognised) provider, because it then uploads caller audio
+            # to a third party. A local provider keeps audio on the box. Declared from config rather
             # than from whether a call has happened yet, so it fails toward
             # disclosure: a server configured to transfer says so before the
             # first byte leaves.
-            "zero_retention": not settings.semantic.enabled,
+            "zero_retention": not settings.semantic.uploads_audio,
             "third_party_audio_processors": _third_party_processors(),
             "cm_backend": PIPELINE.cm.name,
             "asv_backend": PIPELINE.asv.name,
@@ -304,6 +339,14 @@ def health() -> dict:
             # voiceprint. Read from the running instance, so it stays truthful
             # even if VR_ASV_BACKEND=ecapa was requested but degraded to stub.
             "asv_synthetic": PIPELINE.asv_is_synthetic,
+        },
+        # docs/15 N2: where challenge digits are graded from. "server_asr"
+        # transcribes the response audio with a local engine and fails closed
+        # without one; "client_text_drill" trusts the client and is forgeable.
+        "enrolment_store": dict(ENROL_STORE_STATE),
+        "challenge_grading": {
+            "source": "client_text_drill" if settings.challenge.client_text_drill else "server_asr",
+            "asr_provider": settings.challenge.asr_provider,
         },
         "anchor": {
             "user_id": ANCHOR_STATE.get("user_id"),
@@ -330,7 +373,10 @@ def list_enrolled(request: Request) -> EnrolledSpeakersResponse:
 @app.post("/v1/enroll", response_model=EnrollResponse)
 @app.post("/api/v1/enroll", response_model=EnrollResponse)
 async def enroll(
-    request: Request, user_id: str = Form(...), audio: UploadFile = File(...)
+    request: Request,
+    user_id: str = Form(...),
+    audio: UploadFile = File(...),
+    consent_ref: Optional[str] = Form(None),
 ) -> EnrollResponse:
     # acting_as=user_id is the important part: enrolling a voiceprint under
     # someone else's user_id is an identity attack, not a misconfiguration.
@@ -343,6 +389,7 @@ async def enroll(
     # W5: Enrolment QA checks (voiced seconds ≥ 3.0s, SNR floor ≥ 10 dB, CM score ≥ 0.0)
     # Applied when authenticating or when real audio is supplied (bypass if VR_ENROLL_BYPASS_QA=1)
     bypass_qa = os.environ.get("VR_ENROLL_BYPASS_QA", "").strip().lower() in ("1", "true", "yes")
+    qa: Dict[str, object] = {"bypassed": bypass_qa, "duration_s": round(float(x.size) / float(sr), 3)}
     if not bypass_qa and x.size >= int(0.5 * sr):
         v_stats = vad_stats(x, sr)
         total_duration = float(x.size) / float(sr)
@@ -357,6 +404,9 @@ async def enroll(
         cm_score = PIPELINE.cm.score(x, sr)
         if cm_score < 0.0:
             raise HTTPException(400, f"enrolment audio rejected: countermeasure score indicates synthetic voice (LLR={cm_score:.2f})")
+        qa.update(voiced_s=round(voiced_duration, 3),
+                  snr_db=round(float(ch_stats.get("snr_db", 0.0)), 2),
+                  cm_llr=round(float(cm_score), 4))
 
     # Re-use or create a session for enrolment
     sid = f"enroll-{uuid.uuid4().hex[:8]}"
@@ -368,6 +418,19 @@ async def enroll(
     # If the global anchor has calibration parameters, seed per-user calibration from it or baseline
     if PIPELINE.asv.calibration and hasattr(PIPELINE.asv, "_user_calibrations"):
         PIPELINE.asv._user_calibrations[user_id] = dict(PIPELINE.asv.calibration)
+
+    # docs/15 N4: persist, or undo. An enrolment that silently would not
+    # survive a restart is the G-D defect this store exists to close.
+    if ENROL_STORE is not None:
+        emb, cal = PIPELINE.asv.get_enrolment(user_id)
+        try:
+            ENROL_STORE.save(EnrolmentRecord(
+                user_id=user_id, embedding=emb, asv_backend=PIPELINE.asv.name,
+                calibration=cal, qa=qa, consent_ref=consent_ref,
+            ))
+        except Exception as e:
+            PIPELINE.unenroll(user_id)
+            raise HTTPException(500, f"enrolment not persisted ({type(e).__name__}); nothing was kept")
 
     return EnrollResponse(
         status="enrolled",
@@ -383,14 +446,34 @@ async def enroll(
 def delete_enrollment(request: Request, user_id: str) -> EnrollDeleteResponse:
     """DPDP Act 2023 Sec 12: Right to correction and erasure of personal biometric data.
 
-    Permanently erases the voiceprint embedding and per-user calibration for user_id.
-    Logs an immutable receipt to the cryptographic audit chain.
+    Permanently erases the voiceprint embedding and per-user calibration for
+    user_id, from memory and from the persistent store, and ends every live
+    session claiming that identity (docs/15 N4). Logs an immutable receipt to
+    the cryptographic audit chain.
     """
     key = _guard(request, "enroll", "enroll", acting_as=user_id)
-    if not PIPELINE.is_enrolled(user_id):
+    in_store = ENROL_STORE is not None and ENROL_STORE.contains(user_id)
+    if not PIPELINE.is_enrolled(user_id) and not in_store:
         raise HTTPException(404, f"enrolled voiceprint for user '{user_id}' not found")
 
     PIPELINE.unenroll(user_id)
+    store_erased: Optional[bool] = None
+    if ENROL_STORE is not None:
+        ENROL_STORE.erase(user_id)
+        store_erased = not ENROL_STORE.contains(user_id)
+        if not store_erased:
+            raise HTTPException(500, "voiceprint erased from memory but not from disk")
+
+    # A session opened before erasure would otherwise keep scoring against
+    # a claim that no longer exists (G-E). End it; a WS stream is closed on
+    # its next message.
+    closed = sorted(
+        sid for sid, s in list(SESSIONS.items()) if s.context.claimed_identity == user_id
+    )
+    for sid in closed:
+        sess = SESSIONS.pop(sid, None)
+        if sess is not None:
+            sess.revoke("biometric_erasure")
 
     # Immutable receipt chained into DPDP audit log
     ev = AUDIT.append(
@@ -399,7 +482,12 @@ def delete_enrollment(request: Request, user_id: str) -> EnrollDeleteResponse:
         claimed_identity=user_id,
         risk_score=0.0,
         tier="ERASED",
-        features={"biometric_erasure": 1.0, "dpdp_section": 12.0},
+        features={
+            "biometric_erasure": 1.0,
+            "dpdp_section": 12.0,
+            "store_record_erased": -1.0 if store_erased is None else float(store_erased),
+            "sessions_closed": float(len(closed)),
+        },
     )
 
     return EnrollDeleteResponse(
@@ -407,6 +495,8 @@ def delete_enrollment(request: Request, user_id: str) -> EnrollDeleteResponse:
         user_id=user_id,
         erased_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         receipt_hash=ev.receipt_hash,
+        store_record_erased=store_erased,
+        sessions_closed=closed,
     )
 
 
@@ -642,8 +732,8 @@ async def analyze(
         "receipt_sha256": last.receipt_hash,
         "statutory_act": "India Digital Personal Data Protection (DPDP) Act 2023 Section 8(7)",
         # G6: a claim of zero retention is only true when no audio left the
-        # box. With the semantic layer enabled it went to a named third party.
-        "zero_retention_verified": not settings.semantic.enabled,
+        # box. With a cloud semantic provider it went to a named third party.
+        "zero_retention_verified": not settings.semantic.uploads_audio,
         "third_party_audio_processors": _third_party_processors(),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -855,6 +945,12 @@ async def stream_endpoint(ws: WebSocket) -> None:
         while True:
             msg = await ws.receive()
             if msg.get("type") == "websocket.disconnect":
+                break
+            if sess.revoked is not None:
+                # docs/15 N4: the claimed identity was erased mid-call.
+                await ws.send_json({"type": "session_closed", "session_id": sid,
+                                    "reason": sess.revoked})
+                await ws.close(code=1000, reason=sess.revoked)
                 break
             data: Optional[bytes] = msg.get("bytes")
             if data is None:

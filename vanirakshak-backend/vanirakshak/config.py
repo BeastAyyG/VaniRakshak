@@ -118,6 +118,18 @@ class ChallengeConfig:
     # whole call, which puts genuine per-call friction near 100 % (docs/13 P1-F).
     trigger_consecutive: int = max(1, _env_int("VR_CHALLENGE_TRIGGER_CONSECUTIVE", 1))
 
+    # docs/15 N2: digits are graded from the server's own transcript of the
+    # response audio, not from the client's ``response_text`` -- a scripted
+    # client can always send the right digits. The engine must be local
+    # (LOCAL_ASR_PROVIDERS below): the challenge never ships audio abroad,
+    # whatever the semantic layer does.
+    asr_provider: str = _env("VR_CHALLENGE_ASR_PROVIDER", "local")
+    # Response audio kept for transcription, from the moment of issue.
+    response_max_seconds: float = _env_float("VR_CHALLENGE_RESPONSE_MAX_SECONDS", 20.0)
+    # Drill mode only: grade digits from the client's ``response_text``.
+    # Forgeable by construction; never enable it in a deployment.
+    client_text_drill: bool = _env_bool("VR_CHALLENGE_CLIENT_TEXT_DRILL")
+
 
 @dataclass(frozen=True)
 class FusionConfig:
@@ -218,16 +230,28 @@ class ServerConfig:
     )
 
 
+# ASR provider names accepted by backend/services/asr/provider.py, split by
+# where the caller's audio goes. Local engines run inference in this process
+# (model weights may be downloaded once; audio never leaves the box).
+LOCAL_ASR_PROVIDERS = frozenset({
+    "local", "local_whisper", "whisper", "faster_whisper", "existing_whisper",
+    "indicconformer", "indic_conformer", "indic",
+})
+CLOUD_ASR_PROVIDERS = frozenset({"groq", "groq_whisper", "groqcloud", "whisper_turbo"})
+
+
 @dataclass(frozen=True)
 class SemanticConfig:
     """ASR / scam-phrase semantic layer (docs/10 G6).
 
-    **Off by default.** When on, every 4.04 s caller audio window is uploaded
-    to Groq -- a third-party, US-hosted service -- for transcription, which
+    **Off by default.** With a cloud provider (the default, Groq) every 4.04 s
+    caller audio window is uploaded to a third-party, US-hosted service, which
     contradicts the zero-retention claim this system otherwise makes under
     DPDP Act 2023 s.8(7). So it requires an explicit opt-in, and turning it on
-    flips ``zero_retention`` to false on /v1/health and names the processor in
-    every ``dpdp_compliance`` block.
+    with a cloud provider flips ``zero_retention`` to false on /v1/health and
+    names the processor in every ``dpdp_compliance`` block. A local provider
+    (``VR_SEMANTIC_PROVIDER=local``) keeps audio on the box and keeps
+    ``zero_retention`` true.
 
     Deliberately *not* keyed off GROQ_API_KEY alone: that key sits in .env for
     the separate SACH and IndicConformer prototypes, and its mere presence must
@@ -238,8 +262,36 @@ class SemanticConfig:
         "1", "true", "yes", "on",
     )
     # Named so the compliance surface can disclose exactly who receives audio.
-    # Set VR_SEMANTIC_PROVIDER=local or whisper to use offline zero-retention ASR.
     provider: str = _env("VR_SEMANTIC_PROVIDER", "groq")
+
+    def __post_init__(self):
+        object.__setattr__(self, "provider", self.provider.strip().lower())
+
+    @property
+    def provider_known(self) -> bool:
+        return self.provider in LOCAL_ASR_PROVIDERS or self.provider in CLOUD_ASR_PROVIDERS
+
+    @property
+    def provider_is_local(self) -> bool:
+        """True only for a known on-box engine. An unknown name is treated as
+        cloud so every compliance surface fails toward disclosure."""
+        return self.provider in LOCAL_ASR_PROVIDERS
+
+    @property
+    def uploads_audio(self) -> bool:
+        """Whether caller audio leaves this process for a third party."""
+        return self.enabled and not self.provider_is_local
+
+
+@dataclass(frozen=True)
+class EnrolmentConfig:
+    """Persistent enrolment store (docs/15 N4). Empty ``store_path`` keeps
+    enrolments in memory only, as before: a restart then forgets them. With a
+    path set, ``store_key`` (32 bytes, base64 or hex) is required and the
+    server refuses to start without it."""
+
+    store_path: str = _env("VR_ENROL_STORE_PATH", "")
+    store_key: str = field(default=_env("VR_ENROL_STORE_KEY", ""), repr=False)
 
 
 @dataclass(frozen=True)
@@ -272,6 +324,7 @@ class Settings:
     auth: AuthConfig = field(default_factory=AuthConfig)
     semantic: SemanticConfig = field(default_factory=SemanticConfig)
     challenge: ChallengeConfig = field(default_factory=ChallengeConfig)
+    enrolment: EnrolmentConfig = field(default_factory=EnrolmentConfig)
 
     def __post_init__(self):
         preset = os.environ.get("VR_FUSION_PRESET")

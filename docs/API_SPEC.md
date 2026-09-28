@@ -171,7 +171,9 @@ this running instance yet.
 
 ### `POST /v1/enroll` (and `/api/v1/enroll`)
 
-Form fields: `user_id` (string, required), `audio` (file, required, ≥0.5s).
+Form fields: `user_id` (string, required), `audio` (file, required, ≥0.5s),
+`consent_ref` (string, optional: your reference to the consent record, kept
+with the enrolment).
 
 ```json
 {
@@ -187,6 +189,39 @@ Any number of distinct `user_id`s may be enrolled (`EnrolledSpeakersPanel.tsx`
 is the dashboard UI for this). With the stub ASV backend (default) the
 resulting "voiceprint" is a random projection, not real biometrics — real
 multi-speaker verification requires `VR_ASV_BACKEND=ecapa`.
+
+**Persistence (docs/15 N4).** With `VR_ENROL_STORE_PATH` set, each enrolment
+is written to an AES-256-GCM-sealed record (`VR_ENROL_STORE_KEY`): the
+embedding, the ASV backend that made it, the per-user calibration, the QA
+summary and `consent_ref`. Never audio. Records are reloaded at start-up; a
+record made by a different ASV backend is skipped. If the record cannot be
+written, the enrolment is undone and the call returns `500`. Without a store
+path, enrolments are in memory only and a restart forgets them.
+`GET /v1/health` reports `enrolment_store: {persistent, loaded,
+skipped_other_backend, unreadable}`.
+
+### `DELETE /v1/enroll/{user_id}` (and `/api/v1/enroll/{user_id}`)
+
+DPDP Act 2023 s.12 erasure. Removes the voiceprint and its calibration from
+memory and from the persistent store, and ends every live session whose
+`claimed_identity` is that user (a WebSocket stream receives `session_closed`
+on its next message, see PROTOCOL.md §2). `404` if the user is enrolled
+neither in memory nor on disk.
+
+```json
+{
+  "status": "deleted",
+  "user_id": "alice",
+  "erased_at": "2026-09-28T10:02:11Z",
+  "receipt_hash": "9f2c…",
+  "store_record_erased": true,
+  "sessions_closed": ["ws-a1b2c3d4"]
+}
+```
+
+`store_record_erased` is `null` when no store is configured. The audit event
+(tier `ERASED`) records `store_record_erased` (`-1` = no store) and the number
+of `sessions_closed`.
 
 ### `POST /v1/analyze` / `/v1/analyze/audio` (and `/api/v1/` variants)
 
@@ -294,14 +329,24 @@ Returns `{"session_id": "call-..."}`.
 
 ### `POST /v1/sessions/{sid}/challenge` (and `/api/v1/sessions/{sid}/challenge`)
 
-Grade a challenge response. Body: `{"response_text": "...", "response_latency_ms": 1200}`.
+Grade a challenge response. Body: `{"response_latency_ms": 1200}`, with an
+optional `"response_text"` that is graded only in drill mode.
 
 ```json
 {
   "ok": true, "reason": "ok", "confidence": 0.6, "blocked": false,
-  "acoustic": { "windows": 3, "checked": true, "mean_cm_llr": 2.41, "mean_asv": 0.93, "verdict": "pass" }
+  "acoustic": { "windows": 3, "checked": true, "mean_cm_llr": 2.41, "mean_asv": 0.93, "verdict": "pass" },
+  "grade_source": "server_asr", "transcript": "6, 1.", "asr_error": null
 }
 ```
+
+The digits are graded from the server's own transcript of the audio it
+received after issuing the challenge, made by a local ASR engine
+(docs/PROTOCOL.md §3, Amendment 2). `response_text` is ignored unless
+`VR_CHALLENGE_CLIENT_TEXT_DRILL=1`, in which case `grade_source` is
+`"client_text_drill"` and `transcript` is `null`. Grading fails closed:
+`no_response_audio` (under 0.3 s of response audio) or
+`challenge_transcriber_unavailable` (no local engine; `asr_error` says why).
 
 `acoustic` grades the response *audio*: the windows the stream scored while
 the challenge was outstanding (docs/PROTOCOL.md §3, "voice-scored

@@ -20,6 +20,7 @@ from .privacy.buffer import SlidingAudioBuffer
 from .detectors.pipeline import DetectionPipeline
 from .risk.fusion import RiskFusionEngine, RiskDecision
 from .challenge.engine import ChallengeEngine, Challenge
+from .challenge.transcribe import CHALLENGE_TRANSCRIBER, ChallengeTranscriber
 
 
 @dataclass
@@ -89,6 +90,7 @@ class CallSession:
         challenge_engine: Optional[ChallengeEngine] = None,
         audit: Optional[AuditLog] = None,
         challenge_cfg: Optional[ChallengeConfig] = None,
+        challenge_transcriber: Optional[ChallengeTranscriber] = None,
     ) -> None:
         self.session_id = session_id
         self.context = context
@@ -114,8 +116,17 @@ class CallSession:
         # (cm_llr, asv_score, asv_enrolled) of each window scored while a
         # challenge is outstanding — the caller's response audio.
         self._challenge_windows: List[Tuple[float, float, bool]] = []
+        # Raw int16 audio received while a challenge is outstanding, capped at
+        # response_max_seconds. Graded by the server's own transcript
+        # (docs/15 N2), so the digits cannot come from the client.
+        self._challenge_audio: List[np.ndarray] = []
+        self._challenge_audio_samples = 0
+        self._transcriber = challenge_transcriber or CHALLENGE_TRANSCRIBER
         self._challenge_streak = 0
         self._blocked = False
+        # Set when the claimed identity's enrolment is erased mid-call
+        # (docs/15 N4): the session stops scoring and the stream is closed.
+        self._revoked: Optional[str] = None
         self._sr = settings.audio.sample_rate
         # Parallel semantic (ASR + keyword) context signal — see
         # vanirakshak/semantic/. Updated asynchronously by the WS layer
@@ -129,6 +140,22 @@ class CallSession:
     @property
     def blocked(self) -> bool:
         return self._blocked
+
+    @property
+    def revoked(self) -> Optional[str]:
+        """Why this session was ended by the server, or None while it is live."""
+        return self._revoked
+
+    def revoke(self, reason: str) -> None:
+        """End the session: no further windows are scored, buffered audio is
+        wiped, and any outstanding challenge is dropped."""
+        self._revoked = reason
+        self.buffer.wipe()
+        self._pending_window = None
+        self._active_challenge = None
+        self._challenge_windows = []
+        self._challenge_audio = []
+        self._challenge_audio_samples = 0
 
     @property
     def sr(self) -> int:
@@ -153,8 +180,13 @@ class CallSession:
 
     def push_chunk(self, pcm: np.ndarray) -> Optional[ChunkResult]:
         """Push a chunk of int16 / float32 mono PCM. Returns a result
-        once a new hop-window has accumulated, else None.
+        once a new hop-window has accumulated, else None (always None once
+        the session is revoked).
         """
+        if self._revoked is not None:
+            return None
+        if self._active_challenge is not None:
+            self._keep_response_audio(pcm)
         ready = self.buffer.push(pcm)
         if not ready:
             return None
@@ -202,6 +234,8 @@ class CallSession:
             self._challenge_passed = False
             self._rearm_ready = False
             self._challenge_windows = []
+            self._challenge_audio = []
+            self._challenge_audio_samples = 0
             trigger = True
 
         # block logic: if BLOCK, latch
@@ -265,10 +299,47 @@ class CallSession:
         """Called by the WS layer once a background ASR pass completes."""
         self._semantic_state = result
 
+    def _keep_response_audio(self, pcm: np.ndarray) -> None:
+        cap = int(self._challenge_cfg.response_max_seconds * self._sr) - self._challenge_audio_samples
+        if cap <= 0:
+            return
+        if pcm.dtype in (np.float32, np.float64):
+            pcm = (np.clip(pcm, -1.0, 1.0) * 32767.0).astype(np.int16)
+        else:
+            pcm = pcm.astype(np.int16, copy=False)
+        pcm = pcm.reshape(-1)[:cap].copy()
+        self._challenge_audio.append(pcm)
+        self._challenge_audio_samples += pcm.size
+
+    def _response_transcript(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """``(transcript, reason_code, detail)`` for the buffered response audio."""
+        # Under 0.3 s cannot hold two spoken digits.
+        if self._challenge_audio_samples < int(0.3 * self._sr):
+            return None, "no_response_audio", None
+        audio = np.concatenate(self._challenge_audio)
+        text, err = self._transcriber.transcribe(audio, self._sr)
+        if text is None:
+            return None, "challenge_transcriber_unavailable", err
+        return text, None, None
+
     def grade_challenge(self, response_text: str, response_latency_ms: int) -> dict:
         if self._active_challenge is None:
             return {"ok": False, "reason": "no_active_challenge"}
-        passed, reason, conf = self.challenge.grade(self._active_challenge, response_text, response_latency_ms)
+        # docs/15 N2: digits come from the server's transcript of the response
+        # audio. ``response_text`` is graded only in the explicit drill mode.
+        # No transcript (no audio, or no local engine) fails closed.
+        transcript: Optional[str] = None
+        asr_error: Optional[str] = None
+        if self._challenge_cfg.client_text_drill:
+            grade_source = "client_text_drill"
+            passed, reason, conf = self.challenge.grade(self._active_challenge, response_text, response_latency_ms)
+        else:
+            grade_source = "server_asr"
+            transcript, fail_code, asr_error = self._response_transcript()
+            if transcript is None:
+                passed, reason, conf = False, str(fail_code), 0.0
+            else:
+                passed, reason, conf = self.challenge.grade(self._active_challenge, transcript, response_latency_ms)
         acoustic = self._score_challenge_audio()
         if passed and acoustic["verdict"] != "pass":
             passed, reason, conf = False, acoustic["verdict"], 0.05
@@ -277,7 +348,8 @@ class CallSession:
         # only prevents an escalation that hasn't happened yet; it never
         # clears `_blocked` and never re-arms `_triggered_challenge`.
         # Rationale: grading checks digit order + 400-4000ms latency only
-        # (challenge/engine.py::grade) — no voice biometrics — so it cannot
+        # (challenge/engine.py::grade) plus the response-audio CM/ASV below,
+        # so it cannot
         # override strong acoustic evidence (risk>=70 or asv<0.10). Fail
         # escalates to BLOCK permanently; pass leaves the latch as-is.
         # The challenge is consumed on first grading to prevent oracle
@@ -292,6 +364,8 @@ class CallSession:
             self._blocked = True
         self._active_challenge = None
         self._challenge_windows = []
+        self._challenge_audio = []
+        self._challenge_audio_samples = 0
 
         last = self._history[-1] if self._history else None
         self.audit.append(
@@ -305,6 +379,7 @@ class CallSession:
                 "challenge_confidence": float(conf),
                 "response_latency_ms": float(response_latency_ms),
                 "challenge_response_windows": float(acoustic["windows"]),
+                "challenge_server_asr": 1.0 if grade_source == "server_asr" else 0.0,
             },
         )
         return {
@@ -313,6 +388,9 @@ class CallSession:
             "confidence": conf,
             "blocked": self._blocked,
             "acoustic": acoustic,
+            "grade_source": grade_source,
+            "transcript": transcript,
+            "asr_error": asr_error,
         }
 
     def _score_challenge_audio(self) -> dict:
