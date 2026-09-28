@@ -80,6 +80,22 @@ def _push_window(sess: CallSession):
     return cr
 
 
+def _answer_window(sess: CallSession):
+    """Push one window of response audio that contains a voice: the first
+    answer chunk opens with 0.8 s of silence, so the server-measured voice
+    onset lands at ~800 ms, inside the human band (docs/15 W2.b)."""
+    t = np.arange(16000) / 16000.0
+    tone = (6000 * np.sin(2 * np.pi * 180 * t)).astype(np.int16)
+    cr = None
+    while cr is None:
+        chunk = tone.copy()
+        if not getattr(sess, "_answer_started", False):
+            chunk[:12800] = 0
+            sess._answer_started = True
+        cr = sess.push_chunk(chunk)
+    return cr
+
+
 def _issue(sess) -> str:
     """Trigger the challenge; return the correct answer a scripted client sends."""
     cr = _push_window(sess)
@@ -111,7 +127,7 @@ def test_scripted_client_over_silent_response_audio_fails_p1_c():
         for _ in range(3):
             _push_window(sess)
         grade = sess.grade_challenge(correct + " uh ok", 950)
-        if not grade["ok"] and grade["reason"] == "digit_order_mismatch" and sess.blocked:
+        if not grade["ok"] and grade["reason"] == "no_voice_onset" and sess.blocked:
             failures += 1
     assert failures / trials >= 0.90
 
@@ -124,7 +140,7 @@ def test_scripted_client_over_wrong_speech_fails_p1_c():
         sess = _session(f"wrong-{i}", [BORDERLINE] + [GENUINE] * 3, transcriber=wrong)
         correct = _issue(sess)
         for _ in range(3):
-            _push_window(sess)
+            _answer_window(sess)
         grade = sess.grade_challenge(correct, 1000)
         if not grade["ok"] and grade["reason"] == "digit_order_mismatch" and sess.blocked:
             failures += 1
@@ -145,7 +161,7 @@ def test_scripted_client_over_synthetic_audio_fails_p1_c():
                         transcriber=HeardTranscriber(_digits_said))
         correct = _issue(sess)
         for _ in range(3):
-            _push_window(sess)
+            _answer_window(sess)
         grade = sess.grade_challenge(correct + " um okay", 1100)
         if not grade["ok"] and grade["reason"] == "response_voice_synthetic" and sess.blocked:
             failures += 1
@@ -157,8 +173,8 @@ def test_genuine_response_passes_challenge():
     sess = _session("genuine", [BORDERLINE, GENUINE, GENUINE],
                     transcriber=HeardTranscriber(_digits_said))
     _issue(sess)
-    _push_window(sess)
-    _push_window(sess)
+    _answer_window(sess)
+    _answer_window(sess)
     # The client's text is ignored: it can be empty and still pass.
     grade = sess.grade_challenge("", 1200)
     assert grade["ok"] is True, grade
@@ -180,8 +196,8 @@ def test_no_local_engine_fails_closed():
         challenge_cfg=_challenge_cfg(),
     )
     correct = _issue(sess)
-    _push_window(sess)
-    _push_window(sess)
+    _answer_window(sess)
+    _answer_window(sess)
     grade = sess.grade_challenge(correct, 1000)
     assert grade["ok"] is False
     assert grade["reason"] == "challenge_transcriber_unavailable"
@@ -194,8 +210,8 @@ def test_client_text_drill_grades_response_text():
     tr = HeardTranscriber()
     sess = _session("drill", [BORDERLINE, GENUINE, GENUINE], transcriber=tr, client_text_drill=True)
     correct = _issue(sess)
-    _push_window(sess)
-    _push_window(sess)
+    _answer_window(sess)
+    _answer_window(sess)
     grade = sess.grade_challenge(correct, 1000)
     assert grade["ok"] is True
     assert grade["grade_source"] == "client_text_drill"
@@ -209,7 +225,7 @@ def test_response_audio_is_buffered_from_issue_and_capped():
     _issue(sess)
     assert sess._challenge_audio_samples == 0  # audio before issue is not the answer
     for _ in range(4):
-        _push_window(sess)
+        _answer_window(sess)
     assert sess._challenge_audio_samples == int(2.5 * 16000)
     sess.grade_challenge("", 1000)
     assert tr.calls == [(int(2.5 * 16000), 16000)]
@@ -249,3 +265,33 @@ def test_health_reports_challenge_grading_mode():
     grading = TestClient(app_module.app).get("/v1/health").json()["challenge_grading"]
     assert grading["source"] == "server_asr"
     assert grading["asr_provider"] == "local"
+
+
+def test_latency_is_measured_by_the_server_not_the_client():
+    """W2.b: the client's response_latency_ms has no effect under server grading."""
+    sess = _session("latency", [BORDERLINE, GENUINE, GENUINE],
+                    transcriber=HeardTranscriber(_digits_said))
+    _issue(sess)
+    _answer_window(sess)
+    _answer_window(sess)
+    # 50 ms would fail the band if the client's number were used.
+    grade = sess.grade_challenge("", 50)
+    assert grade["ok"] is True, grade
+    assert 750 <= grade["latency_ms"] <= 850
+
+
+def test_instant_answer_fails_server_latency():
+    """Voice from the very first sample (a pre-queued TTS) is below the band."""
+    t = np.arange(16000) / 16000.0
+    tone = (6000 * np.sin(2 * np.pi * 180 * t)).astype(np.int16)
+    sess = _session("instant", [BORDERLINE, GENUINE, GENUINE],
+                    transcriber=HeardTranscriber(_digits_said))
+    _issue(sess)
+    for _ in range(2):
+        cr = None
+        while cr is None:
+            cr = sess.push_chunk(tone)
+    grade = sess.grade_challenge("", 1000)
+    assert grade["ok"] is False
+    assert grade["reason"] == "latency_suspicious"
+    assert grade["latency_ms"] == 0

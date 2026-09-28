@@ -140,10 +140,25 @@ protection comes entirely from the answer being spoken live.
 - W2.a TTS that speaks the right digits passes the transcript, as it should.
   Only the response-audio CM check (`VR_CHALLENGE_CM_LLR_MAX`) stops it, and
   that is off until T1 fits it on dev.
-- W2.b `response_latency_ms` is still client-reported. Measure it server-side
-  from the response audio's voice onset.
-- W2.c Measure genuine pass rate (friction) on real Hindi and Hinglish answers
-  over phone codecs; whisper-tiny is the floor, not the target engine.
+- ~~W2.b~~ **Done (2026-09-28).** Latency is measured by the server: audio time
+  from issue to voice onset in the response (PROTOCOL.md §3 Amendment 3). The
+  client's number is only recorded. P1-C still holds with it
+  (`reports/challenge_p1c_harness.json`; silence now fails as `no_voice_onset`).
+- W2.c **Proxy measured; real measurement still open.**
+  `challenge_forgery_harness.py --genuine-proxy` (`reports/challenge_genuine_proxy.json`),
+  two SAPI voices, 15 trials per cell, correct digits:
+  - English digit words: 100 % clean, 100 % through G.711, 80–100 % through
+    G.711 with noise at 15 dB SNR.
+  - Romanised Hindi digit words ("teen, paanch"): **0 % in every cell.**
+    whisper-tiny with automatic language detection hears "Char punch",
+    "Now, do." or Chinese.
+  The Hindi result comes from English voices reading Hindi words, so it is not
+  a friction number for real callers. It still shows the current engine
+  cannot be trusted with Hindi answers. **Until that changes, instruct callers
+  to answer in English digits, or run the challenge in drill mode for Hindi
+  deployments.** Fix candidates, in order: pass a language hint to the engine,
+  a larger Whisper model, IndicConformer as `VR_CHALLENGE_ASR_PROVIDER`. Then
+  measure on real Hindi and Hinglish answers from people (with D1 consent).
 
 ### W3 — A CM that generalises (docs/13 Phases 2–4, then docs/10 G3). *GPU.*
 
@@ -189,10 +204,17 @@ languages over AMR and G.711 phone lines. No amount of W3 closes that domain gap
 - Each enrolment gets its own calibration entry, stored in the encrypted
   enrolment store with the embedding, so both survive a restart.
 
+- **Per-user calibration is fitted (2026-09-28)** when possible
+  (`detectors/calibration.py`): leave-one-out target scores from 3 s segments
+  of the enrolment audio against the non-target cohort in `VR_ASV_COHORT_DIR`,
+  with the same logistic `scripts/enroll_anchor.py` fits for the anchor. With
+  under 6 s of audio or no usable cohort it falls back to the anchor's
+  logistic. The QA summary and `calibration_method` record which one was used.
+
 **Still open in W5:**
-- The per-user calibration is **seeded from the anchor's logistic**, not fitted
-  per user. Fit it from leave-one-out target scores against a fixed cohort of
-  non-target speakers.
+- Ship a cohort. `data/other_speakers/` is gitignored and absent on this dev
+  box, so every enrolment here is `seeded_from_anchor`. A consented or public
+  non-target set belongs with D1.
 - Enrolment from two or more sessions or devices.
 - **Spoof-aware ASV (SASV):** evaluate the ASV × CM combination on ASVspoof 5's
   SASV protocol, the metric that matches L1.
@@ -230,8 +252,9 @@ Open: latency of local ASR per concurrent call (W7).
 - **Biometric data handling:** voiceprints are sensitive personal data.
   Deletion is done (docs/15 N4): `DELETE /v1/enroll/{user}` erases memory and
   the encrypted on-disk record, ends live sessions for that identity, and
-  returns an audited receipt. Enrolments carry a `consent_ref`. Still to
-  define: retention period, export, and store key rotation.
+  returns an audited receipt. Enrolments carry a `consent_ref`. Store key
+  rotation is done (`scripts/rotate_enrolment_key.py`, crash-safe, keys from
+  the environment only). Still to define: retention period and export.
 - **Audit chain operations:** rotation, external anchoring of the head hash, and
   access logging.
 

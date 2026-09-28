@@ -235,6 +235,19 @@ right digits still passes the transcript; the response-audio CM check above
 is what stops it, once `VR_CHALLENGE_CM_LLR_MAX` is set. Measured by
 `scripts/challenge_forgery_harness.py` (`reports/challenge_p1c_harness.json`).
 
+**Amendment 3 (docs/14 W2.b) — server-measured latency.** Under server
+grading, `response_latency_ms` from the client is ignored too (it is still
+recorded in the audit event as `client_latency_ms`). The server measures the
+latency itself: audio time, in samples, from the moment it issued the
+challenge to the first sustained voiced frame of the response (three 25 ms
+frames within 20 dB of the loudest frame and above about -50 dBFS). It must
+fall within `VR_CHALLENGE_LATENCY_MIN_MS`..`VR_CHALLENGE_LATENCY_MAX_MS`
+(default 400..4000). A response with no voice fails with `no_voice_onset`.
+The grade response carries the measured value as `latency_ms`. Because it is
+counted in samples, network jitter does not enter it. Note the change of
+meaning: the dashboard's old client number ran from issue to *submit*; the
+server's runs from issue to *voice onset*.
+
 ### 3.1 `semantic` — parallel ASR + keyword context signal (advisory)
 
 Populated shape once transcription succeeds:
@@ -410,6 +423,8 @@ alert payload it already received.
 | `VR_CHALLENGE_TRIGGER_CONSECUTIVE` | `1` | Consecutive `CHALLENGE`-tier windows before a challenge is issued |
 | `VR_CHALLENGE_ASR_PROVIDER` | `local` | Engine that transcribes challenge response audio (§3 Amendment 2). Local engines only (`local`, `whisper`, `indicconformer`); a cloud provider is refused and grading fails closed |
 | `VR_CHALLENGE_RESPONSE_MAX_SECONDS` | `20` | Response audio kept for transcription, from the moment the challenge is issued |
+| `VR_CHALLENGE_LATENCY_MIN_MS` | `400` | Lower bound of the human response-latency band (server-measured, issue to voice onset; §3 Amendment 3) |
+| `VR_CHALLENGE_LATENCY_MAX_MS` | `4000` | Upper bound of the same band |
 | `VR_CHALLENGE_CLIENT_TEXT_DRILL` | `0` | `1` grades digits from the client's `response_text` instead. Drills and demos only: forgeable |
 | `VR_ANCHOR_EMBEDDING` | *(backend-default path)* | Overrides which anchor JSON is loaded, bypassing the `VR_ASV_BACKEND`-keyed default |
 | `VR_FUSION_PRESET` | *(unset)* | `demo` applies a preset fusion-weight override tuned for the shipped demo clips |
@@ -423,6 +438,7 @@ alert payload it already received.
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
 | `VR_ENROL_STORE_PATH` | *(unset — in memory)* | Directory for the persistent, encrypted enrolment store (docs/15 N4). Unset: enrolments are lost on restart |
 | `VR_ENROL_STORE_KEY` | *(unset)* | 32-byte key, base64 or hex, sealing each record with AES-256-GCM. Required when `VR_ENROL_STORE_PATH` is set; the server refuses to start without it |
+| `VR_ASV_COHORT_DIR` | `data/other_speakers` | Non-target speakers (16-bit mono WAVs, up to 20 used) for per-user ASV calibration at enrolment (docs/14 W5). Missing or fewer than 5 clips: the enrolment falls back to the anchor's calibration and records that in its QA summary |
 | `VR_ENROLL_BYPASS_QA` | `0` | `1` bypasses enrolment audio quality assurance checks (voiced duration ≥ 3.0s, SNR ≥ 10 dB, CM score ≥ 0.0) |
 | `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block. Cloud: `groq` (default). Local, zero retention: `local` / `local_whisper` / `whisper` (on-box faster-whisper) and `indicconformer`. A local provider keeps `zero_retention: true` and an empty `third_party_audio_processors`. An unrecognised name is reported as a third-party transfer and the block degrades to `available: false`. |
 

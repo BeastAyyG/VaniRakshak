@@ -159,3 +159,17 @@ transcript, and only the response CM gate stops it, which waits on T1 and T2.
 Found while doing N2 and left open: challenge latency is still reported by the
 client (W2.b); measure genuine pass rate on real Hindi and Hinglish answers
 over codecs (W2.c).
+
+### Follow-up, same day: the no-GPU leftovers
+
+| Item | Status | Evidence |
+|---|---|---|
+| W2.b server-side latency | **Done.** Issue-to-voice-onset in audio samples; the client's value is only recorded. | `tests/test_challenge.py`; P1-C re-run: 4 attacks × 30 fail 100 %, control passes 100 % |
+| W2.c genuine pass rate | **Proxy only.** English digits 80–100 % across clean, G.711 and G.711 at 15 dB SNR; romanised-Hindi digits **0 %** with whisper-tiny. | `reports/challenge_genuine_proxy.json` |
+| W5 per-user calibration | **Done in code**; falls back to the anchor seed without a cohort (none on this dev box). | `tests/test_user_calibration.py` |
+| W8 store key rotation | **Done.** | `tests/test_enrolment_store.py` |
+
+**New blocker for Hindi deployments (from W2.c):** the local engine does not
+hear Hindi digit words. Fix the engine (language hint, larger model or
+IndicConformer), then measure on real speech, before relying on the
+server-graded challenge with Hindi-speaking callers.

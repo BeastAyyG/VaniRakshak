@@ -35,6 +35,9 @@ from typing import Dict, List, Optional
 import numpy as np
 
 _SUFFIX = ".vre"
+# Env vars scripts/rotate_enrolment_key.py reads (keys never go on argv).
+KEY_ENV = "VR_ENROL_STORE_KEY"
+NEW_KEY_ENV = "VR_ENROL_STORE_NEW_KEY"
 _AAD = b"vanirakshak-enrolment-v1"
 
 
@@ -177,3 +180,30 @@ def store_from_env(path: str, key: str) -> Optional[EnrolmentStore]:
     if not key:
         raise EnrolmentStoreError("VR_ENROL_STORE_PATH is set but VR_ENROL_STORE_KEY is not")
     return EnrolmentStore(Path(path), parse_key(key))
+
+
+def rotate_key(root: Path, old_key: bytes, new_key: bytes) -> Dict[str, object]:
+    """Re-seal every record under ``new_key`` (docs/14 W8, key rotation).
+
+    Crash-safe and re-runnable: each record is written under the new key
+    (which also gives it a new file name) before its old file is removed, and
+    a file that already opens with the new key is left alone. Run it with the
+    server stopped, then restart with ``VR_ENROL_STORE_KEY`` set to the new key.
+    """
+    old, new = EnrolmentStore(root, old_key), EnrolmentStore(root, new_key)
+    report: Dict[str, object] = {"rotated": 0, "already_new": 0, "unreadable": []}
+    for path in sorted(Path(root).glob(f"*{_SUFFIX}")):
+        try:
+            rec = old._read(path)
+        except Exception:
+            try:
+                new._read(path)
+                report["already_new"] = int(report["already_new"]) + 1
+            except Exception:
+                report["unreadable"].append(path.name)  # type: ignore[union-attr]
+            continue
+        new.save(rec)
+        if new._path(rec.user_id) != path:
+            path.unlink()
+        report["rotated"] = int(report["rotated"]) + 1
+    return report

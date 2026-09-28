@@ -9,29 +9,32 @@
       "n": 30,
       "fail_rate": 1.0,
       "reasons": {
-        "digit_order_mismatch": 30
+        "no_voice_onset": 30
       },
       "examples": [
         {
           "digits": "61",
           "ok": false,
-          "reason": "digit_order_mismatch",
-          "transcript": "",
-          "asr_error": null
+          "reason": "no_voice_onset",
+          "transcript": null,
+          "asr_error": null,
+          "latency_ms": null
         },
         {
           "digits": "03",
           "ok": false,
-          "reason": "digit_order_mismatch",
-          "transcript": "",
-          "asr_error": null
+          "reason": "no_voice_onset",
+          "transcript": null,
+          "asr_error": null,
+          "latency_ms": null
         },
         {
           "digits": "89",
           "ok": false,
-          "reason": "digit_order_mismatch",
-          "transcript": "",
-          "asr_error": null
+          "reason": "no_voice_onset",
+          "transcript": null,
+          "asr_error": null,
+          "latency_ms": null
         }
       ],
       "p1c_pass": true
@@ -48,21 +51,24 @@
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 0
         },
         {
           "digits": "03",
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 0
         },
         {
           "digits": "89",
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 0
         }
       ],
       "p1c_pass": true
@@ -79,21 +85,24 @@
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 0
         },
         {
           "digits": "03",
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 0
         },
         {
           "digits": "89",
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 0
         }
       ],
       "p1c_pass": true
@@ -110,21 +119,24 @@
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "7, 2",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 750
         },
         {
           "digits": "03",
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "1, 4",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 725
         },
         {
           "digits": "89",
           "ok": false,
           "reason": "digit_order_mismatch",
           "transcript": "9.0",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 700
         }
       ],
       "p1c_pass": true
@@ -143,21 +155,24 @@
           "ok": true,
           "reason": "ok",
           "transcript": "6, 1.",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 750
         },
         {
           "digits": "03",
           "ok": true,
           "reason": "ok",
           "transcript": "0, 3",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 725
         },
         {
           "digits": "89",
           "ok": true,
           "reason": "ok",
           "transcript": "8 9",
-          "asr_error": null
+          "asr_error": null,
+          "latency_ms": 725
         }
       ],
       "pass_rate": 1.0
