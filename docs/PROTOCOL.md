@@ -360,7 +360,7 @@ alert payload it already received.
 | `VR_RATE_LIMIT_ENROLL` | `10` | Per-key requests/minute for `POST /v1/enroll`; tighter than analyze because it writes a voiceprint. `0` disables. |
 | `VR_ALERT_WEBHOOK_URL` | *(unset)* | Alert webhook target; unset disables dispatch |
 | `VR_FUSION_W_SEMANTIC` | `0.4` | Fusion weight for the ASR/keyword `semantic_risk` term (§3.1) |
-| `VR_SEMANTIC_ENABLED` | `0` | **Opt-in for the `semantic` block (G6).** Off by default because enabling it uploads each 4.04 s caller audio window to Groq, a third-party US-hosted service. When `1`, `GET /v1/health` reports `models.zero_retention: false` and `models.third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block reports `zero_retention_verified: false` with the same processor list. A `GROQ_API_KEY` alone does **not** enable it — that key is also used by the separate SACH and IndicConformer prototypes. |
+| `VR_SEMANTIC_ENABLED` | `0` | **Opt-in for the `semantic` block (G6).** Off by default because, with the default cloud provider, enabling it uploads each 4.04 s caller audio window to Groq, a third-party US-hosted service. When `1` with a cloud or unrecognised `VR_SEMANTIC_PROVIDER`, `GET /v1/health` reports `models.zero_retention: false` and `models.third_party_audio_processors: ["groq"]`, and every `dpdp_compliance` block reports `zero_retention_verified: false` with the same processor list. A `GROQ_API_KEY` alone does **not** enable it — that key is also used by the separate SACH and IndicConformer prototypes. |
 | `GROQ_API_KEY` | *(unset)* | Required, together with `VR_SEMANTIC_ENABLED=1`, for the `semantic` block to populate; either missing degrades it to `available: false` (see `requirements-asr.txt`) |
 | `GEMINI_API_KEY` | *(unset)* | Enables Gemini threat analysis & fact verification; required for the `verify-chunk` and `verify` endpoints (Sotto edition). Missing key raises `ValueError` in `get_gemini_client()`. |
 | `VR_ASV_BACKEND` | `stub` | `ecapa` swaps in real ECAPA-TDNN embeddings (`asv_ecapa.py`); changes the `metrics` distribution and the anchor file loaded (`data/anchor_asv_embedding_ecapa.json`) |
@@ -386,7 +386,7 @@ alert payload it already received.
 | `VR_AUDIT_PATH` | `data/audit_log.jsonl` | Durable JSONL file for the hash-chained audit log, reloaded and re-verified on restart; empty disables persistence (in-memory ring only) |
 | `VR_AUDIT_MAX_EVENTS` | `10000` | Cap on the in-memory audit ring (the file keeps the full record) |
 | `VR_ENROLL_BYPASS_QA` | `0` | `1` bypasses enrolment audio quality assurance checks (voiced duration ≥ 3.0s, SNR ≥ 10 dB, CM score ≥ 0.0) |
-| `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block: `groq` (default, cloud), `local` / `local_whisper` (on-box faster-whisper, zero retention) |
+| `VR_SEMANTIC_PROVIDER` | `groq` | ASR provider for the semantic block. Cloud: `groq` (default). Local, zero retention: `local` / `local_whisper` / `whisper` (on-box faster-whisper) and `indicconformer`. A local provider keeps `zero_retention: true` and an empty `third_party_audio_processors`. An unrecognised name is reported as a third-party transfer and the block degrades to `available: false`. |
 
 ## 9. Conformance test
 

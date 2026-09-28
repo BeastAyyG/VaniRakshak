@@ -218,16 +218,28 @@ class ServerConfig:
     )
 
 
+# ASR provider names accepted by backend/services/asr/provider.py, split by
+# where the caller's audio goes. Local engines run inference in this process
+# (model weights may be downloaded once; audio never leaves the box).
+LOCAL_ASR_PROVIDERS = frozenset({
+    "local", "local_whisper", "whisper", "faster_whisper", "existing_whisper",
+    "indicconformer", "indic_conformer", "indic",
+})
+CLOUD_ASR_PROVIDERS = frozenset({"groq", "groq_whisper", "groqcloud", "whisper_turbo"})
+
+
 @dataclass(frozen=True)
 class SemanticConfig:
     """ASR / scam-phrase semantic layer (docs/10 G6).
 
-    **Off by default.** When on, every 4.04 s caller audio window is uploaded
-    to Groq -- a third-party, US-hosted service -- for transcription, which
+    **Off by default.** With a cloud provider (the default, Groq) every 4.04 s
+    caller audio window is uploaded to a third-party, US-hosted service, which
     contradicts the zero-retention claim this system otherwise makes under
     DPDP Act 2023 s.8(7). So it requires an explicit opt-in, and turning it on
-    flips ``zero_retention`` to false on /v1/health and names the processor in
-    every ``dpdp_compliance`` block.
+    with a cloud provider flips ``zero_retention`` to false on /v1/health and
+    names the processor in every ``dpdp_compliance`` block. A local provider
+    (``VR_SEMANTIC_PROVIDER=local``) keeps audio on the box and keeps
+    ``zero_retention`` true.
 
     Deliberately *not* keyed off GROQ_API_KEY alone: that key sits in .env for
     the separate SACH and IndicConformer prototypes, and its mere presence must
@@ -238,8 +250,25 @@ class SemanticConfig:
         "1", "true", "yes", "on",
     )
     # Named so the compliance surface can disclose exactly who receives audio.
-    # Set VR_SEMANTIC_PROVIDER=local or whisper to use offline zero-retention ASR.
     provider: str = _env("VR_SEMANTIC_PROVIDER", "groq")
+
+    def __post_init__(self):
+        object.__setattr__(self, "provider", self.provider.strip().lower())
+
+    @property
+    def provider_known(self) -> bool:
+        return self.provider in LOCAL_ASR_PROVIDERS or self.provider in CLOUD_ASR_PROVIDERS
+
+    @property
+    def provider_is_local(self) -> bool:
+        """True only for a known on-box engine. An unknown name is treated as
+        cloud so every compliance surface fails toward disclosure."""
+        return self.provider in LOCAL_ASR_PROVIDERS
+
+    @property
+    def uploads_audio(self) -> bool:
+        """Whether caller audio leaves this process for a third party."""
+        return self.enabled and not self.provider_is_local
 
 
 @dataclass(frozen=True)

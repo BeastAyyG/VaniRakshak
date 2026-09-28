@@ -6,9 +6,13 @@ this must NEVER raise into the caller. On a minimal install (no torch, no
 reason and the acoustic pipeline runs exactly as before — ``semantic_risk``
 defaults to 0.0, which is a no-op in ``risk/fusion.py`` (``w_semantic * 0``).
 
+The engine is ``settings.semantic.provider`` (``VR_SEMANTIC_PROVIDER``): a
+cloud provider such as Groq uploads each window, a local one (``local``,
+faster-whisper, IndicConformer) transcribes on the box.
+
 Call sites must invoke :meth:`SemanticSignal.analyze_window` off the asyncio
-event loop thread (e.g. via ``asyncio.to_thread``) — it makes a blocking
-network call to Groq Whisper when the ASR stack is available.
+event loop thread (e.g. via ``asyncio.to_thread``) — it blocks on a network
+call (cloud) or on local inference.
 """
 
 from __future__ import annotations
@@ -50,6 +54,7 @@ class SemanticSignal:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._service = None
+        self._provider: Optional[str] = None
         self.load_error: Optional[str] = None
         self.available = False
 
@@ -64,16 +69,33 @@ class SemanticSignal:
             # caller audio to a third party.
             from ..config import settings
 
-            if not settings.semantic.enabled:
+            semantic = settings.semantic
+            if not semantic.enabled:
+                if semantic.provider_is_local:
+                    consequence = (
+                        f"enabling transcribes each audio window on this box with "
+                        f"{semantic.provider}; zero_retention stays on"
+                    )
+                else:
+                    consequence = (
+                        f"enabling uploads each audio window to {semantic.provider} "
+                        "(third-party) and turns off zero_retention"
+                    )
                 self.load_error = (
-                    "disabled by default (set VR_SEMANTIC_ENABLED=1 to enable); "
-                    f"enabling uploads each audio window to {settings.semantic.provider} "
-                    "(third-party, US-hosted) and turns off zero_retention"
+                    "disabled by default (set VR_SEMANTIC_ENABLED=1 to enable); " + consequence
+                )
+                return False
+
+            if not semantic.provider_known:
+                self.load_error = (
+                    f"unknown VR_SEMANTIC_PROVIDER '{semantic.provider}' "
+                    "(expected groq, local, whisper or indicconformer)"
                 )
                 return False
 
             # Every failure below is expected on a minimal install: torch,
-            # the `groq` package, and GROQ_API_KEY are all optional. Degrade
+            # the `groq` package, GROQ_API_KEY and faster-whisper are all
+            # optional. Degrade
             # to available=False instead of raising — a missing dependency
             # or unset key must never break the live stream.
             try:
@@ -84,15 +106,17 @@ class SemanticSignal:
                 return False
 
             try:
-                service = ASRService(ASRConfig(provider="groq"))
+                service = ASRService(ASRConfig(provider=semantic.provider))
                 service.warmup()
             except Exception as e:
                 # Most commonly: GROQ_API_KEY not set (ValueError from
-                # groq_provider._get_api_key). Still a clean degrade.
+                # groq_provider._get_api_key), or faster-whisper not
+                # installed for a local provider. Still a clean degrade.
                 self.load_error = f"ASR warmup failed ({type(e).__name__}: {e})"
                 return False
 
             self._service = service
+            self._provider = semantic.provider
             self.available = True
             self.load_error = None
         return True
@@ -123,7 +147,7 @@ class SemanticSignal:
                 language="auto",
             )
         except Exception as e:
-            # Network hiccup, rate limit, transient Groq error, etc. — the
+            # Network hiccup, rate limit, local inference error, etc. — the
             # acoustic verdict must never depend on this succeeding.
             return {**_UNAVAILABLE_BASE, "reason": f"transcription failed ({type(e).__name__}: {e})"}
 
@@ -151,7 +175,7 @@ class SemanticSignal:
             "keyword_risk": scored["semantic_risk"],
             "claim_risk": claims["claim_risk"],
             "claim_findings": claims["findings"],
-            "provider": result.provider or "groq",
+            "provider": result.provider or self._provider,
             "reason": None,
         }
 
