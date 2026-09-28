@@ -294,14 +294,24 @@ Returns `{"session_id": "call-..."}`.
 
 ### `POST /v1/sessions/{sid}/challenge` (and `/api/v1/sessions/{sid}/challenge`)
 
-Grade a challenge response. Body: `{"response_text": "...", "response_latency_ms": 1200}`.
+Grade a challenge response. Body: `{"response_latency_ms": 1200}`, with an
+optional `"response_text"` that is graded only in drill mode.
 
 ```json
 {
   "ok": true, "reason": "ok", "confidence": 0.6, "blocked": false,
-  "acoustic": { "windows": 3, "checked": true, "mean_cm_llr": 2.41, "mean_asv": 0.93, "verdict": "pass" }
+  "acoustic": { "windows": 3, "checked": true, "mean_cm_llr": 2.41, "mean_asv": 0.93, "verdict": "pass" },
+  "grade_source": "server_asr", "transcript": "6, 1.", "asr_error": null
 }
 ```
+
+The digits are graded from the server's own transcript of the audio it
+received after issuing the challenge, made by a local ASR engine
+(docs/PROTOCOL.md §3, Amendment 2). `response_text` is ignored unless
+`VR_CHALLENGE_CLIENT_TEXT_DRILL=1`, in which case `grade_source` is
+`"client_text_drill"` and `transcript` is `null`. Grading fails closed:
+`no_response_audio` (under 0.3 s of response audio) or
+`challenge_transcriber_unavailable` (no local engine; `asr_error` says why).
 
 `acoustic` grades the response *audio*: the windows the stream scored while
 the challenge was outstanding (docs/PROTOCOL.md §3, "voice-scored

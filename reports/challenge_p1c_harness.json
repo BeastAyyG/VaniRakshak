@@ -1,0 +1,167 @@
+{
+  "criterion": "P1-C: each attack fails in >= 90% of trials (docs/13 §1.2, docs/15 N2)",
+  "provider": "local",
+  "trials": 30,
+  "cm_check": "off (transcript gate measured alone)",
+  "date": "2026-09-28",
+  "attacks": {
+    "silence": {
+      "n": 30,
+      "fail_rate": 1.0,
+      "reasons": {
+        "digit_order_mismatch": 30
+      },
+      "examples": [
+        {
+          "digits": "61",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        },
+        {
+          "digits": "03",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        },
+        {
+          "digits": "89",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        }
+      ],
+      "p1c_pass": true
+    },
+    "noise": {
+      "n": 30,
+      "fail_rate": 1.0,
+      "reasons": {
+        "digit_order_mismatch": 30
+      },
+      "examples": [
+        {
+          "digits": "61",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        },
+        {
+          "digits": "03",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        },
+        {
+          "digits": "89",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        }
+      ],
+      "p1c_pass": true
+    },
+    "vocoder": {
+      "n": 30,
+      "fail_rate": 1.0,
+      "reasons": {
+        "digit_order_mismatch": 30
+      },
+      "examples": [
+        {
+          "digits": "61",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        },
+        {
+          "digits": "03",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        },
+        {
+          "digits": "89",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "",
+          "asr_error": null
+        }
+      ],
+      "p1c_pass": true
+    },
+    "tts_wrong": {
+      "n": 30,
+      "fail_rate": 1.0,
+      "reasons": {
+        "digit_order_mismatch": 30
+      },
+      "examples": [
+        {
+          "digits": "61",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "7, 2",
+          "asr_error": null
+        },
+        {
+          "digits": "03",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "1, 4",
+          "asr_error": null
+        },
+        {
+          "digits": "89",
+          "ok": false,
+          "reason": "digit_order_mismatch",
+          "transcript": "9.0",
+          "asr_error": null
+        }
+      ],
+      "p1c_pass": true
+    }
+  },
+  "controls": {
+    "tts_correct": {
+      "n": 30,
+      "fail_rate": 0.0,
+      "reasons": {
+        "ok": 30
+      },
+      "examples": [
+        {
+          "digits": "61",
+          "ok": true,
+          "reason": "ok",
+          "transcript": "6, 1.",
+          "asr_error": null
+        },
+        {
+          "digits": "03",
+          "ok": true,
+          "reason": "ok",
+          "transcript": "0, 3",
+          "asr_error": null
+        },
+        {
+          "digits": "89",
+          "ok": true,
+          "reason": "ok",
+          "transcript": "8 9",
+          "asr_error": null
+        }
+      ],
+      "pass_rate": 1.0
+    }
+  },
+  "p1c_pass": true
+}

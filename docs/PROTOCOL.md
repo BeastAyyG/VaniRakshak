@@ -202,6 +202,27 @@ consecutive `CHALLENGE`-tier windows. Every one of these defaults to the
 original one-shot, text-only behaviour until its threshold is chosen on dev
 data (`scripts/calibrate_decision_layer.py`).
 
+**Amendment 2 (docs/15 N2) — digits graded from the server's transcript.**
+The phrase shows the digits, so a scripted client could always send the right
+`response_text`. The server now keeps the raw audio it receives on the stream
+from the moment it issues a challenge (up to
+`VR_CHALLENGE_RESPONSE_MAX_SECONDS`), transcribes it with a **local** ASR
+engine (`VR_CHALLENGE_ASR_PROVIDER`, default `local` = faster-whisper; a cloud
+provider is refused), and grades digit order from that transcript. Spoken
+digits count in English, romanised Hindi and Devanagari, as do numerals.
+`response_text` is **ignored**, and is now optional in the request body.
+Grading **fails closed**: less than 0.3 s of response audio gives
+`no_response_audio`, and no usable local engine gives
+`challenge_transcriber_unavailable`; both escalate to `BLOCK` like any other
+failure. The grade response adds `grade_source` (`"server_asr"` or
+`"client_text_drill"`), `transcript` (what the server heard, or `null`) and
+`asr_error`. `GET /v1/health` reports the mode under `challenge_grading`.
+`VR_CHALLENGE_CLIENT_TEXT_DRILL=1` restores grading from `response_text` for
+drills and demos only. It is forgeable by construction. A TTS that speaks the
+right digits still passes the transcript; the response-audio CM check above
+is what stops it, once `VR_CHALLENGE_CM_LLR_MAX` is set. Measured by
+`scripts/challenge_forgery_harness.py` (`reports/challenge_p1c_harness.json`).
+
 ### 3.1 `semantic` — parallel ASR + keyword context signal (advisory)
 
 Populated shape once transcription succeeds:
@@ -375,6 +396,9 @@ alert payload it already received.
 | `VR_CHALLENGE_REQUIRE_AUDIO` | `0` | `1` fails a challenge graded with fewer than `VR_CHALLENGE_MIN_WINDOWS` response windows |
 | `VR_CHALLENGE_MAX_PER_SESSION` | `1` | Challenges per session; > 1 re-arms after a pass (see §3 amendment) |
 | `VR_CHALLENGE_TRIGGER_CONSECUTIVE` | `1` | Consecutive `CHALLENGE`-tier windows before a challenge is issued |
+| `VR_CHALLENGE_ASR_PROVIDER` | `local` | Engine that transcribes challenge response audio (§3 Amendment 2). Local engines only (`local`, `whisper`, `indicconformer`); a cloud provider is refused and grading fails closed |
+| `VR_CHALLENGE_RESPONSE_MAX_SECONDS` | `20` | Response audio kept for transcription, from the moment the challenge is issued |
+| `VR_CHALLENGE_CLIENT_TEXT_DRILL` | `0` | `1` grades digits from the client's `response_text` instead. Drills and demos only: forgeable |
 | `VR_ANCHOR_EMBEDDING` | *(backend-default path)* | Overrides which anchor JSON is loaded, bypassing the `VR_ASV_BACKEND`-keyed default |
 | `VR_FUSION_PRESET` | *(unset)* | `demo` applies a preset fusion-weight override tuned for the shipped demo clips |
 | `VR_SAMPLE_RATE` | `16000` | Processing sample rate in Hz — independent of the handshake's `sample_rate`, which is per-connection |

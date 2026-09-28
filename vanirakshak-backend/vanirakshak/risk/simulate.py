@@ -11,6 +11,7 @@ a number from here is a number from the shipped decision layer.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
@@ -92,6 +93,9 @@ def simulate_session(
     hop = max(1, int(round(audio_cfg.hop_seconds * sr)))
     win = int(round(audio_cfg.window_seconds * sr))
 
+    # The responder stands in for what the caller said, so digits are graded
+    # from its text: there is no real audio here to transcribe (docs/15 N2).
+    challenge_cfg = dataclasses.replace(challenge_cfg or settings.challenge, client_text_drill=True)
     sess = CallSession(
         "sim",
         context or SessionContext(),
