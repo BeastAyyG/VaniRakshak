@@ -35,6 +35,9 @@ from typing import Dict, List, Optional
 import numpy as np
 
 _SUFFIX = ".vre"
+# Env vars scripts/rotate_enrolment_key.py reads (keys never go on argv).
+KEY_ENV = "VR_ENROL_STORE_KEY"
+NEW_KEY_ENV = "VR_ENROL_STORE_NEW_KEY"
 _AAD = b"vanirakshak-enrolment-v1"
 
 
