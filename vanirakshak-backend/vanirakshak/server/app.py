@@ -39,6 +39,7 @@ from ..detectors.voice import vad_stats, zcr_variance
 from ..detectors.channel import detect as channel_detect
 from ..anchor import load_anchor
 from ..privacy.enrolment_store import EnrolmentRecord, store_from_env
+from ..detectors.calibration import Cohort, fit_user_calibration
 from ..semantic import SEMANTIC_SIGNAL
 from .auth import ApiKey, AuthError, Authenticator, extract_secret
 
@@ -96,6 +97,8 @@ def _load_enrolment_store():
 
 
 ENROL_STORE, ENROL_STORE_STATE = _load_enrolment_store()
+# Non-target cohort for per-user calibration (W5); clips load on first enrol.
+ASV_COHORT = Cohort(Path(settings.enrolment.cohort_dir))
 
 # API-key auth. Disabled (and loudly warned about) when VR_API_KEYS is unset,
 # so the demo and integration_check keep working; enforced the moment keys
@@ -226,6 +229,9 @@ class EnrollResponse(BaseModel):
     embedding_dimension: int
     audio_retained: bool
     created_at: str
+    # W5: "fitted_loo_vs_cohort", or "seeded_from_anchor" with a reason in
+    # the stored QA summary; None when no calibration applies.
+    calibration_method: Optional[str] = None
 
 
 class EnrollDeleteResponse(BaseModel):
@@ -414,10 +420,19 @@ async def enroll(
     sess.enrol(user_id, x, sr)
     SESSIONS[sid] = sess
 
-    # W5: Per-user calibration
-    # If the global anchor has calibration parameters, seed per-user calibration from it or baseline
-    if PIPELINE.asv.calibration and hasattr(PIPELINE.asv, "_user_calibrations"):
+    # W5: per-user calibration, fitted from leave-one-out target scores
+    # against a fixed non-target cohort. Falls back to the anchor's logistic
+    # when there is too little audio or no cohort, and records which.
+    cal, cal_info = await asyncio.to_thread(
+        fit_user_calibration, PIPELINE.asv, user_id, x, sr, ASV_COHORT
+    )
+    if cal is not None:
+        PIPELINE.asv._user_calibrations[user_id] = cal
+    elif PIPELINE.asv.calibration:
         PIPELINE.asv._user_calibrations[user_id] = dict(PIPELINE.asv.calibration)
+    else:
+        cal_info["method"] = None
+    qa["calibration"] = cal_info
 
     # docs/15 N4: persist, or undo. An enrolment that silently would not
     # survive a restart is the G-D defect this store exists to close.
@@ -438,6 +453,7 @@ async def enroll(
         embedding_dimension=192,
         audio_retained=False,
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        calibration_method=cal_info.get("method"),
     )
 
 

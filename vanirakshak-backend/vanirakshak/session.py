@@ -322,9 +322,37 @@ class CallSession:
             return None, "challenge_transcriber_unavailable", err
         return text, None, None
 
+    def _voice_onset_ms(self) -> Optional[int]:
+        """Audio time from challenge issue to the first sustained voiced frame
+        of the buffered response, or None if the response holds no voice.
+
+        Counted in samples, so network jitter and a client's own clock play
+        no part (docs/15 W2.b). Onset = 3 consecutive 25 ms frames within
+        20 dB of the loudest frame and above an absolute floor (~-50 dBFS),
+        so background hiss before the answer does not count as speech.
+        """
+        if not self._challenge_audio:
+            return None
+        x = np.concatenate(self._challenge_audio).astype(np.float32) / 32768.0
+        frame = max(1, int(0.025 * self._sr))
+        n = x.size // frame
+        if n < 3:
+            return None
+        energy = np.mean(x[: n * frame].reshape(n, frame) ** 2, axis=1)
+        thresh = max(float(energy.max()) * 10.0 ** (-20.0 / 10.0), 1e-5)
+        voiced = energy >= thresh
+        run = np.convolve(voiced.astype(np.int8), np.ones(3, dtype=np.int8), mode="valid")
+        hits = np.flatnonzero(run == 3)
+        if hits.size == 0:
+            return None
+        return int(round(hits[0] * frame * 1000.0 / self._sr))
+
     def grade_challenge(self, response_text: str, response_latency_ms: int) -> dict:
         if self._active_challenge is None:
             return {"ok": False, "reason": "no_active_challenge"}
+        cfg = self._challenge_cfg
+        band = {"latency_min_ms": cfg.latency_min_ms, "latency_max_ms": cfg.latency_max_ms}
+        client_latency_ms = response_latency_ms
         # docs/15 N2: digits come from the server's transcript of the response
         # audio. ``response_text`` is graded only in the explicit drill mode.
         # No transcript (no audio, or no local engine) fails closed.
@@ -332,14 +360,24 @@ class CallSession:
         asr_error: Optional[str] = None
         if self._challenge_cfg.client_text_drill:
             grade_source = "client_text_drill"
-            passed, reason, conf = self.challenge.grade(self._active_challenge, response_text, response_latency_ms)
+            passed, reason, conf = self.challenge.grade(
+                self._active_challenge, response_text, response_latency_ms, **band)
         else:
             grade_source = "server_asr"
-            transcript, fail_code, asr_error = self._response_transcript()
-            if transcript is None:
-                passed, reason, conf = False, str(fail_code), 0.0
+            # W2.b: the latency is the server's own measurement too.
+            onset = self._voice_onset_ms()
+            response_latency_ms = onset if onset is not None else -1
+            if self._challenge_audio_samples < int(0.3 * self._sr):
+                passed, reason, conf = False, "no_response_audio", 0.0
+            elif onset is None:
+                passed, reason, conf = False, "no_voice_onset", 0.0
             else:
-                passed, reason, conf = self.challenge.grade(self._active_challenge, transcript, response_latency_ms)
+                transcript, fail_code, asr_error = self._response_transcript()
+                if transcript is None:
+                    passed, reason, conf = False, str(fail_code), 0.0
+                else:
+                    passed, reason, conf = self.challenge.grade(
+                        self._active_challenge, transcript, response_latency_ms, **band)
         acoustic = self._score_challenge_audio()
         if passed and acoustic["verdict"] != "pass":
             passed, reason, conf = False, acoustic["verdict"], 0.05
@@ -378,6 +416,7 @@ class CallSession:
                 "challenge_passed": 1.0 if passed else 0.0,
                 "challenge_confidence": float(conf),
                 "response_latency_ms": float(response_latency_ms),
+                "client_latency_ms": float(client_latency_ms),
                 "challenge_response_windows": float(acoustic["windows"]),
                 "challenge_server_asr": 1.0 if grade_source == "server_asr" else 0.0,
             },
@@ -389,6 +428,7 @@ class CallSession:
             "blocked": self._blocked,
             "acoustic": acoustic,
             "grade_source": grade_source,
+            "latency_ms": response_latency_ms if response_latency_ms >= 0 else None,
             "transcript": transcript,
             "asr_error": asr_error,
         }

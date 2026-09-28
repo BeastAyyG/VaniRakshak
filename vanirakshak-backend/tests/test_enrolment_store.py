@@ -250,3 +250,47 @@ def test_revoked_session_stops_scoring():
 def test_health_reports_store_state():
     store = TestClient(app_module.app).get("/v1/health").json()["enrolment_store"]
     assert set(store) == {"persistent", "loaded", "skipped_other_backend", "unreadable"}
+
+
+# --- key rotation (docs/14 W8) -------------------------------------------------
+
+
+def test_rotate_key_reseals_every_record(tmp_path):
+    from vanirakshak.privacy.enrolment_store import rotate_key
+
+    new_key = bytes(range(32, 64))
+    old = EnrolmentStore(tmp_path, KEY)
+    old.save(_record("alice"))
+    old.save(_record("bob"))
+    report = rotate_key(tmp_path, KEY, new_key)
+    assert report == {"rotated": 2, "already_new": 0, "unreadable": []}
+
+    assert old.load_all().records == []  # the old key opens nothing now
+    back = EnrolmentStore(tmp_path, new_key).load_all()
+    assert sorted(r.user_id for r in back.records) == ["alice", "bob"]
+    assert back.unreadable == []
+    assert len(list(tmp_path.glob("*.vre"))) == 2  # old files removed
+
+
+def test_rotate_key_is_rerunnable(tmp_path):
+    """An interrupted rotation leaves a mix; a second run finishes it."""
+    from vanirakshak.privacy.enrolment_store import rotate_key
+
+    new_key = bytes(range(32, 64))
+    EnrolmentStore(tmp_path, KEY).save(_record("alice"))
+    EnrolmentStore(tmp_path, new_key).save(_record("bob"))  # already rotated
+    report = rotate_key(tmp_path, KEY, new_key)
+    assert report["rotated"] == 1 and report["already_new"] == 1
+    assert len(EnrolmentStore(tmp_path, new_key).load_all().records) == 2
+
+
+def test_rotate_script_takes_keys_from_env_only(tmp_path):
+    new_key = bytes(range(32, 64))
+    EnrolmentStore(tmp_path, KEY).save(_record("alice"))
+    script = BACKEND_DIR.parent / "scripts" / "rotate_enrolment_key.py"
+    env = {**os.environ, "VR_ENROL_STORE_KEY": KEY_HEX, "VR_ENROL_STORE_NEW_KEY": new_key.hex()}
+    out = subprocess.run([sys.executable, str(script), "--store", str(tmp_path)],
+                         env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout)["rotated"] == 1
+    assert EnrolmentStore(tmp_path, new_key).load("alice") is not None

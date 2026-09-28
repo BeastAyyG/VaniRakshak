@@ -181,9 +181,16 @@ with the enrolment).
   "user_id": "narendra_modi",
   "embedding_dimension": 192,
   "audio_retained": false,
-  "created_at": "2026-09-09T02:20:18Z"
+  "created_at": "2026-09-09T02:20:18Z",
+  "calibration_method": "fitted_loo_vs_cohort"
 }
 ```
+
+`calibration_method` (docs/14 W5) is `"fitted_loo_vs_cohort"` when the ASV
+score logistic was fitted for this user: leave-one-out target scores from
+3 s segments of the enrolment audio against the non-target cohort in
+`VR_ASV_COHORT_DIR`. It is `"seeded_from_anchor"` when there was under 6 s of
+audio or no usable cohort; the reason is kept in the stored QA summary.
 
 Any number of distinct `user_id`s may be enrolled (`EnrolledSpeakersPanel.tsx`
 is the dashboard UI for this). With the stub ASV backend (default) the
@@ -218,6 +225,11 @@ neither in memory nor on disk.
   "sessions_closed": ["ws-a1b2c3d4"]
 }
 ```
+
+To change the store key, stop the server and run
+`scripts/rotate_enrolment_key.py` with the current key in
+`VR_ENROL_STORE_KEY` and the new one in `VR_ENROL_STORE_NEW_KEY` (keys are read
+from the environment, never argv). It is crash-safe and re-runnable.
 
 `store_record_erased` is `null` when no store is configured. The audit event
 (tier `ERASED`) records `store_record_erased` (`-1` = no store) and the number
@@ -336,7 +348,7 @@ optional `"response_text"` that is graded only in drill mode.
 {
   "ok": true, "reason": "ok", "confidence": 0.6, "blocked": false,
   "acoustic": { "windows": 3, "checked": true, "mean_cm_llr": 2.41, "mean_asv": 0.93, "verdict": "pass" },
-  "grade_source": "server_asr", "transcript": "6, 1.", "asr_error": null
+  "grade_source": "server_asr", "latency_ms": 820, "transcript": "6, 1.", "asr_error": null
 }
 ```
 
@@ -347,6 +359,9 @@ received after issuing the challenge, made by a local ASR engine
 `"client_text_drill"` and `transcript` is `null`. Grading fails closed:
 `no_response_audio` (under 0.3 s of response audio) or
 `challenge_transcriber_unavailable` (no local engine; `asr_error` says why).
+`latency_ms` is measured by the server, from issue to voice onset in the
+response audio (PROTOCOL.md §3 Amendment 3); a response with no voice fails
+with `no_voice_onset`. In drill mode it echoes the client's value.
 
 `acoustic` grades the response *audio*: the windows the stream scored while
 the challenge was outstanding (docs/PROTOCOL.md §3, "voice-scored
