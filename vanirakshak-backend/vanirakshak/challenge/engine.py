@@ -11,10 +11,11 @@ ends with an instruction to repeat only the numbers, which:
   * a live TTS can do, but the response latency is usually wrong
     (TTS systems are <300 ms or >1500 ms, humans are 600-1200 ms).
 
-This module ships a deterministic phrase generator and a *stub*
-response analyzer (string match + latency check). For the hackathon
-demo we use string match against the expected answer; for production
-you'd wire this to AI4Bharat IndicConformer or Whisper.
+This module ships a deterministic phrase generator and the response
+grader (digit order + latency). The text it grades is the server's own
+transcript of the response audio (``challenge/transcribe.py``, docs/15 N2);
+:func:`extract_digits` reads spoken digits in English, romanised Hindi and
+Devanagari as well as numerals.
 """
 
 from __future__ import annotations
@@ -27,8 +28,42 @@ from typing import List, Optional, Tuple
 
 
 HINDI_WORDS = ["aam", "nadi", "kela", "suraj", "chai", "tara", "kitaab", "ghar"]
-ENGLISH_WORDS = ["mango", "river", "blue", "seven", "table", "green", "orange", "cloud"]
+# No number words here: the grader reads spoken digits, so a distractor
+# like "seven" would be scored as a digit.
+ENGLISH_WORDS = ["mango", "river", "blue", "paper", "table", "green", "orange", "cloud"]
 DIGITS = list("0123456789")
+
+# Spoken forms an ASR engine may return for each digit. Hindi entries cover
+# common romanisations and Devanagari. "no" is left out on purpose (English
+# "no" is far likelier than a misspelt "nau").
+_DIGIT_WORDS = {
+    "0": ["zero", "oh", "shunya", "shoonya", "sunya", "शून्य"],
+    "1": ["one", "ek", "एक"],
+    "2": ["two", "do", "दो"],
+    "3": ["three", "teen", "tin", "तीन"],
+    "4": ["four", "char", "chaar", "चार"],
+    "5": ["five", "paanch", "panch", "पांच", "पाँच"],
+    "6": ["six", "chhe", "chhah", "chah", "che", "छह", "छः", "छे"],
+    "7": ["seven", "saat", "sat", "सात"],
+    "8": ["eight", "aath", "ath", "आठ"],
+    "9": ["nine", "nau", "nao", "नौ"],
+}
+_WORD_TO_DIGIT = {w: d for d, words in _DIGIT_WORDS.items() for w in words}
+_DEVANAGARI_NUMERALS = str.maketrans("०१२३४५६७८९", "0123456789")
+# \w alone drops Devanagari vowel signs (category Mn/Mc), splitting "पाँच".
+_TOKEN = re.compile(r"[\wऀ-ॿ]+")
+
+
+def extract_digits(text: str) -> List[str]:
+    """Digits in *text*, in spoken order: numerals ("35", "३५") and number
+    words ("three five", "teen paanch", "तीन पांच")."""
+    out: List[str] = []
+    for tok in _TOKEN.findall((text or "").lower().translate(_DEVANAGARI_NUMERALS)):
+        if tok.isdigit():
+            out.extend(tok)
+        elif tok in _WORD_TO_DIGIT:
+            out.append(_WORD_TO_DIGIT[tok])
+    return out
 
 
 @dataclass
@@ -91,7 +126,7 @@ class ChallengeEngine:
         *confidence* is a [0,1] belief that the answer is genuine.
         """
         # 1. digit-order match
-        response_digits = re.findall(r"\d", response_text or "")
+        response_digits = extract_digits(response_text)
         correct_order = response_digits[: len(challenge.expected_digits)] == challenge.expected_digits
 
         # 2. latency check: humans typically 600-1500 ms; TTS <300 or >1500

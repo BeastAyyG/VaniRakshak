@@ -118,6 +118,18 @@ class ChallengeConfig:
     # whole call, which puts genuine per-call friction near 100 % (docs/13 P1-F).
     trigger_consecutive: int = max(1, _env_int("VR_CHALLENGE_TRIGGER_CONSECUTIVE", 1))
 
+    # docs/15 N2: digits are graded from the server's own transcript of the
+    # response audio, not from the client's ``response_text`` -- a scripted
+    # client can always send the right digits. The engine must be local
+    # (LOCAL_ASR_PROVIDERS below): the challenge never ships audio abroad,
+    # whatever the semantic layer does.
+    asr_provider: str = _env("VR_CHALLENGE_ASR_PROVIDER", "local")
+    # Response audio kept for transcription, from the moment of issue.
+    response_max_seconds: float = _env_float("VR_CHALLENGE_RESPONSE_MAX_SECONDS", 20.0)
+    # Drill mode only: grade digits from the client's ``response_text``.
+    # Forgeable by construction; never enable it in a deployment.
+    client_text_drill: bool = _env_bool("VR_CHALLENGE_CLIENT_TEXT_DRILL")
+
 
 @dataclass(frozen=True)
 class FusionConfig:

@@ -27,6 +27,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import numpy as np
 
+import dataclasses
+
 from ..config import settings, FusionConfig, RiskConfig
 from ..data.synthetic import synthetic_speech, synthetic_spoofed
 from ..data.augment import apply_random_pipeline
@@ -74,6 +76,9 @@ def run_demo() -> int:
     print("[1] Enrolling genuine user 'demo_user' (4.0 s) ...")
     # Use the aggressive demo preset so the BLOCK transition is visible
     # on stage. Real production re-fits these on ASVspoof 5.
+    # The demo's audio is synthetic, so no ASR engine could hear digits in
+    # it: grade the scripted text instead (drill mode, docs/15 N2).
+    DRILL = dataclasses.replace(settings.challenge, client_text_drill=True)
     fusion = RiskFusionEngine(fusion_cfg=FusionConfig(
         intercept=-2.4, w_cm=3.5, w_asv=2.5, w_prosody=1.2, w_channel=1.5, w_context=1.0,
     ))
@@ -87,6 +92,7 @@ def run_demo() -> int:
             prior_fraud_score=0.0,
         ),
         fusion_engine=fusion,
+        challenge_cfg=DRILL,
     )
     genuine = synthetic_speech(duration_sec=4.0, sr=sr, rng=rng)
     sess.enrol("demo_user", genuine, sr)
@@ -126,20 +132,22 @@ def run_demo() -> int:
         challenge = ch.to_dict()
     print("[4] Challenge engine issued:")
     print(f"    phrase        : \"{challenge['phrase']}\"")
-    print(f"    expected digits: {''.join(challenge['expected_digits'])}")
+    # expected_digits is kept off the wire (W2); the demo reads the session's copy.
+    expected = sess._active_challenge.expected_digits
+    print(f"    expected digits: {''.join(expected)}")
     print(f"    instructions  : {challenge['instructions']}")
     print()
 
     # 5. grade a simulated HUMAN response
     print("[5] Grading a simulated HUMAN response (correct digits, ~900 ms latency) ...")
-    response_text = " ".join(challenge["expected_digits"]) + " uh I think that is it"
+    response_text = " ".join(expected) + " uh I think that is it"
     grade = sess.grade_challenge(response_text, response_latency_ms=900)
     print(f"    result        : {grade}")
     print()
 
     # 6. now grade a simulated REPLAY/TTS response (too fast)
     print("[6] Grading a simulated REPLAY/TTS response (too fast, 180 ms) ...")
-    sess2 = CallSession("demo-replay", SessionContext(caller_id="+91-1111111111", claimed_identity="imposter", transaction_value_inr=4_00_000), fusion_engine=fusion)
+    sess2 = CallSession("demo-replay", SessionContext(caller_id="+91-1111111111", claimed_identity="imposter", transaction_value_inr=4_00_000), fusion_engine=fusion, challenge_cfg=DRILL)
     sess2.enrol("demo_user", genuine, sr)
     # push enough spoofed to force the challenge to fire
     sp_short = synthetic_spoofed(duration_sec=5.5, sr=sr, rng=np.random.default_rng(13))

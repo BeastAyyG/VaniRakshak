@@ -264,7 +264,9 @@ class SessionStartRequest(BaseModel):
 
 
 class ChallengeGradeRequest(BaseModel):
-    response_text: str
+    # Graded only under VR_CHALLENGE_CLIENT_TEXT_DRILL=1. Otherwise the server
+    # transcribes the response audio itself (docs/15 N2) and ignores this.
+    response_text: str = ""
     response_latency_ms: int
 
 
@@ -305,6 +307,13 @@ def health() -> dict:
             # voiceprint. Read from the running instance, so it stays truthful
             # even if VR_ASV_BACKEND=ecapa was requested but degraded to stub.
             "asv_synthetic": PIPELINE.asv_is_synthetic,
+        },
+        # docs/15 N2: where challenge digits are graded from. "server_asr"
+        # transcribes the response audio with a local engine and fails closed
+        # without one; "client_text_drill" trusts the client and is forgeable.
+        "challenge_grading": {
+            "source": "client_text_drill" if settings.challenge.client_text_drill else "server_asr",
+            "asr_provider": settings.challenge.asr_provider,
         },
         "anchor": {
             "user_id": ANCHOR_STATE.get("user_id"),
