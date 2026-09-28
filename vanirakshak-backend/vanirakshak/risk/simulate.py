@@ -178,7 +178,7 @@ def summarise(
 
 
 def bootstrap_sessions(
-    llrs: np.ndarray,
+    llrs: "np.ndarray | Sequence[np.ndarray]",
     *,
     n_sessions: int,
     call_seconds: float,
@@ -189,7 +189,11 @@ def bootstrap_sessions(
     prosody_unnatural: float = 0.0,
     audio_cfg: Optional[AudioConfig] = None,
 ) -> List[List[WindowScore]]:
-    """Build calls by drawing window scores i.i.d. from a pool.
+    """Build calls by drawing window scores from a pool.
+
+    ``llrs`` is either one array (windows drawn i.i.d. from all of it) or a
+    sequence of per-speaker arrays: each call then picks one speaker, uniformly,
+    and draws every window from that speaker only (docs/14 W1.b).
 
     I.i.d. draws ignore within-call correlation (a genuine speaker who reads
     as synthetic tends to do so all call), which *overstates* how much
@@ -199,9 +203,12 @@ def bootstrap_sessions(
     """
     audio_cfg = audio_cfg or settings.audio
     n_win = max(1, int(np.floor((call_seconds - audio_cfg.window_seconds) / audio_cfg.hop_seconds)) + 1)
+    grouped = not isinstance(llrs, np.ndarray)
+    groups = [g for g in llrs if len(g)] if grouped else None
     out: List[List[WindowScore]] = []
     for _ in range(n_sessions):
-        draw = rng.choice(llrs, size=n_win, replace=True)
+        pool = groups[int(rng.integers(len(groups)))] if grouped else llrs
+        draw = rng.choice(pool, size=n_win, replace=True)
         out.append([
             WindowScore(float(v), asv, asv_enrolled, channel_anomaly, prosody_unnatural) for v in draw
         ])

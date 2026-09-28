@@ -28,6 +28,10 @@ RESULT_FILES = {
     "t1_grade": OUT / "t1" / "t1_grade.json",
     "telephony": OUT / "d2" / "telephony_stopc.json",
     "hindi_asr": OUT / "w2c" / "hindi_asr.json",
+    "heads": OUT / "g1_heads" / "heads_telephony.json",
+    "docs16": OUT / "g2" / "verdict.json",
+    "docs16_futility": OUT / "g2" / "futility.json",
+    "spk": OUT / "g1_spk" / "comparison.json",
 }
 
 
@@ -124,6 +128,14 @@ async function tick(){
   <tr><td colspan="2"><b>STOP-C triggered</b></td><td>${t.stop_c.triggered==null?'—':t.stop_c.triggered?'<span class="failed">YES</span>':'<span class="done">no</span>'}</td></tr></table></div>`)}
  if(r.hindi_asr){const h=r.hindi_asr;out.push(`<div class="card"><h2>Hindi challenge ASR</h2><table><tr><th>Engine</th><th>Hindi pass</th><th>English pass</th></tr>
   ${Object.entries(h.engines||{}).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.hi_pass_pct} %</td><td>${v.en_pass_pct} %</td></tr>`).join('')}</table></div>`)}
+ if(r.heads){out.push(`<div class="card"><h2>All checkpoints on phone audio (STOP-C bar: &lt; 50 %)</h2><table><tr><th>Checkpoint</th><th>Worst NB miss</th><th>Clean worst</th></tr>
+  ${r.heads.ranking_by_worst_narrowband_miss.map(x=>`<tr><td>${esc(x.head)}</td><td>${x.worst_narrowband_miss_pct<50?'<span class="done">':'<span class="failed">'}${x.worst_narrowband_miss_pct} %</span></td><td>${x.clean_worst_miss_pct} %</td></tr>`).join('')}</table></div>`)}
+ if(r.docs16_futility||r.docs16){const f=r.docs16_futility,v=r.docs16;out.push(`<div class="card"><h2>docs/16 real-codec training</h2><table>
+  ${f?`<tr><td>Seed 42: control vs real-codec worst NB miss</td><td>${f.C42_worst_nb_miss_pct} % vs ${f.R42_worst_nb_miss_pct} %</td></tr><tr><td>Futility stop</td><td>${f.stop?'<span class="failed">yes</span>':'<span class="done">no, continue</span>'}</td></tr>`:''}
+  ${v?`<tr><td><b>Verdict</b></td><td><b>${esc(v.verdict)}</b></td></tr><tr><td>Mean worst NB miss C / R</td><td>${v.worst_nb_miss_pct.C_mean} % / ${v.worst_nb_miss_pct.R_mean} %</td></tr>`:'<tr><td>Verdict</td><td>pending</td></tr>'}</table></div>`)}
+ if(r.spk){const k=r.spk;out.push(`<div class="card"><h2>T1: i.i.d. vs speaker-grouped calls</h2><table><tr><th></th><th>i.i.d.</th><th>grouped</th></tr>
+  <tr><td>Genuine BLOCK (max cell)</td><td>${(100*k.max_genuine_block.iid).toFixed(1)} %</td><td>${(100*k.max_genuine_block.grouped).toFixed(1)} %</td></tr>
+  <tr><td>Spoof BLOCK (worst cell/attack)</td><td>${(100*k.min_spoof_block_worst_attack.iid).toFixed(1)} %</td><td>${(100*k.min_spoof_block_worst_attack.grouped).toFixed(1)} %</td></tr></table></div>`)}
  document.getElementById('res').innerHTML=out.join('')||'<div class="card">no results yet</div>';
 }
 tick();setInterval(tick,3000);

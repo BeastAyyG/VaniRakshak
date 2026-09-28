@@ -946,6 +946,59 @@ def g2_adjudicate(ctx: Ctx) -> dict:
     return rec
 
 
+# --------------------------------------------------------------------------- G1: speaker-grouped T1
+
+SPK_DIR = OUT / "g1_spk"
+PROTOCOLS = Path("A:/cm-corpus/protocols")
+
+
+def g1_speaker_grouped(ctx: Ctx) -> dict:
+    """docs/14 W1.b: re-measure T1's chosen thresholds with every simulated
+    call drawn from ONE speaker (ASVspoof 5 protocol speaker ids) instead of
+    i.i.d. windows. Recorded, not a re-grade of docs/13 §11."""
+    SPK_DIR.mkdir(parents=True, exist_ok=True)
+    out = SPK_DIR / "t1_speaker_grouped.json"
+    if not out.exists():
+        ctx.progress(0, 1, "simulating speaker-grouped calls (CPU)")
+        p = ctx.run([PY, "scripts/calibrate_decision_layer.py",
+                     "--dev-scores", str(DEV_DUMP), "--eval-scores", str(GATE_DUMP),
+                     "--speaker-grouped",
+                     "--dev-manifest", "A:/cm-corpus/manifests/dev.tsv",
+                     "--dev-protocol", str(PROTOCOLS / "ASVspoof5.dev.track_1.tsv"),
+                     "--eval-manifest", str(GATE_MANIFEST),
+                     "--eval-protocol", str(PROTOCOLS / "ASVspoof5.eval.track_1.tsv"),
+                     "--fixed-from", str(T1_DIR / "decision_layer_calibration.json"),
+                     "--challenge-consecutive", "3", "--out", str(out)], timeout=6 * 3600)
+        if p.returncode != 0:
+            raise RuntimeError("speaker-grouped calibration failed; see log")
+    grouped = json.loads(out.read_text(encoding="utf-8"))["results"]["eval"]
+    iid = json.loads((T1_DIR / "decision_layer_calibration.json").read_text(encoding="utf-8"))["results"]["eval"]
+    cmp: dict = {}
+    for cell in grouped["after"]:
+        g, i = grouped["after"][cell], iid["after"][cell]
+        cmp[cell] = {
+            "genuine_block_by_end": {"iid": i["genuine"]["p_block_by_end"], "grouped": g["genuine"]["p_block_by_end"]},
+            "genuine_challenge_60s": {"iid": i["genuine"]["p_challenge_within_60s"],
+                                      "grouped": g["genuine"]["p_challenge_within_60s"]},
+            "spoof_block_worst_attack": {"iid": _worst_attack(i), "grouped": _worst_attack(g)},
+        }
+    summary = {
+        "what": "T1 thresholds (docs/13 §11) re-measured with speaker-grouped calls on the gate split",
+        "cells": cmp,
+        "max_genuine_block": {"iid": max(v["genuine_block_by_end"]["iid"] for v in cmp.values()),
+                              "grouped": max(v["genuine_block_by_end"]["grouped"] for v in cmp.values())},
+        "min_spoof_block_worst_attack": {"iid": min(v["spoof_block_worst_attack"]["iid"] for v in cmp.values()),
+                                         "grouped": min(v["spoof_block_worst_attack"]["grouped"] for v in cmp.values())},
+    }
+    (SPK_DIR / "comparison.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    ctx.log(f"genuine BLOCK max: iid {summary['max_genuine_block']['iid']}  grouped "
+            f"{summary['max_genuine_block']['grouped']};  worst spoof BLOCK: iid "
+            f"{summary['min_spoof_block_worst_attack']['iid']}  grouped {summary['min_spoof_block_worst_attack']['grouped']}")
+    ctx.progress(1, 1, "done")
+    return {"summary": str(SPK_DIR / "comparison.json"), **{k: summary[k] for k in
+            ("max_genuine_block", "min_spoof_block_worst_attack")}}
+
+
 # --------------------------------------------------------------------------- driver
 
 STAGES: Dict[str, Callable[[Ctx], dict]] = {
@@ -961,6 +1014,7 @@ STAGES: Dict[str, Callable[[Ctx], dict]] = {
     "g2_train_rest": g2_train_rest,
     "g2_eval": g2_eval,
     "g2_adjudicate": g2_adjudicate,
+    "g1_speaker_grouped": g1_speaker_grouped,
 }
 
 
