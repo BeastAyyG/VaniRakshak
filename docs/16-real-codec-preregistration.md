@@ -130,3 +130,49 @@ coverage claim may be made from this plan alone.
 `ml/augment.py`'s broken codec branch is left as it is, so docs/20 and 21
 stay reproducible, and both arms here run with it off. Fixing its order is a
 separate change after this plan is adjudicated.
+
+## 9. Results and verdict (recorded 2026-09-29)
+
+All six arm-seed runs completed per protocol. Training order: C42, R42,
+futility check, C43, R43, C44, R44. Checkpoints:
+`data/cm_docs16_C_s4{2,3,4}.pt`, `data/cm_docs16_R_s4{2,3,4}.pt`.
+
+Selected checkpoint per run (best dev minDCF, patience 5):
+
+| Run | Selected epoch | Dev minDCF | Dev EER |
+|-----|---------------|-----------:|--------:|
+| C42 | 1 | 0.5011 | 5.18% |
+| R42 | 8 | 0.4372 | 3.98% |
+| C43 | 4 | 0.7037 | 7.35% |
+| R43 | 4 | 0.3782 | 3.40% |
+| C44 | 2 | 0.3011 | 3.06% |
+| R44 | 1 | 0.2245 | 2.54% |
+
+Futility check (after C42/R42): worst narrowband miss R42 9.8% vs C42
+50.35%. stop=false, remaining seeds continued.
+
+Registered telephony scoring (all 84 shards, 2026-09-29 22:54 IST):
+
+- Worst narrowband miss (%): C [50.35, 75.8, 54.3], mean 60.15;
+  R [9.8, 14.7, 12.1], mean 12.2.
+- Clean worst-attack miss (%): C [32.7, 44.84, 25.63];
+  R [5.4, 8.1, 9.6].
+- Clean bonafide FRR (%): C [11.63, 5.95, 8.75];
+  R [18.05, 23.63, 20.88].
+
+P16-1 (effect): PASS. R mean worst-NB miss improves by 47.95 pp, and every
+R seed beats every C seed.
+P16-2 (STOP-C bar): PASS. R mean worst-NB miss 12.2% < 50%.
+P16-3 (no clean regression): FAIL. Clean bonafide FRR regresses by
++6.42, +17.68, +12.13 pp per seed, against a 2 pp limit.
+
+**Verdict: HARMS.** Real-codec augmentation substantially improves
+telephony robustness but degrades clean-audio false rejection beyond the
+preregistered limit. The augmentation path is rejected; no T1
+recalibration, P1-T, or STOP-C follow. Full adjudication record:
+`C:\vr-out\pipeline\state_g2.json` (g2_adjudicate, 2026-09-29 22:54:48).
+
+Operational notes: lab-beast slept twice during the campaign
+(~11:42-15:17 and ~19:49-20:26 IST on 2026-09-29); training processes
+survived both gaps and resumed with no reboot. ~3.5 GPU-hours lost to the
+first gap. No cloud credits used.
