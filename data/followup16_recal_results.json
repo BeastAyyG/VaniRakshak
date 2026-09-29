@@ -1,0 +1,386 @@
+[
+ {
+  "head": "cm_docs16_R_s42",
+  "cand": "T_reg(5pct_clean)",
+  "thr": 25.196650314331055,
+  "frr": 18.075,
+  "wmt": 9.8,
+  "c_frr": 11.625,
+  "c_wmt": 50.4,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 18.075,
+    "worst_miss": 5.4,
+    "worst_attack": "A30"
+   },
+   "g711u": {
+    "frr": 26.3,
+    "worst_miss": 6.800000000000001,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 26.450000000000003,
+    "worst_miss": 9.8,
+    "worst_attack": "A27"
+   },
+   "amrwb_12k65": {
+    "frr": 23.075000000000003,
+    "worst_miss": 8.200000000000001,
+    "worst_attack": "A30"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s42",
+  "cand": "T_mc4(5pct_pool4)",
+  "thr": 22.38253164291382,
+  "frr": 12.2,
+  "wmt": 15.299999999999999,
+  "c_frr": 11.625,
+  "c_wmt": 50.4,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 12.2,
+    "worst_miss": 11.899999999999999,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 18.5,
+    "worst_miss": 12.8,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 19.325,
+    "worst_miss": 15.299999999999999,
+    "worst_attack": "A30"
+   },
+   "amrwb_12k65": {
+    "frr": 15.55,
+    "worst_miss": 13.100000000000001,
+    "worst_attack": "A28"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s42",
+  "cand": "T_mc3(5pct_pool3)",
+  "thr": 21.58691921234131,
+  "frr": 11.025,
+  "wmt": 18.2,
+  "c_frr": 11.625,
+  "c_wmt": 50.4,
+  "dominates": true,
+  "per_condition": {
+   "clean": {
+    "frr": 11.025,
+    "worst_miss": 14.000000000000002,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 16.875,
+    "worst_miss": 14.499999999999998,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 17.2,
+    "worst_miss": 18.2,
+    "worst_attack": "A30"
+   },
+   "amrwb_12k65": {
+    "frr": 14.249999999999998,
+    "worst_miss": 15.2,
+    "worst_attack": "A28"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s42",
+  "cand": "T_p1(1pct_clean)",
+  "thr": 18.436686325073243,
+  "frr": 7.3999999999999995,
+  "wmt": 29.599999999999998,
+  "c_frr": 11.625,
+  "c_wmt": 50.4,
+  "dominates": true,
+  "per_condition": {
+   "clean": {
+    "frr": 7.3999999999999995,
+    "worst_miss": 23.400000000000002,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 11.3,
+    "worst_miss": 25.1,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 11.375,
+    "worst_miss": 29.599999999999998,
+    "worst_attack": "A28"
+   },
+   "amrwb_12k65": {
+    "frr": 9.15,
+    "worst_miss": 25.5,
+    "worst_attack": "A28"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s43",
+  "cand": "T_reg(5pct_clean)",
+  "thr": 21.455311584472657,
+  "frr": 23.65,
+  "wmt": 14.7,
+  "c_frr": 5.975,
+  "c_wmt": 75.8,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 23.65,
+    "worst_miss": 8.1,
+    "worst_attack": "A32"
+   },
+   "g711u": {
+    "frr": 33.675,
+    "worst_miss": 13.600000000000001,
+    "worst_attack": "A31"
+   },
+   "amrnb_12k2": {
+    "frr": 36.225,
+    "worst_miss": 14.7,
+    "worst_attack": "A32"
+   },
+   "amrwb_12k65": {
+    "frr": 34.625,
+    "worst_miss": 8.7,
+    "worst_attack": "A32"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s43",
+  "cand": "T_mc4(5pct_pool4)",
+  "thr": 14.61233205795288,
+  "frr": 12.1,
+  "wmt": 26.700000000000003,
+  "c_frr": 5.975,
+  "c_wmt": 75.8,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 12.1,
+    "worst_miss": 17.0,
+    "worst_attack": "A31"
+   },
+   "g711u": {
+    "frr": 18.7,
+    "worst_miss": 26.700000000000003,
+    "worst_attack": "A31"
+   },
+   "amrnb_12k2": {
+    "frr": 18.2,
+    "worst_miss": 25.7,
+    "worst_attack": "A30"
+   },
+   "amrwb_12k65": {
+    "frr": 18.45,
+    "worst_miss": 18.8,
+    "worst_attack": "A32"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s43",
+  "cand": "T_mc3(5pct_pool3)",
+  "thr": 13.357386922836303,
+  "frr": 10.8,
+  "wmt": 29.599999999999998,
+  "c_frr": 5.975,
+  "c_wmt": 75.8,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 10.8,
+    "worst_miss": 19.1,
+    "worst_attack": "A31"
+   },
+   "g711u": {
+    "frr": 16.45,
+    "worst_miss": 29.599999999999998,
+    "worst_attack": "A31"
+   },
+   "amrnb_12k2": {
+    "frr": 16.05,
+    "worst_miss": 28.299999999999997,
+    "worst_attack": "A31"
+   },
+   "amrwb_12k65": {
+    "frr": 16.55,
+    "worst_miss": 20.4,
+    "worst_attack": "A31"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s43",
+  "cand": "T_p1(1pct_clean)",
+  "thr": 13.330200443267822,
+  "frr": 10.725,
+  "wmt": 29.7,
+  "c_frr": 5.975,
+  "c_wmt": 75.8,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 10.725,
+    "worst_miss": 19.2,
+    "worst_attack": "A31"
+   },
+   "g711u": {
+    "frr": 16.375,
+    "worst_miss": 29.7,
+    "worst_attack": "A31"
+   },
+   "amrnb_12k2": {
+    "frr": 15.925,
+    "worst_miss": 28.499999999999996,
+    "worst_attack": "A32"
+   },
+   "amrwb_12k65": {
+    "frr": 16.475,
+    "worst_miss": 20.5,
+    "worst_attack": "A31"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s44",
+  "cand": "T_reg(5pct_clean)",
+  "thr": 16.57988224029541,
+  "frr": 20.9,
+  "wmt": 12.1,
+  "c_frr": 8.774999999999999,
+  "c_wmt": 54.300000000000004,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 20.9,
+    "worst_miss": 9.6,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 29.175,
+    "worst_miss": 9.5,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 34.1,
+    "worst_miss": 12.1,
+    "worst_attack": "A28"
+   },
+   "amrwb_12k65": {
+    "frr": 31.324999999999996,
+    "worst_miss": 8.200000000000001,
+    "worst_attack": "A28"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s44",
+  "cand": "T_mc4(5pct_pool4)",
+  "thr": 13.76181697845459,
+  "frr": 10.9,
+  "wmt": 24.9,
+  "c_frr": 8.774999999999999,
+  "c_wmt": 54.300000000000004,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 10.9,
+    "worst_miss": 21.8,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 16.150000000000002,
+    "worst_miss": 23.1,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 19.175,
+    "worst_miss": 24.9,
+    "worst_attack": "A28"
+   },
+   "amrwb_12k65": {
+    "frr": 17.275,
+    "worst_miss": 19.2,
+    "worst_attack": "A28"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s44",
+  "cand": "T_mc3(5pct_pool3)",
+  "thr": 13.185071897506715,
+  "frr": 9.45,
+  "wmt": 28.1,
+  "c_frr": 8.774999999999999,
+  "c_wmt": 54.300000000000004,
+  "dominates": false,
+  "per_condition": {
+   "clean": {
+    "frr": 9.45,
+    "worst_miss": 24.7,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 14.05,
+    "worst_miss": 26.0,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 17.0,
+    "worst_miss": 28.1,
+    "worst_attack": "A28"
+   },
+   "amrwb_12k65": {
+    "frr": 15.024999999999999,
+    "worst_miss": 22.6,
+    "worst_attack": "A28"
+   }
+  }
+ },
+ {
+  "head": "cm_docs16_R_s44",
+  "cand": "T_p1(1pct_clean)",
+  "thr": 12.727829542160034,
+  "frr": 8.649999999999999,
+  "wmt": 31.0,
+  "c_frr": 8.774999999999999,
+  "c_wmt": 54.300000000000004,
+  "dominates": true,
+  "per_condition": {
+   "clean": {
+    "frr": 8.649999999999999,
+    "worst_miss": 27.400000000000002,
+    "worst_attack": "A28"
+   },
+   "g711u": {
+    "frr": 12.675,
+    "worst_miss": 29.099999999999998,
+    "worst_attack": "A28"
+   },
+   "amrnb_12k2": {
+    "frr": 15.575,
+    "worst_miss": 31.0,
+    "worst_attack": "A28"
+   },
+   "amrwb_12k65": {
+    "frr": 13.575000000000001,
+    "worst_miss": 24.7,
+    "worst_attack": "A28"
+   }
+  }
+ }
+]

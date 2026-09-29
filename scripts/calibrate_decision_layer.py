@@ -61,6 +61,28 @@ def load_dump(path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return d["raw_llr"].astype(np.float64), d["label"].astype(np.int64), d["attack"].astype(str)
 
 
+def speakers_for(dump_path: Path, manifest: Path, protocol: Path) -> np.ndarray:
+    """Speaker id of every dump row: dump row_index -> manifest path ->
+    utterance id -> ASVspoof 5 protocol speaker (the target speaker for spoofs)."""
+    d = np.load(dump_path, allow_pickle=False)
+    utt_spk = {}
+    with open(protocol, encoding="utf-8") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) >= 2:
+                utt_spk[parts[1]] = parts[0]
+    stems = []
+    with open(manifest, encoding="utf-8") as f:
+        next(f)
+        for line in f:
+            stems.append(Path(line.split("\t")[0].replace("\\", "/")).stem)
+    return np.array([utt_spk.get(stems[int(i)], "?") for i in d["row_index"]])
+
+
+def group_by(values: np.ndarray, keys: np.ndarray) -> List[np.ndarray]:
+    return [values[keys == k] for k in np.unique(keys)]
+
+
 def synthetic_dump(rng: np.random.Generator, n_bon: int = 4000, n_spf: int = 16000):
     """Gaussian stand-in with roughly the incumbent's ~13 % EER, for smoke runs only."""
     bon = rng.normal(10.0, 3.0, n_bon)
@@ -173,6 +195,16 @@ def main() -> int:
     src.add_argument("--dev-scores", type=Path)
     src.add_argument("--synthetic", action="store_true", help="Gaussian stand-in; smoke test only")
     ap.add_argument("--eval-scores", type=Path, help="Measured only, never used to choose thresholds")
+    ap.add_argument("--speaker-grouped", action="store_true",
+                    help="Each simulated call draws all its windows from ONE speaker (needs the "
+                         "manifest + protocol flags below), instead of i.i.d. from the whole pool.")
+    ap.add_argument("--dev-manifest", type=Path)
+    ap.add_argument("--dev-protocol", type=Path)
+    ap.add_argument("--eval-manifest", type=Path)
+    ap.add_argument("--eval-protocol", type=Path)
+    ap.add_argument("--fixed-from", type=Path,
+                    help="Reuse the thresholds 'chosen' in this calibration JSON instead of choosing "
+                         "new ones; only measure. For re-measuring T1's thresholds.")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--op-percentile", type=float, default=5.0)
     ap.add_argument("--max-false-block", type=float, default=0.01,
@@ -212,33 +244,57 @@ def main() -> int:
                                     clone_cm_llr_max=None)
     base_challenge = dataclasses.replace(settings.challenge, min_windows=args.challenge_min_windows)
 
-    clone_k, clone_fb = bisect_clone_threshold(
-        bon, base_risk=base_risk, challenge_cfg=base_challenge, fusion_cfg=fusion_cfg,
-        max_false_block=args.max_false_block, n_sessions=args.sessions,
-        call_seconds=args.call_seconds, seed=args.seed,
-    )
-    means = np.array([
-        rng.choice(bon, size=args.challenge_min_windows, replace=True).mean() for _ in range(20000)
-    ])
-    challenge_k = float(np.percentile(means, 100.0 * args.max_false_fail))
+    if args.fixed_from:
+        fixed = json.loads(args.fixed_from.read_text(encoding="utf-8"))["chosen"]
+        op_threshold = float(fixed["operating_threshold"])
+        bon = bon_raw - op_threshold
+        clone_k, clone_fb = float(fixed["VR_CLONE_CM_LLR_MAX"]), fixed.get("clone_genuine_false_block_at_asv_1")
+        challenge_k = float(fixed["VR_CHALLENGE_CM_LLR_MAX"])
+    else:
+        clone_k, clone_fb = bisect_clone_threshold(
+            bon, base_risk=base_risk, challenge_cfg=base_challenge, fusion_cfg=fusion_cfg,
+            max_false_block=args.max_false_block, n_sessions=args.sessions,
+            call_seconds=args.call_seconds, seed=args.seed,
+        )
+        means = np.array([
+            rng.choice(bon, size=args.challenge_min_windows, replace=True).mean() for _ in range(20000)
+        ])
+        challenge_k = float(np.percentile(means, 100.0 * args.max_false_fail))
 
     chosen_risk = dataclasses.replace(base_risk, clone_cm_llr_max=clone_k)
     chosen_challenge = dataclasses.replace(base_challenge, cm_llr_max=challenge_k,
                                            trigger_consecutive=args.challenge_consecutive)
 
-    def spoof_pools(r: np.ndarray, y: np.ndarray, a: np.ndarray, thr: float) -> Dict[str, np.ndarray]:
-        return {atk: r[(y == 0) & (a == atk)] - thr for atk in np.unique(a[y == 0])}
+    def spoof_pools(r, y, a, thr, spk=None):
+        out = {}
+        for atk in np.unique(a[y == 0]):
+            m = (y == 0) & (a == atk)
+            out[atk] = group_by(r[m] - thr, spk[m]) if spk is not None else r[m] - thr
+        return out
 
-    eval_sets: List[Tuple[str, np.ndarray, Dict[str, np.ndarray]]] = [
-        ("dev", bon, spoof_pools(raw, label, attack, op_threshold)),
-    ]
+    dev_spk = eval_spk = None
+    if args.speaker_grouped:
+        if not (args.dev_manifest and args.dev_protocol):
+            raise SystemExit("--speaker-grouped needs --dev-manifest and --dev-protocol")
+        dev_spk = speakers_for(args.dev_scores, args.dev_manifest, args.dev_protocol)
+        if args.eval_scores:
+            if not (args.eval_manifest and args.eval_protocol):
+                raise SystemExit("--speaker-grouped with --eval-scores needs --eval-manifest and --eval-protocol")
+            eval_spk = speakers_for(args.eval_scores, args.eval_manifest, args.eval_protocol)
+    dev_bon = group_by(bon, dev_spk[label == 1]) if dev_spk is not None else bon
+    eval_sets = [("dev", dev_bon, spoof_pools(raw, label, attack, op_threshold, dev_spk))]
     if args.eval_scores:
         er, el, ea = load_dump(args.eval_scores)
-        eval_sets.append(("eval", er[el == 1] - op_threshold, spoof_pools(er, el, ea, op_threshold)))
+        eb = er[el == 1] - op_threshold
+        eval_sets.append(("eval", group_by(eb, eval_spk[el == 1]) if eval_spk is not None else eb,
+                          spoof_pools(er, el, ea, op_threshold, eval_spk)))
 
     report: Dict[str, object] = {
         "source": source,
-        "assumption": "window scores drawn i.i.d. per call (no speaker column yet); optimistic",
+        "assumption": ("speaker-grouped: each call draws all windows from one speaker "
+                       "(ASVspoof 5 protocol speaker ids)" if args.speaker_grouped else
+                       "window scores drawn i.i.d. per call (no speaker column yet); optimistic"),
+        "thresholds": f"fixed from {args.fixed_from}" if args.fixed_from else "chosen on dev in this run",
         "fusion": dataclasses.asdict(fusion_cfg),
         "chosen": {
             "operating_threshold": op_threshold,

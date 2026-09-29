@@ -47,6 +47,7 @@ for p in [str(REPO_ROOT), str(BACKEND_DIR)]:
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
 from ml.augment import CodecTelephonyAugmenter, prepare_audio_window
+from ml.real_codecs import REAL_CODECS, RealCodecAugmenter
 from vanirakshak.detectors.cm_aasist import _validate_checkpoint
 
 logging.basicConfig(
@@ -130,8 +131,12 @@ class FastAudioAugmentLoader:
         max_samples: Optional[int] = None,
         generator: Optional[torch.Generator] = None,
         seed: int = 42,
+        real_codec: Optional["RealCodecAugmenter"] = None,
     ) -> None:
         self.samples = dataset.samples
+        # docs/16: a real codec round trip on the RAW utterance, before
+        # prepare_audio_window normalises it. None = off.
+        self.real_codec = real_codec
         if max_samples and max_samples < len(self.samples):
             self.samples = self.samples[:max_samples]
         self.augmenter = augmenter
@@ -166,6 +171,12 @@ class FastAudioAugmentLoader:
         rng = np.random.default_rng([self.seed, epoch, int(index)])
         try:
             audio, sr = sf.read(path, dtype="float32")
+            if self.real_codec is not None and self.real_codec.p > 0:
+                if audio.ndim > 1:
+                    audio = audio.mean(axis=1)
+                if sr != 16000:
+                    raise ValueError(f"real-codec augmentation expects 16 kHz audio, got {sr}")
+                audio = self.real_codec(audio, rng)
             w = prepare_audio_window(
                 audio, sr=sr, target_duration=4.0, random_crop=True, rng=rng
             )
@@ -618,6 +629,8 @@ def train_recipe_a(
     aug_p_bandpass: float = 0.3,
     aug_p_rir: float = 0.2,
     aug_p_gain: float = 0.3,
+    real_codec_p: float = 0.0,
+    real_codecs: Optional[List[str]] = None,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation.
 
@@ -650,9 +663,13 @@ def train_recipe_a(
         "Augmenter probabilities: codec=%.2f noise=%.2f bandpass=%.2f rir=%.2f gain=%.2f",
         aug_p_codec, aug_p_noise, aug_p_bandpass, aug_p_rir, aug_p_gain,
     )
+    real_codec = RealCodecAugmenter(real_codec_p, real_codecs or REAL_CODECS) if real_codec_p > 0 else None
+    if real_codec is not None:
+        logger.info("Real-codec augmentation (docs/16): %s", real_codec.describe())
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
         augmenter=augmenter,
+        real_codec=real_codec,
         batch_size=batch_size,
         shuffle=True,
         drop_last=True,
@@ -1031,6 +1048,7 @@ def train_recipe_a(
                     "p_rir": float(aug_p_rir),
                     "p_gain": float(aug_p_gain),
                 },
+                "real_codec": real_codec.describe() if real_codec is not None else None,
             }
             logger.info(
                 "Checkpoint provenance: init_weights=%s augmentation=%s",
@@ -1178,6 +1196,11 @@ def main() -> None:
                         help="Augmenter reverberation probability (default 0.2).")
     parser.add_argument("--p-gain", type=float, default=0.3,
                         help="Augmenter gain probability (default 0.3).")
+    parser.add_argument("--real-codec-p", type=float, default=0.0,
+                        help="docs/16: probability of a real codec round trip (G.711, AMR) on the "
+                             "raw utterance before windowing. 0 (default) = off.")
+    parser.add_argument("--real-codecs", type=str, default=",".join(REAL_CODECS),
+                        help="Comma-separated subset of " + ",".join(REAL_CODECS) + ".")
     args = parser.parse_args()
 
     # A warm start that was asked for and did not happen is a silent experiment
@@ -1215,6 +1238,8 @@ def main() -> None:
         aug_p_bandpass=args.p_bandpass,
         aug_p_rir=args.p_rir,
         aug_p_gain=args.p_gain,
+        real_codec_p=args.real_codec_p,
+        real_codecs=[c.strip() for c in args.real_codecs.split(",") if c.strip()],
     )
 
 
