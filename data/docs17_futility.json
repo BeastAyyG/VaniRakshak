@@ -1,0 +1,7 @@
+{
+  "rule": "docs/17 futility: stop if worst-NB miss R42 > C-mean - 1.0 pp",
+  "C_mean_worst_nb_miss_pct": 58.92,
+  "R42_worst_nb_miss_pct": 21.62,
+  "stop": false,
+  "verdict_if_stop": "NO_EFFECT (early)"
+}

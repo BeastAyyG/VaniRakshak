@@ -1,0 +1,687 @@
+{
+  "what": "Every distinct CM checkpoint on the STOP-C telephony protocol (docs/13 \u00a712)",
+  "threshold": "per head (T_mc3, docs/17): 5th percentile of pooled raw LLRs over the codec-condition dev-bonafide sets (dev labels only)",
+  "threshold_rule": "tmc3",
+  "narrowband_conditions": [
+    "g711u",
+    "g711a",
+    "amrnb_12k2"
+  ],
+  "n_gate": 20000,
+  "n_dev_bonafide": 4000,
+  "skipped": {},
+  "heads": {
+    "cm_docs17_R_s42": {
+      "operating_threshold": 21.9308,
+      "conditions": {
+        "clean": {
+          "bonafide_frr_pct": 9.45,
+          "worst_attack": "A30",
+          "worst_miss_pct": 19.9,
+          "mean_miss_pct": 7.01,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 1.9,
+            "A19": 15.6,
+            "A20": 8.8,
+            "A21": 0.1,
+            "A22": 0.2,
+            "A23": 2.3,
+            "A24": 0.5,
+            "A25": 0.0,
+            "A26": 0.3,
+            "A27": 15.2,
+            "A28": 18.7,
+            "A29": 0.2,
+            "A30": 19.9,
+            "A31": 18.02,
+            "A32": 10.4
+          }
+        },
+        "g711u": {
+          "bonafide_frr_pct": 15.83,
+          "worst_attack": "A31",
+          "worst_miss_pct": 17.42,
+          "mean_miss_pct": 5.1,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 0.3,
+            "A19": 5.9,
+            "A20": 1.9,
+            "A21": 0.0,
+            "A22": 0.3,
+            "A23": 0.5,
+            "A24": 0.3,
+            "A25": 0.0,
+            "A26": 0.2,
+            "A27": 12.0,
+            "A28": 17.1,
+            "A29": 0.1,
+            "A30": 15.9,
+            "A31": 17.42,
+            "A32": 9.6
+          }
+        },
+        "g711a": {
+          "bonafide_frr_pct": 16.08,
+          "worst_attack": "A31",
+          "worst_miss_pct": 21.62,
+          "mean_miss_pct": 5.43,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 0.5,
+            "A19": 6.3,
+            "A20": 1.6,
+            "A21": 0.0,
+            "A22": 0.3,
+            "A23": 0.2,
+            "A24": 0.5,
+            "A25": 0.0,
+            "A26": 0.2,
+            "A27": 12.9,
+            "A28": 16.9,
+            "A29": 0.2,
+            "A30": 16.1,
+            "A31": 21.62,
+            "A32": 9.5
+          }
+        },
+        "amrnb_12k2": {
+          "bonafide_frr_pct": 18.18,
+          "worst_attack": "A31",
+          "worst_miss_pct": 21.32,
+          "mean_miss_pct": 6.56,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 1.4,
+            "A19": 7.5,
+            "A20": 3.9,
+            "A21": 0.1,
+            "A22": 0.2,
+            "A23": 0.9,
+            "A24": 0.3,
+            "A25": 0.0,
+            "A26": 0.2,
+            "A27": 20.6,
+            "A28": 17.6,
+            "A29": 0.2,
+            "A30": 19.3,
+            "A31": 21.32,
+            "A32": 11.5
+          }
+        },
+        "amrwb_12k65": {
+          "bonafide_frr_pct": 12.98,
+          "worst_attack": "A30",
+          "worst_miss_pct": 23.6,
+          "mean_miss_pct": 7.77,
+          "per_attack_miss_pct": {
+            "A17": 0.1,
+            "A18": 2.0,
+            "A19": 13.4,
+            "A20": 7.8,
+            "A21": 0.0,
+            "A22": 0.2,
+            "A23": 1.7,
+            "A24": 0.4,
+            "A25": 0.0,
+            "A26": 0.3,
+            "A27": 22.6,
+            "A28": 17.9,
+            "A29": 0.3,
+            "A30": 23.6,
+            "A31": 20.02,
+            "A32": 14.0
+          }
+        }
+      },
+      "worst_narrowband_miss_pct": 21.62,
+      "passes_stop_c_bar": true
+    },
+    "cm_docs17_R_s43": {
+      "operating_threshold": 18.5498,
+      "conditions": {
+        "clean": {
+          "bonafide_frr_pct": 12.13,
+          "worst_attack": "A28",
+          "worst_miss_pct": 17.0,
+          "mean_miss_pct": 3.27,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 2.3,
+            "A19": 3.3,
+            "A20": 1.5,
+            "A21": 0.0,
+            "A22": 0.1,
+            "A23": 3.7,
+            "A24": 1.1,
+            "A25": 0.0,
+            "A26": 0.1,
+            "A27": 3.1,
+            "A28": 17.0,
+            "A29": 0.1,
+            "A30": 11.3,
+            "A31": 7.01,
+            "A32": 1.7
+          }
+        },
+        "g711u": {
+          "bonafide_frr_pct": 17.13,
+          "worst_attack": "A28",
+          "worst_miss_pct": 18.2,
+          "mean_miss_pct": 3.56,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 1.1,
+            "A19": 1.7,
+            "A20": 0.7,
+            "A21": 0.0,
+            "A22": 0.1,
+            "A23": 1.7,
+            "A24": 0.5,
+            "A25": 0.1,
+            "A26": 0.2,
+            "A27": 4.4,
+            "A28": 18.2,
+            "A29": 0.1,
+            "A30": 14.0,
+            "A31": 9.71,
+            "A32": 4.4
+          }
+        },
+        "g711a": {
+          "bonafide_frr_pct": 17.6,
+          "worst_attack": "A28",
+          "worst_miss_pct": 18.2,
+          "mean_miss_pct": 3.59,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 1.2,
+            "A19": 1.4,
+            "A20": 0.8,
+            "A21": 0.0,
+            "A22": 0.2,
+            "A23": 1.9,
+            "A24": 1.1,
+            "A25": 0.1,
+            "A26": 0.2,
+            "A27": 4.3,
+            "A28": 18.2,
+            "A29": 0.1,
+            "A30": 13.3,
+            "A31": 10.51,
+            "A32": 4.2
+          }
+        },
+        "amrnb_12k2": {
+          "bonafide_frr_pct": 22.28,
+          "worst_attack": "A28",
+          "worst_miss_pct": 18.1,
+          "mean_miss_pct": 3.0,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 1.1,
+            "A19": 1.2,
+            "A20": 1.0,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 2.1,
+            "A24": 0.4,
+            "A25": 0.0,
+            "A26": 0.1,
+            "A27": 5.1,
+            "A28": 18.1,
+            "A29": 0.1,
+            "A30": 10.4,
+            "A31": 5.91,
+            "A32": 2.5
+          }
+        },
+        "amrwb_12k65": {
+          "bonafide_frr_pct": 17.8,
+          "worst_attack": "A28",
+          "worst_miss_pct": 16.4,
+          "mean_miss_pct": 2.84,
+          "per_attack_miss_pct": {
+            "A17": 0.0,
+            "A18": 1.6,
+            "A19": 2.1,
+            "A20": 1.4,
+            "A21": 0.0,
+            "A22": 0.0,
+            "A23": 2.8,
+            "A24": 1.4,
+            "A25": 0.1,
+            "A26": 0.1,
+            "A27": 3.9,
+            "A28": 16.4,
+            "A29": 0.1,
+            "A30": 8.8,
+            "A31": 5.51,
+            "A32": 1.2
+          }
+        }
+      },
+      "worst_narrowband_miss_pct": 18.2,
+      "passes_stop_c_bar": true
+    },
+    "cm_docs16_C_s42": {
+      "operating_threshold": 13.8247,
+      "conditions": {
+        "clean": {
+          "bonafide_frr_pct": 8.63,
+          "worst_attack": "A31",
+          "worst_miss_pct": 38.04,
+          "mean_miss_pct": 15.69,
+          "per_attack_miss_pct": {
+            "A17": 0.2,
+            "A18": 3.1,
+            "A19": 19.3,
+            "A20": 25.0,
+            "A21": 4.5,
+            "A22": 4.0,
+            "A23": 22.9,
+            "A24": 11.3,
+            "A25": 0.3,
+            "A26": 2.0,
+            "A27": 37.5,
+            "A28": 29.2,
+            "A29": 0.7,
+            "A30": 18.6,
+            "A31": 38.04,
+            "A32": 34.4
+          }
+        },
+        "g711u": {
+          "bonafide_frr_pct": 9.95,
+          "worst_attack": "A31",
+          "worst_miss_pct": 58.86,
+          "mean_miss_pct": 21.22,
+          "per_attack_miss_pct": {
+            "A17": 0.1,
+            "A18": 4.4,
+            "A19": 18.2,
+            "A20": 26.1,
+            "A21": 4.4,
+            "A22": 5.2,
+            "A23": 34.2,
+            "A24": 13.7,
+            "A25": 0.2,
+            "A26": 1.8,
+            "A27": 47.9,
+            "A28": 48.1,
+            "A29": 0.7,
+            "A30": 29.9,
+            "A31": 58.86,
+            "A32": 45.8
+          }
+        },
+        "g711a": {
+          "bonafide_frr_pct": 10.63,
+          "worst_attack": "A31",
+          "worst_miss_pct": 58.96,
+          "mean_miss_pct": 21.5,
+          "per_attack_miss_pct": {
+            "A17": 0.2,
+            "A18": 4.6,
+            "A19": 19.4,
+            "A20": 25.7,
+            "A21": 4.8,
+            "A22": 4.9,
+            "A23": 33.8,
+            "A24": 16.2,
+            "A25": 0.2,
+            "A26": 1.7,
+            "A27": 48.1,
+            "A28": 47.7,
+            "A29": 0.6,
+            "A30": 30.5,
+            "A31": 58.96,
+            "A32": 46.6
+          }
+        },
+        "amrnb_12k2": {
+          "bonafide_frr_pct": 10.7,
+          "worst_attack": "A31",
+          "worst_miss_pct": 55.36,
+          "mean_miss_pct": 25.52,
+          "per_attack_miss_pct": {
+            "A17": 0.3,
+            "A18": 7.41,
+            "A19": 27.5,
+            "A20": 38.0,
+            "A21": 11.4,
+            "A22": 8.6,
+            "A23": 43.5,
+            "A24": 18.6,
+            "A25": 0.5,
+            "A26": 2.9,
+            "A27": 53.8,
+            "A28": 55.2,
+            "A29": 1.3,
+            "A30": 35.8,
+            "A31": 55.36,
+            "A32": 48.1
+          }
+        },
+        "amrwb_12k65": {
+          "bonafide_frr_pct": 9.78,
+          "worst_attack": "A27",
+          "worst_miss_pct": 47.2,
+          "mean_miss_pct": 20.22,
+          "per_attack_miss_pct": {
+            "A17": 0.3,
+            "A18": 6.01,
+            "A19": 28.2,
+            "A20": 33.4,
+            "A21": 6.0,
+            "A22": 4.4,
+            "A23": 31.2,
+            "A24": 13.9,
+            "A25": 0.4,
+            "A26": 2.3,
+            "A27": 47.2,
+            "A28": 39.6,
+            "A29": 1.2,
+            "A30": 26.3,
+            "A31": 41.04,
+            "A32": 42.0
+          }
+        }
+      },
+      "worst_narrowband_miss_pct": 58.96,
+      "passes_stop_c_bar": false
+    },
+    "cm_docs16_C_s43": {
+      "operating_threshold": 24.0674,
+      "conditions": {
+        "clean": {
+          "bonafide_frr_pct": 9.15,
+          "worst_attack": "A27",
+          "worst_miss_pct": 36.9,
+          "mean_miss_pct": 15.27,
+          "per_attack_miss_pct": {
+            "A17": 0.5,
+            "A18": 6.51,
+            "A19": 26.6,
+            "A20": 18.3,
+            "A21": 4.1,
+            "A22": 3.6,
+            "A23": 15.9,
+            "A24": 9.1,
+            "A25": 0.5,
+            "A26": 3.4,
+            "A27": 36.9,
+            "A28": 20.8,
+            "A29": 0.5,
+            "A30": 30.1,
+            "A31": 35.94,
+            "A32": 31.6
+          }
+        },
+        "g711u": {
+          "bonafide_frr_pct": 7.83,
+          "worst_attack": "A31",
+          "worst_miss_pct": 63.66,
+          "mean_miss_pct": 24.75,
+          "per_attack_miss_pct": {
+            "A17": 0.5,
+            "A18": 11.71,
+            "A19": 31.0,
+            "A20": 23.0,
+            "A21": 4.7,
+            "A22": 5.1,
+            "A23": 28.5,
+            "A24": 13.8,
+            "A25": 0.7,
+            "A26": 3.9,
+            "A27": 59.5,
+            "A28": 42.3,
+            "A29": 0.8,
+            "A30": 52.8,
+            "A31": 63.66,
+            "A32": 54.0
+          }
+        },
+        "g711a": {
+          "bonafide_frr_pct": 8.28,
+          "worst_attack": "A31",
+          "worst_miss_pct": 61.66,
+          "mean_miss_pct": 24.63,
+          "per_attack_miss_pct": {
+            "A17": 0.5,
+            "A18": 11.11,
+            "A19": 30.8,
+            "A20": 22.4,
+            "A21": 4.4,
+            "A22": 4.9,
+            "A23": 28.6,
+            "A24": 16.8,
+            "A25": 0.7,
+            "A26": 3.8,
+            "A27": 59.0,
+            "A28": 43.0,
+            "A29": 0.8,
+            "A30": 52.2,
+            "A31": 61.66,
+            "A32": 53.4
+          }
+        },
+        "amrnb_12k2": {
+          "bonafide_frr_pct": 7.03,
+          "worst_attack": "A27",
+          "worst_miss_pct": 68.2,
+          "mean_miss_pct": 31.02,
+          "per_attack_miss_pct": {
+            "A17": 1.9,
+            "A18": 20.32,
+            "A19": 45.0,
+            "A20": 35.8,
+            "A21": 9.7,
+            "A22": 8.2,
+            "A23": 38.3,
+            "A24": 21.5,
+            "A25": 1.2,
+            "A26": 8.7,
+            "A27": 68.2,
+            "A28": 57.2,
+            "A29": 2.1,
+            "A30": 56.4,
+            "A31": 64.76,
+            "A32": 57.1
+          }
+        },
+        "amrwb_12k65": {
+          "bonafide_frr_pct": 9.33,
+          "worst_attack": "A27",
+          "worst_miss_pct": 47.7,
+          "mean_miss_pct": 20.07,
+          "per_attack_miss_pct": {
+            "A17": 1.0,
+            "A18": 10.91,
+            "A19": 37.7,
+            "A20": 23.9,
+            "A21": 4.7,
+            "A22": 4.2,
+            "A23": 20.4,
+            "A24": 14.7,
+            "A25": 0.6,
+            "A26": 4.9,
+            "A27": 47.7,
+            "A28": 32.9,
+            "A29": 0.9,
+            "A30": 37.3,
+            "A31": 41.04,
+            "A32": 38.2
+          }
+        }
+      },
+      "worst_narrowband_miss_pct": 68.2,
+      "passes_stop_c_bar": false
+    },
+    "cm_docs16_C_s44": {
+      "operating_threshold": 24.4144,
+      "conditions": {
+        "clean": {
+          "bonafide_frr_pct": 10.03,
+          "worst_attack": "A31",
+          "worst_miss_pct": 23.12,
+          "mean_miss_pct": 7.21,
+          "per_attack_miss_pct": {
+            "A17": 0.3,
+            "A18": 1.3,
+            "A19": 3.8,
+            "A20": 3.1,
+            "A21": 1.1,
+            "A22": 2.0,
+            "A23": 2.3,
+            "A24": 9.9,
+            "A25": 0.0,
+            "A26": 0.5,
+            "A27": 16.2,
+            "A28": 21.6,
+            "A29": 0.3,
+            "A30": 13.8,
+            "A31": 23.12,
+            "A32": 16.1
+          }
+        },
+        "g711u": {
+          "bonafide_frr_pct": 10.35,
+          "worst_attack": "A31",
+          "worst_miss_pct": 43.34,
+          "mean_miss_pct": 12.43,
+          "per_attack_miss_pct": {
+            "A17": 0.2,
+            "A18": 1.2,
+            "A19": 4.0,
+            "A20": 4.5,
+            "A21": 0.9,
+            "A22": 3.5,
+            "A23": 3.8,
+            "A24": 14.2,
+            "A25": 0.0,
+            "A26": 0.6,
+            "A27": 30.6,
+            "A28": 37.1,
+            "A29": 0.3,
+            "A30": 26.5,
+            "A31": 43.34,
+            "A32": 28.2
+          }
+        },
+        "g711a": {
+          "bonafide_frr_pct": 10.58,
+          "worst_attack": "A31",
+          "worst_miss_pct": 45.85,
+          "mean_miss_pct": 12.96,
+          "per_attack_miss_pct": {
+            "A17": 0.2,
+            "A18": 1.2,
+            "A19": 3.9,
+            "A20": 4.6,
+            "A21": 0.8,
+            "A22": 3.1,
+            "A23": 4.2,
+            "A24": 17.4,
+            "A25": 0.0,
+            "A26": 0.6,
+            "A27": 31.3,
+            "A28": 36.9,
+            "A29": 0.3,
+            "A30": 27.2,
+            "A31": 45.85,
+            "A32": 29.8
+          }
+        },
+        "amrnb_12k2": {
+          "bonafide_frr_pct": 8.6,
+          "worst_attack": "A28",
+          "worst_miss_pct": 49.6,
+          "mean_miss_pct": 16.21,
+          "per_attack_miss_pct": {
+            "A17": 0.7,
+            "A18": 3.7,
+            "A19": 8.1,
+            "A20": 10.1,
+            "A21": 2.6,
+            "A22": 5.0,
+            "A23": 10.9,
+            "A24": 22.9,
+            "A25": 0.3,
+            "A26": 2.0,
+            "A27": 37.2,
+            "A28": 49.6,
+            "A29": 1.1,
+            "A30": 28.3,
+            "A31": 44.84,
+            "A32": 32.0
+          }
+        },
+        "amrwb_12k65": {
+          "bonafide_frr_pct": 10.1,
+          "worst_attack": "A28",
+          "worst_miss_pct": 32.9,
+          "mean_miss_pct": 10.44,
+          "per_attack_miss_pct": {
+            "A17": 0.5,
+            "A18": 2.4,
+            "A19": 6.0,
+            "A20": 5.8,
+            "A21": 1.6,
+            "A22": 2.5,
+            "A23": 5.3,
+            "A24": 16.2,
+            "A25": 0.1,
+            "A26": 1.4,
+            "A27": 24.8,
+            "A28": 32.9,
+            "A29": 0.4,
+            "A30": 18.0,
+            "A31": 27.13,
+            "A32": 22.0
+          }
+        }
+      },
+      "worst_narrowband_miss_pct": 49.6,
+      "passes_stop_c_bar": true
+    }
+  },
+  "ranking_by_worst_narrowband_miss": [
+    {
+      "head": "cm_docs17_R_s43",
+      "worst_narrowband_miss_pct": 18.2,
+      "narrowband_mean_miss_pct": 3.38,
+      "clean_worst_miss_pct": 17.0,
+      "clean_frr_pct": 12.13
+    },
+    {
+      "head": "cm_docs17_R_s42",
+      "worst_narrowband_miss_pct": 21.62,
+      "narrowband_mean_miss_pct": 5.7,
+      "clean_worst_miss_pct": 19.9,
+      "clean_frr_pct": 9.45
+    },
+    {
+      "head": "cm_docs16_C_s44",
+      "worst_narrowband_miss_pct": 49.6,
+      "narrowband_mean_miss_pct": 13.87,
+      "clean_worst_miss_pct": 23.12,
+      "clean_frr_pct": 10.03
+    },
+    {
+      "head": "cm_docs16_C_s42",
+      "worst_narrowband_miss_pct": 58.96,
+      "narrowband_mean_miss_pct": 22.75,
+      "clean_worst_miss_pct": 38.04,
+      "clean_frr_pct": 8.63
+    },
+    {
+      "head": "cm_docs16_C_s43",
+      "worst_narrowband_miss_pct": 68.2,
+      "narrowband_mean_miss_pct": 26.8,
+      "clean_worst_miss_pct": 36.9,
+      "clean_frr_pct": 9.15
+    }
+  ]
+}

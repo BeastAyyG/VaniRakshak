@@ -1,0 +1,8 @@
+{
+  "checkpoint": "C:\\VaniRakshak\\data\\cm_docs17_R_s42.pt",
+  "arm": "R",
+  "seed": 42,
+  "git_head": "cc4699cde6562a6249a77f76ec47b0d77f935d55",
+  "codec_aug_p": 0.2,
+  "wall_hours": 2.62
+}
