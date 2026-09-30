@@ -290,6 +290,16 @@ def _g711u(x16: np.ndarray) -> np.ndarray:
     return np.clip(y, -32768, 32767).astype(np.int16)
 
 
+def _g711a(x16: np.ndarray) -> np.ndarray:
+    """Bit-exact G.711 A-law via audioop, at 8 kHz, back to 16 kHz (docs/17)."""
+    from scipy.signal import resample_poly
+
+    x8 = np.clip(resample_poly(x16.astype(np.float32), 1, 2), -32768, 32767).astype(np.int16)
+    dec = np.frombuffer(audioop.alaw2lin(audioop.lin2alaw(x8.tobytes(), 2), 2), dtype=np.int16)
+    y = resample_poly(dec.astype(np.float32), 2, 1)
+    return np.clip(y, -32768, 32767).astype(np.int16)
+
+
 def _subset() -> dict:
     d = np.load(GATE_DUMP)
     attack, label = d["attack"].astype(str), d["label"].astype(int)
@@ -381,6 +391,8 @@ def d2_telephony(ctx: Ctx) -> dict:
             return x16
         if cond == "g711u":
             return _g711u(x16)
+        if cond == "g711a":
+            return _g711a(x16)
         return _ffmpeg_roundtrip(ffmpeg, x16, cond)
 
     done = sum(1 for c in conditions for k in range(n_shards) if (shard_dir / f"{c}_{k:04d}.npz").exists())
@@ -654,6 +666,8 @@ def _degrade(ffmpeg: str, x16: np.ndarray, cond: str) -> np.ndarray:
         return x16
     if cond == "g711u":
         return _g711u(x16)
+    if cond == "g711a":
+        return _g711a(x16)
     return _ffmpeg_roundtrip(ffmpeg, x16, cond)
 
 
@@ -661,9 +675,23 @@ def g1_telephony_heads(ctx: Ctx) -> dict:
     return _score_heads(ctx, G1_HEADS, G1_DIR)
 
 
-def _score_heads(ctx: Ctx, head_names: List[str], out_dir: Path) -> dict:
+def _score_heads(ctx: Ctx, head_names: List[str], out_dir: Path,
+                 conditions: Optional[List[str]] = None,
+                 dev_codec_conditions: Optional[List[str]] = None,
+                 threshold_rule: str = "registered",
+                 narrowband: tuple = ("g711u", "amrnb_12k2")) -> dict:
     """Score checkpoints (by name under data/) on the STOP-C telephony
-    protocol: shared by G1 (existing heads) and docs/16 (new heads)."""
+    protocol: shared by G1 (existing heads) and docs/16 (new heads).
+
+    docs/17 extensions (all default to the docs/13-16 behavior):
+    conditions = gate conditions; dev_codec_conditions = extra dev-bonafide
+    sets scored under codec conditions (needed for threshold_rule="tmc3");
+    threshold_rule "tmc3" = T_mc3, the 5th percentile of pooled dev-bonafide
+    LLRs over the codec conditions (dev labels only); narrowband = the
+    conditions counted as narrowband for worst-miss.
+    """
+    if conditions is None:
+        conditions = CONDITIONS
     sys.path.insert(0, str(REPO))
     sys.path.insert(0, str(REPO / "scripts"))
     import soundfile as sf
@@ -714,7 +742,9 @@ def _score_heads(ctx: Ctx, head_names: List[str], out_dir: Path) -> dict:
             if r in want:
                 gate_paths[want[r]] = line.split("\t")[0]
     dev_paths = _dev_bonafide_paths()
-    sets = {"dev_clean": (dev_paths, ["clean"]), "gate": (gate_paths, CONDITIONS)}
+    sets = {"dev_clean": (dev_paths, ["clean"]), "gate": (gate_paths, conditions)}
+    if dev_codec_conditions:
+        sets["dev_codec"] = (dev_paths, dev_codec_conditions)
 
     unreadable: set = set()
     raw16 = _raw16_reader(sf, unreadable)
@@ -758,7 +788,9 @@ def _score_heads(ctx: Ctx, head_names: List[str], out_dir: Path) -> dict:
             n_scored += len(idx)
             ctx.progress(done, len(jobs),
                          f"{s} {cond} shard {k + 1}  ({n_scored / (time.time() - t0):.0f} utt/s)")
-    return _g1_summarise(ctx, sub, len(dev_paths), list(heads), skipped, out_dir)
+    return _g1_summarise(ctx, sub, len(dev_paths), list(heads), skipped, out_dir,
+                         conditions=conditions, threshold_rule=threshold_rule,
+                         narrowband=narrowband, dev_codec_conditions=dev_codec_conditions)
 
 
 def _g1_load(set_name: str, cond: str, n: int, name: str, out_dir: Path = G1_DIR):
@@ -772,17 +804,35 @@ def _g1_load(set_name: str, cond: str, n: int, name: str, out_dir: Path = G1_DIR
 
 
 def _g1_summarise(ctx: Ctx, sub: dict, n_dev: int, names: List[str], skipped: dict,
-                  out_dir: Path = G1_DIR) -> dict:
+                  out_dir: Path = G1_DIR, conditions: Optional[List[str]] = None,
+                  threshold_rule: str = "registered", narrowband: tuple = ("g711u", "amrnb_12k2"),
+                  dev_codec_conditions: Optional[List[str]] = None) -> dict:
+    if conditions is None:
+        conditions = CONDITIONS
     label, attack = sub["label"], sub["attack"]
     n = label.size
+    thr_desc = ("per head: 5th percentile of its own raw LLR on a seeded dev-bonafide set"
+                if threshold_rule == "registered" else
+                "per head (T_mc3, docs/17): 5th percentile of pooled raw LLRs over the "
+                "codec-condition dev-bonafide sets (dev labels only)")
     res: dict = {"what": "Every distinct CM checkpoint on the STOP-C telephony protocol (docs/13 §12)",
-                 "threshold": "per head: 5th percentile of its own raw LLR on a seeded dev-bonafide set",
+                 "threshold": thr_desc, "threshold_rule": threshold_rule,
+                 "narrowband_conditions": list(narrowband),
                  "n_gate": int(n), "n_dev_bonafide": n_dev, "skipped": skipped, "heads": {}}
     for name in names:
-        dev, dbad = _g1_load("dev_clean", "clean", n_dev, name, out_dir)
-        tau = float(np.percentile(dev[~dbad], 5.0))
+        if threshold_rule == "tmc3":
+            if not dev_codec_conditions:
+                raise ValueError("threshold_rule='tmc3' requires dev_codec_conditions")
+            parts = []
+            for dc in dev_codec_conditions:
+                d, db = _g1_load("dev_codec", dc, n_dev, name, out_dir)
+                parts.append(d[~db])
+            tau = float(np.percentile(np.concatenate(parts), 5.0))
+        else:
+            dev, dbad = _g1_load("dev_clean", "clean", n_dev, name, out_dir)
+            tau = float(np.percentile(dev[~dbad], 5.0))
         h: dict = {"operating_threshold": round(tau, 4), "conditions": {}}
-        for cond in CONDITIONS:
+        for cond in conditions:
             llr, bad = _g1_load("gate", cond, n, name, out_dir)
             keep = ~bad
             lab, atk, s = label[keep], attack[keep], llr[keep]
@@ -796,7 +846,7 @@ def _g1_summarise(ctx: Ctx, sub: dict, n_dev: int, names: List[str], skipped: di
                 "mean_miss_pct": round(float(np.mean(list(miss.values()))), 2),
                 "per_attack_miss_pct": miss,
             }
-        nb = max(h["conditions"][c]["worst_miss_pct"] for c in ("g711u", "amrnb_12k2"))
+        nb = max(h["conditions"][c]["worst_miss_pct"] for c in narrowband)
         h["worst_narrowband_miss_pct"] = nb
         h["passes_stop_c_bar"] = nb < 50.0
         res["heads"][name] = h
@@ -805,7 +855,7 @@ def _g1_summarise(ctx: Ctx, sub: dict, n_dev: int, names: List[str], skipped: di
         {"head": k,
          "worst_narrowband_miss_pct": res["heads"][k]["worst_narrowband_miss_pct"],
          "narrowband_mean_miss_pct": round(float(np.mean(
-             [res["heads"][k]["conditions"][c]["mean_miss_pct"] for c in ("g711u", "amrnb_12k2")])), 2),
+             [res["heads"][k]["conditions"][c]["mean_miss_pct"] for c in narrowband])), 2),
          "clean_worst_miss_pct": res["heads"][k]["conditions"]["clean"]["worst_miss_pct"],
          "clean_frr_pct": res["heads"][k]["conditions"]["clean"]["bonafide_frr_pct"]}
         for k in ranking]
@@ -946,6 +996,157 @@ def g2_adjudicate(ctx: Ctx) -> dict:
     return rec
 
 
+# --------------------------------------------------------------------------- docs/17 (G3): confirmatory codec retrain
+
+G3_DIR = OUT / "g3"
+G3_COMMON = ["--merge-layers", "12", "--layer-index", "5", "--epochs", "10", "--batch-size", "64",
+             "--lr", "5e-4", "--weight-decay", "1e-4", "--patience", "5", "--max-dev-utts", "30000",
+             "--streaming-dev", "--workers", "24", "--p-codec", "0", "--p-noise", "0",
+             "--p-bandpass", "0", "--p-rir", "0", "--p-gain", "0"]
+G3_CODEC_P = "0.2"
+G3_SEEDS = (42, 43)
+G3_CONDITIONS = ["clean", "g711u", "g711a", "amrnb_12k2", "amrwb_12k65"]
+G3_CODEC_CONDITIONS = ["g711u", "g711a", "amrnb_12k2", "amrwb_12k65"]
+G3_NARROWBAND = ("g711u", "g711a", "amrnb_12k2")
+G3_NEW_HEADS = ["cm_docs17_R_s42", "cm_docs17_R_s43"]
+G3_C_HEADS = ["cm_docs16_C_s42", "cm_docs16_C_s43", "cm_docs16_C_s44"]
+
+
+def _g3_train(ctx: Ctx, seed: int) -> dict:
+    """One docs/17 run. Same completion contract as docs/16 (_g2_train):
+    a run is either complete (a .done marker next to the checkpoint) or it is
+    re-run from scratch; partial checkpoints are deleted, never resumed."""
+    ckpt = REPO / "data" / f"cm_docs17_R_s{seed}.pt"
+    done = ckpt.with_suffix(".done.json")
+    if ckpt.exists() and done.exists():
+        ctx.log(f"{ckpt.name}: already complete")
+        return json.loads(done.read_text(encoding="utf-8"))
+    if ckpt.exists():
+        ckpt.unlink()
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    ctx.log(f"training {ckpt.name} at git {head}")
+    t0 = time.time()
+    p = ctx.run([PY, "ml/train_cm.py", *G3_COMMON, "--codec-aug-p", G3_CODEC_P, "--seed", str(seed),
+                 "--output", str(ckpt)], timeout=12 * 3600)
+    if p.returncode != 0 or not ckpt.exists():
+        raise RuntimeError(f"training {ckpt.name} failed; see log")
+    rec = {"checkpoint": str(ckpt), "arm": "R", "seed": seed, "git_head": head,
+           "codec_aug_p": float(G3_CODEC_P), "wall_hours": round((time.time() - t0) / 3600, 2)}
+    done.write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    return rec
+
+
+def g3_train(ctx: Ctx) -> dict:
+    out = {}
+    for i, seed in enumerate(G3_SEEDS):
+        ctx.progress(i, len(G3_SEEDS), f"training docs/17 seed {seed}")
+        out[seed] = _g3_train(ctx, seed)
+    ctx.progress(len(G3_SEEDS), len(G3_SEEDS), "docs/17 seeds trained")
+    return out
+
+
+def g3_futility(ctx: Ctx) -> dict:
+    """docs/17 futility: stop if R42 worst-NB miss is not at least 1 pp better
+    than the C-head mean (same 1 pp bar as docs/16 §5)."""
+    names = [G3_NEW_HEADS[0]] + G3_C_HEADS
+    res = _score_heads(ctx, names, G3_DIR / "s42", conditions=G3_CONDITIONS,
+                       dev_codec_conditions=G3_CODEC_CONDITIONS, threshold_rule="tmc3",
+                       narrowband=G3_NARROWBAND)
+    heads = json.loads((G3_DIR / "s42" / "heads_telephony.json").read_text(encoding="utf-8"))["heads"]
+    r = heads[G3_NEW_HEADS[0]]["worst_narrowband_miss_pct"]
+    c = float(np.mean([heads[nm]["worst_narrowband_miss_pct"] for nm in G3_C_HEADS]))
+    stop = r > c - 1.0
+    rec = {"rule": "docs/17 futility: stop if worst-NB miss R42 > C-mean - 1.0 pp",
+           "C_mean_worst_nb_miss_pct": round(c, 2), "R42_worst_nb_miss_pct": r, "stop": stop,
+           "verdict_if_stop": "NO_EFFECT (early)"}
+    G3_DIR.mkdir(parents=True, exist_ok=True)
+    (G3_DIR / "futility.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    ctx.log(f"futility: C-mean {c:.2f} %  R42 {r} %  -> {'STOP' if stop else 'continue'}")
+    return {**rec, "scoring": res}
+
+
+def g3_telephony(ctx: Ctx) -> dict:
+    fut = json.loads((G3_DIR / "futility.json").read_text(encoding="utf-8")) \
+        if (G3_DIR / "futility.json").exists() else None
+    new = G3_NEW_HEADS if not (fut and fut["stop"]) else G3_NEW_HEADS[:1]
+    return _score_heads(ctx, new + G3_C_HEADS, G3_DIR / "all", conditions=G3_CONDITIONS,
+                        dev_codec_conditions=G3_CODEC_CONDITIONS, threshold_rule="tmc3",
+                        narrowband=G3_NARROWBAND)
+
+
+def _eer_from_llr(bon: np.ndarray, spf: np.ndarray) -> float:
+    """Threshold-independent EER (%) from bonafide/spoof LLR arrays
+    (higher LLR = more bonafide). docs/17 G17-3 discrimination guard."""
+    bon = np.sort(np.asarray(bon, dtype=float))
+    spf = np.sort(np.asarray(spf, dtype=float))
+    if bon.size == 0 or spf.size == 0:
+        return float("nan")
+    thr = np.unique(np.concatenate([bon, spf]))
+    frr = np.searchsorted(bon, thr, side="left") / bon.size
+    far = 1.0 - np.searchsorted(spf, thr, side="left") / spf.size
+    i = int(np.argmin(np.abs(frr - far)))
+    return round(100 * float((frr[i] + far[i]) / 2.0), 2)
+
+
+def g3_adjudicate(ctx: Ctx) -> dict:
+    """docs/17 adjudication. Guards mirror docs/16 (G17-1 effect, G17-2 STOP-C
+    bar, G17-3 no clean regression = 2 pp FRR guard + 1 pp EER guard)."""
+    fut = json.loads((G3_DIR / "futility.json").read_text(encoding="utf-8")) \
+        if (G3_DIR / "futility.json").exists() else None
+    heads = json.loads((G3_DIR / "all" / "heads_telephony.json").read_text(encoding="utf-8"))["heads"]
+    sub = np.load(G3_DIR / "all" / "subset.npz")
+    label = sub["label"].astype(int)
+    n = int(label.size)
+    r_names = [nm for nm in G3_NEW_HEADS if nm in heads]
+    c_names = [nm for nm in G3_C_HEADS if nm in heads]
+
+    nb = lambda h: h["worst_narrowband_miss_pct"]
+    cf = lambda h: h["conditions"]["clean"]["bonafide_frr_pct"]
+    eer: dict = {}
+    for nm in r_names + c_names:
+        llr, bad = _g1_load("gate", "clean", n, nm, G3_DIR / "all")
+        keep = ~bad
+        s, lab = llr[keep], label[keep]
+        eer[nm] = _eer_from_llr(s[lab == 1], s[lab == 0])
+
+    C_nb = [nb(heads[x]) for x in c_names]
+    R_nb = [nb(heads[x]) for x in r_names]
+    C_frr = [cf(heads[x]) for x in c_names]
+    R_frr = [cf(heads[x]) for x in r_names]
+    C_eer = [eer[x] for x in c_names]
+    R_eer = [eer[x] for x in r_names]
+    mean = lambda x: round(float(np.mean(x)), 2)
+    c_eer_mean = float(np.mean(C_eer))
+
+    g1 = mean(R_nb) <= mean(C_nb) - 5.0 and max(R_nb) < min(C_nb)
+    g2 = mean(R_nb) < 50.0
+    g3_frr = mean(R_frr) <= mean(C_frr) + 2.0 and all(r <= mean(C_frr) + 2.0 for r in R_frr)
+    g3_eer = all(r <= c_eer_mean + 1.0 for r in R_eer)
+    g3 = g3_frr and g3_eer
+
+    if fut and fut["stop"]:
+        verdict = "NO_EFFECT (early, docs/17 futility)"
+    elif not g3:
+        verdict = "HARMS"
+    elif g1 and g2:
+        verdict = "ADOPT"
+    elif g1:
+        verdict = "IMPROVES_NOT_ENOUGH"
+    else:
+        verdict = "NO_EFFECT"
+    rec = {"plan": "docs/17", "verdict": verdict,
+           "G17_1_effect": g1, "G17_2_stop_c_bar": g2, "G17_3_no_clean_regression": g3,
+           "G17_3_frr_guard": g3_frr, "G17_3_eer_guard": g3_eer,
+           "threshold_rule": "tmc3",
+           "worst_nb_miss_pct": {"C": C_nb, "R": R_nb, "C_mean": mean(C_nb), "R_mean": mean(R_nb)},
+           "clean_frr_pct": {"C": C_frr, "R": R_frr, "C_mean": mean(C_frr), "R_mean": mean(R_frr)},
+           "clean_eer_pct": {"C": C_eer, "R": R_eer, "C_mean": round(c_eer_mean, 2)},
+           "futility": fut, "date": time.strftime("%Y-%m-%d")}
+    (G3_DIR / "verdict.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    ctx.log(f"docs/17 verdict: {verdict}  (G17-1 {g1}, G17-2 {g2}, G17-3 {g3})")
+    return rec
+
+
 # --------------------------------------------------------------------------- G1: speaker-grouped T1
 
 SPK_DIR = OUT / "g1_spk"
@@ -1014,6 +1215,10 @@ STAGES: Dict[str, Callable[[Ctx], dict]] = {
     "g2_train_rest": g2_train_rest,
     "g2_eval": g2_eval,
     "g2_adjudicate": g2_adjudicate,
+    "g3_train": g3_train,
+    "g3_futility": g3_futility,
+    "g3_telephony": g3_telephony,
+    "g3_adjudicate": g3_adjudicate,
     "g1_speaker_grouped": g1_speaker_grouped,
 }
 

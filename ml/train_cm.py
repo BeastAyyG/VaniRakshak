@@ -631,6 +631,8 @@ def train_recipe_a(
     aug_p_gain: float = 0.3,
     real_codec_p: float = 0.0,
     real_codecs: Optional[List[str]] = None,
+    codec_aug_p: float = 0.0,
+    codec_aug_codecs: Optional[List[str]] = None,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation.
 
@@ -663,9 +665,14 @@ def train_recipe_a(
         "Augmenter probabilities: codec=%.2f noise=%.2f bandpass=%.2f rir=%.2f gain=%.2f",
         aug_p_codec, aug_p_noise, aug_p_bandpass, aug_p_rir, aug_p_gain,
     )
-    real_codec = RealCodecAugmenter(real_codec_p, real_codecs or REAL_CODECS) if real_codec_p > 0 else None
+    if real_codec_p > 0 and codec_aug_p > 0:
+        raise ValueError("use only one of --real-codec-p (docs/16) and --codec-aug-p (docs/17)")
+    _aug_p = codec_aug_p if codec_aug_p > 0 else real_codec_p
+    _aug_codecs = codec_aug_codecs or real_codecs or REAL_CODECS
+    real_codec = RealCodecAugmenter(_aug_p, _aug_codecs) if _aug_p > 0 else None
     if real_codec is not None:
-        logger.info("Real-codec augmentation (docs/16): %s", real_codec.describe())
+        tag = "docs/17" if codec_aug_p > 0 else "docs/16"
+        logger.info("Real-codec augmentation (%s): %s", tag, real_codec.describe())
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
         augmenter=augmenter,
@@ -1201,6 +1208,12 @@ def main() -> None:
                              "raw utterance before windowing. 0 (default) = off.")
     parser.add_argument("--real-codecs", type=str, default=",".join(REAL_CODECS),
                         help="Comma-separated subset of " + ",".join(REAL_CODECS) + ".")
+    parser.add_argument("--codec-aug-p", type=float, default=0.0,
+                        help="docs/17: on-the-fly real-codec augmentation probability per training "
+                             "sample (uniform over --codec-aug-codecs), applied to the raw utterance "
+                             "before windowing. 0 (default) = off. Conflicts with --real-codec-p.")
+    parser.add_argument("--codec-aug-codecs", type=str, default=",".join(REAL_CODECS),
+                        help="docs/17: comma-separated subset of " + ",".join(REAL_CODECS) + ".")
     args = parser.parse_args()
 
     # A warm start that was asked for and did not happen is a silent experiment
@@ -1240,6 +1253,8 @@ def main() -> None:
         aug_p_gain=args.p_gain,
         real_codec_p=args.real_codec_p,
         real_codecs=[c.strip() for c in args.real_codecs.split(",") if c.strip()],
+        codec_aug_p=args.codec_aug_p,
+        codec_aug_codecs=[c.strip() for c in args.codec_aug_codecs.split(",") if c.strip()],
     )
 
 

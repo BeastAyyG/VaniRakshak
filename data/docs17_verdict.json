@@ -1,0 +1,56 @@
+{
+  "plan": "docs/17",
+  "verdict": "HARMS",
+  "G17_1_effect": true,
+  "G17_2_stop_c_bar": true,
+  "G17_3_no_clean_regression": false,
+  "G17_3_frr_guard": false,
+  "G17_3_eer_guard": true,
+  "threshold_rule": "tmc3",
+  "worst_nb_miss_pct": {
+    "C": [
+      58.96,
+      68.2,
+      49.6
+    ],
+    "R": [
+      21.62,
+      18.2
+    ],
+    "C_mean": 58.92,
+    "R_mean": 19.91
+  },
+  "clean_frr_pct": {
+    "C": [
+      8.63,
+      9.15,
+      10.03
+    ],
+    "R": [
+      9.45,
+      12.13
+    ],
+    "C_mean": 9.27,
+    "R_mean": 10.79
+  },
+  "clean_eer_pct": {
+    "C": [
+      12.05,
+      12.8,
+      8.4
+    ],
+    "R": [
+      8.03,
+      7.0
+    ],
+    "C_mean": 11.08
+  },
+  "futility": {
+    "rule": "docs/17 futility: stop if worst-NB miss R42 > C-mean - 1.0 pp",
+    "C_mean_worst_nb_miss_pct": 58.92,
+    "R42_worst_nb_miss_pct": 21.62,
+    "stop": false,
+    "verdict_if_stop": "NO_EFFECT (early)"
+  },
+  "date": "2026-09-30"
+}
