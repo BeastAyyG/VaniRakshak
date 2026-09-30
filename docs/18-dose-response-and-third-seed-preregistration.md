@@ -138,3 +138,69 @@ arm reaches ADOPT on n=2, a third L seed is required before runtime use
 
 To be recorded after adjudication, in this section, following the docs/16
 convention. The verdict stands as written; history is not rewritten.
+
+
+Recorded 2026-09-30 after g4_adjudicate (finished 23:46:25 IST). Criteria
+unchanged from the preregistration above. Machine source of truth:
+C:\vr-out\g4\verdict.json (plus futility.json, l42/heads_telephony.json,
+all/heads_telephony.json).
+
+### Run log
+- g4_train_r44 (R seed 44, p=0.2): finished 21:33:30 IST, early stop at
+  epoch 10 (patience 5/5). Best epoch 5: dev minDCF 0.3647, EER 3.753%.
+  Checkpoint C:\VaniRakshak\data\cm_docs18_R_s44.pt. Wall 2.61h. One dev
+  spike at epoch 6 (minDCF 0.8707) resolved at epoch 7 (0.4768): dev-set
+  noise, not sustained divergence.
+- g4_train_l42 (L seed 42, p=0.1): finished 23:03:19 IST, early stop at
+  epoch 6 (patience 5/5). Best epoch 1: dev minDCF 0.5957, EER 6.733%.
+  Checkpoint C:\VaniRakshak\data\cm_docs18_L_s42.pt. Wall 1.5h.
+- g4_futility: finished 23:24:16 IST, 120/120 shards, exit 0. STOP.
+- g4_train_l43: cancelled by the futility stop (marked done, zero duration).
+- g4_telephony: finished 23:46:25 IST, exit 0.
+- g4_adjudicate: finished 23:46:25 IST, exit 0.
+- No crashes, no sustained divergence, no errors. Zero cloud spend.
+
+### Futility (L arm)
+- Rule: stop if L42 worst-NB miss > C-mean minus 1.0 pp.
+- L42 worst-NB miss 64.10% vs C-mean 58.92% (stop line 57.92).
+  64.10 > 57.92, so STOP. L verdict: NO_EFFECT (early). L43 was not trained.
+
+### R arm verdict: HARMS
+- G18-1 (effect): PASS. R mean worst-NB miss 20.84% (seeds 21.62 / 18.20 /
+  22.70) vs C mean 58.92%; every R seed beats every C seed (C: 58.96 /
+  68.20 / 49.60).
+- G18-2 (STOP-C bar): PASS. 20.84% < 50%.
+- G18-3 (no clean regression): FAIL. frr_guard fails: R mean clean FRR
+  10.05% (seeds 9.45 / 12.13 / 8.58) vs C mean 9.27%; the per-seed rule
+  requires every seed at or under C mean + 2 pp = 11.27, and R43 is 12.13.
+  eer_guard passes: R seeds 8.03 / 7.00 / 6.47 vs C mean EER 11.08 + 1 pp.
+- Preregistered mapping (no-clean-regression fails -> HARMS), so the R
+  verdict is HARMS. The docs/17 HARMS verdict stands as history; this is an
+  independent confirmation with a third seed.
+
+### L arm verdict: NO_EFFECT (early)
+- Stopped at futility before full adjudication. L42: worst-NB miss 64.10%
+  (narrowband mean miss 19.87%), clean FRR 6.13%, clean EER 13.2%.
+- G18-1: FAIL (64.10 vs C mean 58.92). G18-2: FAIL (64.10 > 50%).
+  G18-3: FRR side passes (6.13 vs C mean 9.27); EER side fails (13.2 vs
+  11.08 + 1 pp = 12.08).
+
+### Hypothesis answers
+- H18a (p=0.1 retains the telephony effect while passing the 2pp
+  clean-FRR guard): REJECTED. The low dose kept clean FRR healthy (6.13%,
+  better than the control mean 9.27%) but produced no telephony effect
+  (worst-NB miss 64.10%, worse than control mean 58.92%). Futility stopped
+  the arm before L43.
+- H18b (third p=0.2 seed resolves whether docs/17's per-seed FRR failure
+  was seed noise): ANSWERED as seed instability. R44 clean FRR is 8.58%
+  (passes the per-seed guard) and R42 is 9.45% (passes); only R43 at 12.13%
+  fails. The R mean clean FRR (10.05%) is only 0.78 pp above the control
+  mean, inside the mean guard. The HARMS verdict is driven by the
+  all-seeds-must-pass per-seed rule, not by a systematic clean-FRR shift.
+
+### Deployment and compute
+- Deployment unchanged: R42 + T_mc3 (21.9308). Neither arm reached ADOPT
+  or IMPROVES_NOT_ENOUGH, so no checkpoint is promoted.
+- Compute: R44 2.61h + L42 1.50h + futility/tele scoring ~0.7h, roughly
+  4.8 GPU-hours against the 20 GPU-hour cap.
+
