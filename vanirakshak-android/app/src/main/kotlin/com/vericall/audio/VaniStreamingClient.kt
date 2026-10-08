@@ -40,6 +40,12 @@ class VaniStreamingClient(
     }
 
     var onSnapshot: ((VaniRiskBus.Snapshot) -> Unit)? = null
+    /**
+     * Raw verdict JSON frames (for paths that need fields beyond the
+     * Snapshot, e.g. metrics.tier_override). Fired for every frame that
+     * carries risk_score; session_ack is skipped.
+     */
+    var onVerdictJson: ((JSONObject) -> Unit)? = null
     var onStatus: ((String) -> Unit)? = null
     /** Fires when the stream dies permanently so the caller can fall back to on-device analysis. */
     var onExhausted: (() -> Unit)? = null
@@ -54,6 +60,12 @@ class VaniStreamingClient(
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var manualClose = false
+    /**
+     * True only after the JSON handshake has been sent. Gates sendPcm so a
+     * binary frame can never overtake the handshake (the server closes with
+     * 1003 when the first frame is not JSON).
+     */
+    @Volatile private var handshakeSent = false
     @Volatile private var attempt = 0
     @Volatile private var everConnected = false
 
@@ -71,8 +83,9 @@ class VaniStreamingClient(
         socket = client.newWebSocket(request, Listener())
     }
 
-    /** Push one PCM chunk (mono 16-bit @16kHz) as a binary frame. No-op when socket is down. */
+    /** Push one PCM chunk (mono 16-bit @16kHz) as a binary frame. No-op until the handshake is sent. */
     fun sendPcm(pcm: ShortArray, count: Int = pcm.size) {
+        if (!handshakeSent) return
         val ws = socket ?: return
         val n = count.coerceAtMost(pcm.size)
         if (n <= 0) return
@@ -83,6 +96,7 @@ class VaniStreamingClient(
 
     fun stop() {
         manualClose = true
+        handshakeSent = false
         runCatching { socket?.close(1000, "call ended") }
         socket = null
     }
@@ -117,11 +131,20 @@ class VaniStreamingClient(
                 put("prior_fraud_score", 0)
             }
             webSocket.send(handshake.toString())
+            handshakeSent = true
             Log.i(TAG, "ws connected, session=$sessionId")
             postStatus("Connected — streaming to forensic backend…")
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            try {
+                val raw = JSONObject(text)
+                if (raw.optString("type") != "session_ack" && raw.has("risk_score")) {
+                    mainHandler.post { onVerdictJson?.invoke(raw) }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "raw verdict forward failed: " + e.message)
+            }
             parseVerdict(text)?.let { snapshot ->
                 mainHandler.post { onSnapshot?.invoke(snapshot) }
             }
@@ -129,6 +152,7 @@ class VaniStreamingClient(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             Log.w(TAG, "ws failure: ${t.message}")
+            handshakeSent = false
             socket = null
             if (!everConnected && attempt == 0) {
                 // Fast-fail the very first attempt so offline fallback kicks in
@@ -141,6 +165,7 @@ class VaniStreamingClient(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            handshakeSent = false
             socket = null
             if (!manualClose) scheduleReconnect()
         }

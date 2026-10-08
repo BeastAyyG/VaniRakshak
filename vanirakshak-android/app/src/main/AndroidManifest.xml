@@ -26,6 +26,9 @@
          `adb reverse tcp:8000 tcp:8000`, or a LAN IP set in the app's backend
          settings (see VaniBackendConfig). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- WebRTC NetworkMonitor queries active network state; without this,
+         its JNI callback throws SecurityException and the process dies. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
@@ -48,6 +51,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- VaniRakshak Call: in-app internet calling (WebRTC) -->
+        <activity
+            android:name=".voip.VoipCallActivity"
+            android:exported="true"
+            android:label="VaniRakshak Call" />
 
         <!-- Live Call Voice-Clone Defense Screen -->
         <activity

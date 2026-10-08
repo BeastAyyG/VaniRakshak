@@ -908,6 +908,17 @@ def tail_audit(request: Request, n: int = 50) -> dict:
     }
 
 
+async def _safe_ws_close(ws: WebSocket, code: int, reason: str = "") -> None:
+    # Best-effort close: uvicorn's websockets_impl never runs websockets'
+    # connection_open(), so the legacy close() raises AttributeError
+    # ('transfer_data_task'). The connection is torn down when this handler
+    # returns anyway, so a failed close frame must never raise here.
+    try:
+        await ws.close(code=code, reason=reason)
+    except Exception:
+        pass
+
+
 @app.websocket("/v1/stream")
 @app.websocket("/api/v1/stream")
 @app.websocket("/ws/stream")
@@ -919,7 +930,7 @@ async def stream_endpoint(ws: WebSocket) -> None:
         import json
         handshake = json.loads(handshake_raw)
     except Exception:
-        await ws.close(code=1003)
+        await _safe_ws_close(ws, 1003)
         return
 
     # Auth on the handshake. A browser cannot set headers on a WebSocket, so
@@ -934,7 +945,7 @@ async def stream_endpoint(ws: WebSocket) -> None:
     except AuthError as e:
         # Never echo the detail of a 401 back over the socket beyond its reason
         # string; it is already non-specific about which key ids exist.
-        await ws.close(code=1008, reason=e.detail[:120])
+        await _safe_ws_close(ws, 1008, reason=e.detail[:120])
         return
 
     sid = handshake.get("session_id") or f"ws-{uuid.uuid4().hex[:8]}"
@@ -966,7 +977,7 @@ async def stream_endpoint(ws: WebSocket) -> None:
                 # docs/15 N4: the claimed identity was erased mid-call.
                 await ws.send_json({"type": "session_closed", "session_id": sid,
                                     "reason": sess.revoked})
-                await ws.close(code=1000, reason=sess.revoked)
+                await _safe_ws_close(ws, 1000, reason=sess.revoked)
                 break
             data: Optional[bytes] = msg.get("bytes")
             if data is None:
