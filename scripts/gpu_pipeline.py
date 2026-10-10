@@ -1147,6 +1147,164 @@ def g3_adjudicate(ctx: Ctx) -> dict:
     return rec
 
 
+# --------------------------------------------------------------------------- docs/18 (G4): dose-response + third seed
+
+G4_DIR = OUT / "g4"
+G4_COMMON = G3_COMMON
+G4_CONDITIONS = G3_CONDITIONS
+G4_CODEC_CONDITIONS = G3_CODEC_CONDITIONS
+G4_NARROWBAND = G3_NARROWBAND
+G4_C_HEADS = G3_C_HEADS
+G4_R_HEADS = ["cm_docs17_R_s42", "cm_docs17_R_s43", "cm_docs18_R_s44"]
+G4_L_HEADS = ["cm_docs18_L_s42", "cm_docs18_L_s43"]
+
+
+def _g4_train(ctx: Ctx, arm: str, seed: int, p: str) -> dict:
+    """One docs/18 run. Same completion contract as _g3_train: a run is
+    either complete (a .done marker next to the checkpoint) or it is
+    re-run from scratch; partial checkpoints are deleted, never resumed."""
+    ckpt = REPO / "data" / f"cm_docs18_{arm}_s{seed}.pt"
+    done = ckpt.with_suffix(".done.json")
+    if ckpt.exists() and done.exists():
+        ctx.log(f"{ckpt.name}: already complete")
+        return json.loads(done.read_text(encoding="utf-8"))
+    if ckpt.exists():
+        ckpt.unlink()
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    ctx.log(f"training {ckpt.name} at git {head}")
+    t0 = time.time()
+    pr = ctx.run([PY, "ml/train_cm.py", *G4_COMMON, "--codec-aug-p", p, "--seed", str(seed),
+                  "--output", str(ckpt)], timeout=12 * 3600)
+    if pr.returncode != 0 or not ckpt.exists():
+        raise RuntimeError(f"training {ckpt.name} failed; see log")
+    rec = {"checkpoint": str(ckpt), "arm": arm, "seed": seed, "git_head": head,
+           "codec_aug_p": float(p), "wall_hours": round((time.time() - t0) / 3600, 2)}
+    done.write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    return rec
+
+
+def _g4_futility_path() -> Path:
+    return G4_DIR / "futility.json"
+
+
+def g4_train_r44(ctx: Ctx) -> dict:
+    return _g4_train(ctx, "R", 44, "0.2")
+
+
+def g4_train_l42(ctx: Ctx) -> dict:
+    return _g4_train(ctx, "L", 42, "0.1")
+
+
+def g4_futility(ctx: Ctx) -> dict:
+    """docs/18 futility (L arm only): stop if L42 worst-NB miss is not at
+    least 1 pp better than the C-head mean (same 1 pp bar as docs/16/17)."""
+    names = [G4_L_HEADS[0]] + G4_C_HEADS
+    res = _score_heads(ctx, names, G4_DIR / "l42", conditions=G4_CONDITIONS,
+                       dev_codec_conditions=G4_CODEC_CONDITIONS, threshold_rule="tmc3",
+                       narrowband=G4_NARROWBAND)
+    heads = json.loads((G4_DIR / "l42" / "heads_telephony.json").read_text(encoding="utf-8"))["heads"]
+    r = heads[G4_L_HEADS[0]]["worst_narrowband_miss_pct"]
+    c = float(np.mean([heads[nm]["worst_narrowband_miss_pct"] for nm in G4_C_HEADS]))
+    stop = r > c - 1.0
+    rec = {"rule": "docs/18 futility: stop if worst-NB miss L42 > C-mean - 1.0 pp",
+           "C_mean_worst_nb_miss_pct": round(c, 2), "L42_worst_nb_miss_pct": r, "stop": stop,
+           "verdict_if_stop": "NO_EFFECT (early)"}
+    G4_DIR.mkdir(parents=True, exist_ok=True)
+    _g4_futility_path().write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    ctx.log(f"futility: C-mean {c:.2f} %  L42 {r} %  -> {'STOP' if stop else 'continue'}")
+    return {**rec, "scoring": res}
+
+
+def g4_train_l43(ctx: Ctx) -> dict:
+    fut = json.loads(_g4_futility_path().read_text(encoding="utf-8")) \
+        if _g4_futility_path().exists() else None
+    if fut and fut["stop"]:
+        ctx.log("futility STOP: L43 cancelled")
+        return {"skipped": True, "reason": "docs/18 futility stop"}
+    return _g4_train(ctx, "L", 43, "0.1")
+
+
+def g4_telephony(ctx: Ctx) -> dict:
+    fut = json.loads(_g4_futility_path().read_text(encoding="utf-8")) \
+        if _g4_futility_path().exists() else None
+    l_heads = G4_L_HEADS if not (fut and fut["stop"]) else G4_L_HEADS[:1]
+    return _score_heads(ctx, G4_R_HEADS + l_heads + G4_C_HEADS, G4_DIR / "all",
+                        conditions=G4_CONDITIONS,
+                        dev_codec_conditions=G4_CODEC_CONDITIONS, threshold_rule="tmc3",
+                        narrowband=G4_NARROWBAND)
+
+
+def _g4_arm_gates(heads: dict, arm_names: list, c_names: list,
+                  sub_label: np.ndarray, out_dir: Path, n: int) -> dict:
+    """docs/18 gates for one arm (mirrors g3_adjudicate)."""
+    nb = lambda h: h["worst_narrowband_miss_pct"]
+    cf = lambda h: h["conditions"]["clean"]["bonafide_frr_pct"]
+    eer: dict = {}
+    for nm in arm_names + c_names:
+        llr, bad = _g1_load("gate", "clean", n, nm, out_dir)
+        keep = ~bad
+        s, lab = llr[keep], sub_label[keep]
+        eer[nm] = _eer_from_llr(s[lab == 1], s[lab == 0])
+    A_nb = [nb(heads[x]) for x in arm_names]
+    C_nb = [nb(heads[x]) for x in c_names]
+    A_frr = [cf(heads[x]) for x in arm_names]
+    C_frr = [cf(heads[x]) for x in c_names]
+    A_eer = [eer[x] for x in arm_names]
+    c_eer_mean = float(np.mean([eer[x] for x in c_names]))
+    mean = lambda x: round(float(np.mean(x)), 2)
+    g1 = mean(A_nb) <= mean(C_nb) - 5.0 and max(A_nb) < min(C_nb)
+    g2 = mean(A_nb) < 50.0
+    g3_frr = mean(A_frr) <= mean(C_frr) + 2.0 and all(r <= mean(C_frr) + 2.0 for r in A_frr)
+    g3_eer = all(r <= c_eer_mean + 1.0 for r in A_eer)
+    g3 = g3_frr and g3_eer
+    return {"G18_1_effect": g1, "G18_2_stop_c_bar": g2, "G18_3_no_clean_regression": g3,
+            "G18_3_frr_guard": g3_frr, "G18_3_eer_guard": g3_eer,
+            "worst_nb_miss_pct": {"arm": A_nb, "C": C_nb, "arm_mean": mean(A_nb), "C_mean": mean(C_nb)},
+            "clean_frr_pct": {"arm": A_frr, "C": C_frr, "arm_mean": mean(A_frr), "C_mean": mean(C_frr)},
+            "clean_eer_pct": {"arm": A_eer, "C_eer_mean": round(c_eer_mean, 2)},
+            "seeds": arm_names}
+
+
+def _g4_verdict(gates: dict, fut_stop: bool = False) -> str:
+    g1, g2, g3 = gates["G18_1_effect"], gates["G18_2_stop_c_bar"], gates["G18_3_no_clean_regression"]
+    if fut_stop:
+        return "NO_EFFECT (early, docs/18 futility)"
+    if not g3:
+        return "HARMS"
+    if g1 and g2:
+        return "ADOPT"
+    if g1:
+        return "IMPROVES_NOT_ENOUGH"
+    return "NO_EFFECT"
+
+
+def g4_adjudicate(ctx: Ctx) -> dict:
+    """docs/18 adjudication: the R arm re-adjudicates the docs/17 protocol on
+    three seeds; the L arm is judged on the same gates."""
+    fut = json.loads(_g4_futility_path().read_text(encoding="utf-8")) \
+        if _g4_futility_path().exists() else None
+    l_stop = bool(fut and fut["stop"])
+    heads = json.loads((G4_DIR / "all" / "heads_telephony.json").read_text(encoding="utf-8"))["heads"]
+    sub = np.load(G4_DIR / "all" / "subset.npz")
+    label = sub["label"].astype(int)
+    n = int(label.size)
+    out_dir = G4_DIR / "all"
+    r_names = [nm for nm in G4_R_HEADS if nm in heads]
+    l_names = [nm for nm in G4_L_HEADS if nm in heads]
+    c_names = [nm for nm in G4_C_HEADS if nm in heads]
+    r_gates = _g4_arm_gates(heads, r_names, c_names, label, out_dir, n)
+    r_verdict = _g4_verdict(r_gates)
+    l_gates = _g4_arm_gates(heads, l_names, c_names, label, out_dir, n)
+    l_verdict = _g4_verdict(l_gates, fut_stop=l_stop)
+    rec = {"plan": "docs/18", "threshold_rule": "tmc3", "date": time.strftime("%Y-%m-%d"),
+           "R_arm": {"verdict": r_verdict, **r_gates},
+           "L_arm": {"verdict": l_verdict, **l_gates},
+           "futility": fut}
+    (G4_DIR / "verdict.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    ctx.log(f"docs/18 verdicts: R={r_verdict}  L={l_verdict}")
+    return rec
+
+
 # --------------------------------------------------------------------------- G1: speaker-grouped T1
 
 SPK_DIR = OUT / "g1_spk"
@@ -1219,6 +1377,12 @@ STAGES: Dict[str, Callable[[Ctx], dict]] = {
     "g3_futility": g3_futility,
     "g3_telephony": g3_telephony,
     "g3_adjudicate": g3_adjudicate,
+    "g4_train_r44": g4_train_r44,
+    "g4_train_l42": g4_train_l42,
+    "g4_futility": g4_futility,
+    "g4_train_l43": g4_train_l43,
+    "g4_telephony": g4_telephony,
+    "g4_adjudicate": g4_adjudicate,
     "g1_speaker_grouped": g1_speaker_grouped,
 }
 
