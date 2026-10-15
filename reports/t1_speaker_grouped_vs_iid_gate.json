@@ -1,0 +1,125 @@
+{
+  "what": "T1 thresholds (docs/13 \u00a711) re-measured with speaker-grouped calls on the gate split",
+  "cells": {
+    "asv=0.80,channel=0.00": {
+      "genuine_block_by_end": {
+        "iid": 0.075,
+        "grouped": 0.1175
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.0625,
+        "grouped": 0.1275
+      },
+      "spoof_block_worst_attack": {
+        "iid": 0.9975,
+        "grouped": 0.835
+      }
+    },
+    "asv=0.80,channel=0.25": {
+      "genuine_block_by_end": {
+        "iid": 0.12,
+        "grouped": 0.15
+      },
+      "genuine_challenge_60s": {
+        "iid": 1.0,
+        "grouped": 0.98
+      },
+      "spoof_block_worst_attack": {
+        "iid": 1.0,
+        "grouped": 0.8225
+      }
+    },
+    "asv=0.90,channel=0.00": {
+      "genuine_block_by_end": {
+        "iid": 0.075,
+        "grouped": 0.1125
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.0175,
+        "grouped": 0.075
+      },
+      "spoof_block_worst_attack": {
+        "iid": 1.0,
+        "grouped": 0.82
+      }
+    },
+    "asv=0.90,channel=0.25": {
+      "genuine_block_by_end": {
+        "iid": 0.0925,
+        "grouped": 0.1325
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.715,
+        "grouped": 0.5675
+      },
+      "spoof_block_worst_attack": {
+        "iid": 1.0,
+        "grouped": 0.8425
+      }
+    },
+    "asv=0.95,channel=0.00": {
+      "genuine_block_by_end": {
+        "iid": 0.075,
+        "grouped": 0.1125
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.0025,
+        "grouped": 0.0475
+      },
+      "spoof_block_worst_attack": {
+        "iid": 1.0,
+        "grouped": 0.8125
+      }
+    },
+    "asv=0.95,channel=0.25": {
+      "genuine_block_by_end": {
+        "iid": 0.0825,
+        "grouped": 0.1325
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.51,
+        "grouped": 0.4375
+      },
+      "spoof_block_worst_attack": {
+        "iid": 1.0,
+        "grouped": 0.835
+      }
+    },
+    "asv=1.00,channel=0.00": {
+      "genuine_block_by_end": {
+        "iid": 0.075,
+        "grouped": 0.1125
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.0,
+        "grouped": 0.0275
+      },
+      "spoof_block_worst_attack": {
+        "iid": 0.9975,
+        "grouped": 0.81
+      }
+    },
+    "asv=1.00,channel=0.25": {
+      "genuine_block_by_end": {
+        "iid": 0.075,
+        "grouped": 0.1225
+      },
+      "genuine_challenge_60s": {
+        "iid": 0.2525,
+        "grouped": 0.285
+      },
+      "spoof_block_worst_attack": {
+        "iid": 0.9975,
+        "grouped": 0.835
+      }
+    }
+  },
+  "max_genuine_block": {
+    "iid": 0.12,
+    "grouped": 0.15
+  },
+  "min_spoof_block_worst_attack": {
+    "iid": 0.9975,
+    "grouped": 0.81
+  }
+}

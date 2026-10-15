@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import android.annotation.SuppressLint
 import android.media.AudioFormat
@@ -250,8 +252,10 @@ class VaniCallGuardService : Service() {
         }, "VaniStreamFeed").apply { start() }
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private fun runOnMain(block: () -> Unit) {
-        android.os.Handler(android.os.Looper.getMainLooper()).post(block)
+        mainHandler.post(block)
     }
 
     /** Offline fallback: the on-device heuristic publishes locally-flagged snapshots. */
@@ -300,7 +304,7 @@ class VaniCallGuardService : Service() {
 
     private fun stopStreaming() {
         streaming = false
-        streamingClient?.stop()
+        streamingClient?.release()
         streamingClient = null
         streamThread?.interrupt()
         streamThread = null

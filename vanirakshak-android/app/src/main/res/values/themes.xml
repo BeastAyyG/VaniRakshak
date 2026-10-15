@@ -2,7 +2,7 @@
 <resources>
     <!-- VaniRakshak vibrant pastel theme: white canvas, bold violet accent,
          lavender surfaces, soft ink text. -->
-    <style name="Theme.VaniRakshak" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="Theme.VaniRakshak" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/pin_red</item>
         <item name="colorPrimaryVariant">@color/pin_red_pressed</item>
         <item name="colorOnPrimary">@color/white</item>

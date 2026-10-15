@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.activity.addCallback
 import com.vericall.R
 import com.vericall.audio.VaniChallengeGrader
 import com.vericall.audio.VaniLiveVoiceAnalyzer
@@ -72,7 +73,13 @@ class TempContactDetailActivity : AppCompatActivity() {
         // Start real-time acoustic ingestion; UI + notification follow ACTUAL voice
         startLiveVoiceAnalysis()
 
-        binding.btnBack.setOnClickListener { finish() }
+        binding.btnBack.setOnClickListener { exitScreen() }
+
+        // Back press on a live call must also stop the guard service: for
+        // simulated calls no telephony IDLE event will ever arrive, so
+        // without this the mic keeps streaming after the user dismisses
+        // the screen.
+        onBackPressedDispatcher.addCallback(this) { exitScreen() }
 
         binding.btnTriggerChallenge.setOnClickListener {
             triggerLivenessChallenge()
@@ -395,6 +402,17 @@ class TempContactDetailActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Leave the guard screen. For a live (simulated) call this also stops
+     * the guard service via VaniCallRouter.onEnded; otherwise the service
+     * keeps the microphone open and streams after the screen is gone.
+     * Plain contact details just finish (no service was started for them).
+     */
+    private fun exitScreen() {
+        if (isLiveCall) VaniCallRouter.onEnded(this)
+        finish()
     }
 
     private fun blockAndTerminateCall(callerName: String) {
