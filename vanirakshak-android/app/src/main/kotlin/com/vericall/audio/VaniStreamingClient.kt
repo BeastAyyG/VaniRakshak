@@ -101,6 +101,17 @@ class VaniStreamingClient(
         socket = null
     }
 
+    /**
+     * Release the per-call OkHttp resources (dispatcher threads, connection
+     * pool). Without this every call leaks threads until their idle timeout.
+     * Do not call on an instance you intend to start() again.
+     */
+    fun release() {
+        stop()
+        runCatching { client.dispatcher.executorService.shutdown() }
+        runCatching { client.connectionPool.evictAll() }
+    }
+
     private fun scheduleReconnect() {
         if (manualClose) return
         if (attempt >= MAX_ATTEMPTS) {

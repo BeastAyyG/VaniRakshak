@@ -1,6 +1,7 @@
 package com.vericall.util
 
 import com.vericall.model.RiskLevel
+import java.util.concurrent.CopyOnWriteArraySet
 
 /**
  * Single in-process channel for live analysis results.
@@ -38,8 +39,8 @@ object VaniRiskBus {
         val listenState: ListenState = ListenState.SCORING
     )
 
-    private val listeners = LinkedHashSet<(Snapshot) -> Unit>()
-    private val amplitudeListeners = LinkedHashSet<(Float) -> Unit>()
+    private val listeners = CopyOnWriteArraySet<(Snapshot) -> Unit>()
+    private val amplitudeListeners = CopyOnWriteArraySet<(Float) -> Unit>()
 
     @Volatile
     var last: Snapshot? = null
