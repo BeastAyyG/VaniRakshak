@@ -16,6 +16,19 @@ before the money moves.
   retained or sent to a third party; every decision leaves a tamper-evident
   audit record.
 
+## Current state (Oct 2026)
+
+- **Live deepfake verdicts on in-app internet calls** (eat/voip-calling, PR #20):
+  Android WebRTC calling with a JSON-over-WebSocket signaling server. The remote
+  party's voice is scored live and the in-call banner turns red (>= 0.7),
+  amber (0.4-0.7) or neutral (< 0.4) by deepfake score. Verified end to end on
+  two headless emulators: 75 s bidirectional call, 95 verdict frames.
+- **Trained countermeasure**: WavLM-base-plus Layer-5 frontend + AASIST-L head,
+  production threshold 21.9308. All 33 training checkpoints are backed up in the
+  private Hugging Face repo BeastAgpandey/vanirakshak-weights.
+- **Still ahead**: background incoming-call ringing (needs Firebase FCM) and
+  PSTN call screening through a SIP/CPaaS layer.
+
 ## Getting started
 
 Requires Python 3.11+ and Node.js 20+.
