@@ -191,12 +191,31 @@ def evaluate_checkpoint_on_audio(
     ckpt = torch.load(str(checkpoint_path), map_location="cpu")
     state_dict = ckpt["state_dict"]
 
+    layer_index_arg = layer_index
     if layer_index is None:
         layer_index = int(ckpt.get("layer_index", ckpt.get("layer", -1)))
     logger.info("Using WavLM layer index: %d", layer_index)
 
+    # Goal 2: a checkpoint trained with --merge-layers or
+    # --merge-layer-list must be scored with the same layers it was
+    # trained on. An explicit --layer-index overrides the checkpoint and
+    # scores one layer, as before.
+    from ml.train_cm import select_wavlm_features
+
+    merge_layer_list = ckpt.get("merge_layer_list") if layer_index_arg is None else None
+    if layer_index_arg is None and merge_layer_list:
+        merge_layers = len(merge_layer_list)
+    elif layer_index_arg is None:
+        merge_layers = ckpt.get("merge_layers") or None
+    else:
+        merge_layers = None
+    if merge_layer_list:
+        logger.info("Using WavLM merge layer list: %s", merge_layer_list)
+    elif merge_layers:
+        logger.info("Using WavLM merge prefix of %d hidden states", merge_layers)
+
     in_dim = 768 if ckpt.get("frontend") == "microsoft/wavlm-base-plus" else 1024
-    model = AASISTLHead(in_dim=in_dim).to(dev)
+    model = AASISTLHead(in_dim=in_dim, merge_layers=merge_layers).to(dev)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
 
@@ -258,7 +277,10 @@ def evaluate_checkpoint_on_audio(
                 audio_t = audio_t.half()
 
             with torch.no_grad():
-                hidden = wavlm(audio_t, output_hidden_states=True).hidden_states[layer_index].float()
+                w_out = wavlm(audio_t, output_hidden_states=True)
+                hidden = select_wavlm_features(
+                    w_out, layer_index, merge_layers, merge_layer_list
+                )
                 _, logits = model(hidden)
                 raw_llrs = (logits[:, 1] - logits[:, 0]).cpu().numpy()
                 llrs = cal_w * raw_llrs + cal_b
@@ -282,6 +304,8 @@ def evaluate_checkpoint_on_audio(
         np.array(bonafide_scores), np.array(spoof_scores), attack_scores
     )
     results["layer_index"] = layer_index
+    results["merge_layers"] = merge_layers
+    results["merge_layer_list"] = merge_layer_list
 
     logger.info("=== Audio Evaluation Results for %s ===", checkpoint_path.name)
     logger.info("Layer index: %d", layer_index)

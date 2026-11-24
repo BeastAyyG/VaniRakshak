@@ -11,6 +11,12 @@ docs/08-cm-training-plan.md §§4, 12.1 and docs/03-codec-augmentation-and-telep
   - Fast dev validation against pre-cached fp16 feature tensors
   - In-training evaluation on benchmark demo clips (verifying YouTube domain-shift resolution)
   - Best-model checkpointing to data/cm_aasist.pt matching detector schema
+
+Goal 2 additions (muse-inbox issue 2):
+  - RawBoost augmentation (--rawboost-p, ml/rawboost.py), off by default
+  - Neural codec augmentation (--neural-codec-p, ml/neural_codecs.py), off by default
+  - Explicit WavLM layer-list pooling (--merge-layer-list, ml/layer_pooling.py)
+  - A Platt calibration block written into every best checkpoint (ml/calibration.py)
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ import queue
 import sys
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import soundfile as sf
@@ -47,6 +53,10 @@ for p in [str(REPO_ROOT), str(BACKEND_DIR)]:
 from benchmarks.compute_mindcf import compute_eer, compute_mindcf, evaluate_system
 from ml.aasist_model import AASISTLHead
 from ml.augment import CodecTelephonyAugmenter, prepare_audio_window
+from ml.calibration import calibration_block
+from ml.layer_pooling import hidden_state_indices, parse_merge_layer_list, resolve_merge_config
+from ml.neural_codecs import NEURAL_CODECS, NeuralCodecAugmenter
+from ml.rawboost import RawBoostAugmenter
 from ml.real_codecs import REAL_CODECS, RealCodecAugmenter
 from vanirakshak.detectors.cm_aasist import _validate_checkpoint
 
@@ -132,11 +142,15 @@ class FastAudioAugmentLoader:
         generator: Optional[torch.Generator] = None,
         seed: int = 42,
         real_codec: Optional["RealCodecAugmenter"] = None,
+        extra_raw_augmenters: Optional[Sequence] = None,
     ) -> None:
         self.samples = dataset.samples
         # docs/16: a real codec round trip on the RAW utterance, before
         # prepare_audio_window normalises it. None = off.
         self.real_codec = real_codec
+        # Goal 2: further raw-audio augmenters (RawBoost, neural codecs),
+        # applied in order after the real codec, still before windowing.
+        self.extra_raw_augmenters = list(extra_raw_augmenters or [])
         if max_samples and max_samples < len(self.samples):
             self.samples = self.samples[:max_samples]
         self.augmenter = augmenter
@@ -177,6 +191,9 @@ class FastAudioAugmentLoader:
                 if sr != 16000:
                     raise ValueError(f"real-codec augmentation expects 16 kHz audio, got {sr}")
                 audio = self.real_codec(audio, rng)
+            for extra in self.extra_raw_augmenters:
+                if getattr(extra, "p", 0) > 0:
+                    audio = extra(audio, rng)
             w = prepare_audio_window(
                 audio, sr=sr, target_duration=4.0, random_crop=True, rng=rng
             )
@@ -495,14 +512,29 @@ class FastAudioDevLoader:
 # Benchmark Demo Clip Evaluator
 # ---------------------------------------------------------------------------
 
-def select_wavlm_features(w_out, layer_index: int, merge_layers: Optional[int] = None):
+def select_wavlm_features(
+    w_out,
+    layer_index: int,
+    merge_layers: Optional[int] = None,
+    merge_layer_list: Optional[Sequence[int]] = None,
+):
     """Pick the WavLM representation(s) the AASIST head will consume.
 
     Returns a single (B, T, D) tensor for the single-layer recipe, or a list
-    of them when ``merge_layers`` is set, for AASISTLHead's attentive merge
-    (Pan et al., docs/08 [R10]). ``merge_layers=12`` selects hidden_states
-    0..11 -- the embedding output plus the early-to-middle transformer
-    layers that docs/08 §12.6 measured as carrying the spoofing signal.
+    of them when ``merge_layers`` or ``merge_layer_list`` is set, for
+    AASISTLHead's attentive merge (Pan et al., docs/08 [R10]).
+    ``merge_layers=12`` selects hidden_states 0..11 -- the embedding output
+    plus the early-to-middle transformer layers that docs/08 §12.6 measured
+    as carrying the spoofing signal.
+
+    ``merge_layer_list`` is the Goal 2 alternative: an explicit list of
+    transformer layer indices, 0-11 for WavLM-base-plus. It maps to hidden
+    states by adding one, because hidden_states[0] is the embedding output
+    and hidden_states[k] is transformer layer k-1. So ``[6, 7, 8, 9, 10,
+    11]`` pools transformer layers 6 to 11 (hidden states 7 to 12), the
+    region the Hyper Research report recommends. ``--merge-layers 12`` is
+    not that: it is a prefix that never reads layer 11. The two merge
+    options are mutually exclusive.
 
     Every extraction site in this file routes through here, so train and
     inference cannot drift apart on which layers they read.
@@ -511,6 +543,15 @@ def select_wavlm_features(w_out, layer_index: int, merge_layers: Optional[int] =
     in one place means a caller cannot forget it on the merged path, where
     the value is a list and ``.float()`` would raise AttributeError.
     """
+    if merge_layers is not None and merge_layer_list is not None:
+        raise ValueError(
+            "use only one of merge_layers (a hidden-states prefix) and "
+            "merge_layer_list (an explicit transformer layer list)"
+        )
+    if merge_layer_list is not None:
+        return [
+            w_out.hidden_states[i].float() for i in hidden_state_indices(merge_layer_list)
+        ]
     if merge_layers:
         return [w_out.hidden_states[i].float() for i in range(merge_layers)]
     return w_out.hidden_states[layer_index].float()
@@ -523,6 +564,7 @@ def evaluate_demo_clips(
     dev: torch.device,
     layer_index: int = 5,
     merge_layers: Optional[int] = None,
+    merge_layer_list: Optional[Sequence[int]] = None,
     freeze_merge: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     """Evaluate model on the 4 demo benchmark clips via full pipeline and fusion."""
@@ -542,12 +584,14 @@ def evaluate_demo_clips(
 
     class _TempCM:
         def __init__(self, m: AASISTLHead, w: WavLMModel, t: float, layer_idx: int = 5,
-                     merge_layers: Optional[int] = None) -> None:
+                     merge_layers: Optional[int] = None,
+                     merge_layer_list: Optional[Sequence[int]] = None) -> None:
             self.m = m
             self.w = w
             self.t = t
             self.layer_idx = layer_idx
             self.merge_layers = merge_layers
+            self.merge_layer_list = merge_layer_list
 
         def score(self, x: np.ndarray, sr: int) -> float:
             audio = np.asarray(x, dtype=np.float32).ravel()
@@ -567,12 +611,15 @@ def evaluate_demo_clips(
 
             with torch.no_grad():
                 w_out = self.w(inp, output_hidden_states=True)
-                feat = select_wavlm_features(w_out, self.layer_idx, self.merge_layers)
+                feat = select_wavlm_features(
+                    w_out, self.layer_idx, self.merge_layers, self.merge_layer_list
+                )
                 _, logits = self.m(feat)
                 raw_llr = float((logits[0, 1] - logits[0, 0]).item())
                 return raw_llr - self.t
 
-    cm_temp = _TempCM(model, wavlm, threshold, layer_idx=layer_index, merge_layers=merge_layers)
+    cm_temp = _TempCM(model, wavlm, threshold, layer_idx=layer_index, merge_layers=merge_layers,
+                      merge_layer_list=merge_layer_list)
     pipe = DetectionPipeline(cm=cm_temp)
 
     # Enrol Modi using genuine demo audio
@@ -619,6 +666,7 @@ def train_recipe_a(
     n_workers: int = 24,
     layer_index: int = 5,
     merge_layers: Optional[int] = None,
+    merge_layer_list: Optional[Sequence[int]] = None,
     freeze_merge: bool = False,
     streaming_dev: bool = False,
     seed: int = 42,
@@ -633,6 +681,10 @@ def train_recipe_a(
     real_codecs: Optional[List[str]] = None,
     codec_aug_p: float = 0.0,
     codec_aug_codecs: Optional[List[str]] = None,
+    rawboost_p: float = 0.0,
+    neural_codec_p: float = 0.0,
+    neural_codecs: Optional[List[str]] = None,
+    write_calibration_block: bool = True,
 ) -> Path:
     """Train Recipe A with on-the-fly codec/telephony augmentation.
 
@@ -647,6 +699,14 @@ def train_recipe_a(
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     loader_generator = torch.Generator().manual_seed(seed)
+
+    # Goal 2: resolve the merge config once. A layer list replaces the
+    # prefix count: the head's merge count becomes the list length, and
+    # the last used layer is the highest listed transformer layer.
+    # Raises ValueError when both merge options are given.
+    merge_config = resolve_merge_config(merge_layers, merge_layer_list)
+    merge_layers = merge_config["merge_layers"]
+    merge_layer_list = merge_config["merge_layer_list"]
 
     dev = torch.device(device if (device.startswith("cuda") and torch.cuda.is_available()) else "cpu")
     logger.info("Initializing Recipe A Retraining on device: %s (WavLM layer_index=%d, seed=%d)", dev, layer_index, seed)
@@ -673,10 +733,25 @@ def train_recipe_a(
     if real_codec is not None:
         tag = "docs/17" if codec_aug_p > 0 else "docs/16"
         logger.info("Real-codec augmentation (%s): %s", tag, real_codec.describe())
+    # Goal 2: RawBoost and neural codecs, on raw audio before windowing,
+    # after the real codec. Both default to off (p=0), so default training
+    # behaviour is unchanged.
+    rawboost = RawBoostAugmenter(rawboost_p) if rawboost_p > 0 else None
+    if rawboost is not None:
+        logger.info("RawBoost augmentation: %s", rawboost.describe())
+    neural_codec = (
+        NeuralCodecAugmenter(neural_codec_p, neural_codecs or NEURAL_CODECS)
+        if neural_codec_p > 0
+        else None
+    )
+    if neural_codec is not None:
+        logger.info("Neural-codec augmentation: %s", neural_codec.describe())
+    extra_raw_augmenters = [a for a in (rawboost, neural_codec) if a is not None]
     train_loader = FastAudioAugmentLoader(
         dataset=train_set,
         augmenter=augmenter,
         real_codec=real_codec,
+        extra_raw_augmenters=extra_raw_augmenters,
         batch_size=batch_size,
         shuffle=True,
         drop_last=True,
@@ -752,8 +827,10 @@ def train_recipe_a(
     # --merge-layers 12 layer 11's output is never read, and unfreezing it
     # trains nothing (measured: 57 of 76 tensors received gradients, exactly
     # three layers' worth). Anchor the window to the last layer the head sees.
-    if merge_layers:
-        last_used_layer = merge_layers - 2
+    # With --merge-layer-list the last used layer is the highest listed
+    # transformer layer, in transformer numbering.
+    if merge_config["last_used_layer"] is not None:
+        last_used_layer = merge_config["last_used_layer"]
     else:
         last_used_layer = (
             n_encoder_layers - 1 if layer_index in (-1, n_encoder_layers)
@@ -768,7 +845,8 @@ def train_recipe_a(
             raise ValueError(
                 f"--unfreeze-top-n {unfreeze_top_n} exceeds the {last_used_layer + 1} "
                 f"encoder layers this configuration actually reads "
-                f"(merge_layers={merge_layers}, layer_index={layer_index})"
+                f"(merge_layers={merge_layers}, merge_layer_list={merge_layer_list}, "
+                f"layer_index={layer_index})"
             )
         for name, param in wavlm.named_parameters():
             if name.startswith("encoder.layers."):
@@ -905,11 +983,11 @@ def train_recipe_a(
                 if unfreeze_top_n > 0:
                     # Graph must reach the encoder, so no no_grad() here.
                     w_out = wavlm(audio_batch, output_hidden_states=True)
-                    feats = select_wavlm_features(w_out, layer_index, merge_layers)
+                    feats = select_wavlm_features(w_out, layer_index, merge_layers, merge_layer_list)
                 else:
                     with torch.no_grad():
                         w_out = wavlm(audio_batch, output_hidden_states=True)
-                        feats = select_wavlm_features(w_out, layer_index, merge_layers)
+                        feats = select_wavlm_features(w_out, layer_index, merge_layers, merge_layer_list)
                 _, logits = model(feats)
                 loss = criterion(logits, labels)
 
@@ -968,7 +1046,7 @@ def train_recipe_a(
                         dev, dtype=frontend_dtype, non_blocking=True,
                     )
                     w_out = wavlm(audio_batch, output_hidden_states=True)
-                    feats = select_wavlm_features(w_out, layer_index, merge_layers)
+                    feats = select_wavlm_features(w_out, layer_index, merge_layers, merge_layer_list)
                     with torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp):
                         _, logits = model(feats)
                     llr = (logits[:, 1] - logits[:, 0]).float().cpu().numpy()
@@ -997,7 +1075,7 @@ def train_recipe_a(
 
         # Evaluate demo clips
         demo_res = evaluate_demo_clips(model, wavlm, threshold_eer, dev, layer_index=layer_index,
-                                   merge_layers=merge_layers)
+                                   merge_layers=merge_layers, merge_layer_list=merge_layer_list)
         demo_01 = demo_res.get("demo_01_genuine.wav", {})
 
         elapsed_total = time.perf_counter() - t0
@@ -1039,6 +1117,9 @@ def train_recipe_a(
                 "dev_min_dcf": float(best_dev_mindcf),
                 "layer_index": int(layer_index),
                 "merge_layers": int(merge_layers) if merge_layers else None,
+                "merge_layer_list": (
+                    [int(i) for i in merge_layer_list] if merge_layer_list else None
+                ),
                 "freeze_merge": bool(freeze_merge),
                 "seed": int(seed),
                 "best_epoch": int(best_epoch),
@@ -1054,8 +1135,29 @@ def train_recipe_a(
                     "p_bandpass": float(aug_p_bandpass),
                     "p_rir": float(aug_p_rir),
                     "p_gain": float(aug_p_gain),
+                    "rawboost": rawboost.describe() if rawboost is not None else None,
+                    "neural_codec": neural_codec.describe() if neural_codec is not None else None,
+                    "raw_augmentation_order": (
+                        ["real_codec"] if real_codec is not None else []
+                    )
+                    + (["rawboost"] if rawboost is not None else [])
+                    + (["neural_codec"] if neural_codec is not None else []),
                 },
                 "real_codec": real_codec.describe() if real_codec is not None else None,
+                # Goal 2: Platt calibration fitted on this epoch's dev LLRs,
+                # with the threshold and the data it was fitted on. The fit
+                # is optimistic (dev also selects the best checkpoint); see
+                # ml/calibration.py. Omit with --no-calibration-block.
+                "calibration": (
+                    calibration_block(
+                        bon_arr,
+                        spf_arr,
+                        threshold=float(best_eer_threshold),
+                        data_reference=str(dev_manifest),
+                    )
+                    if write_calibration_block
+                    else None
+                ),
             }
             logger.info(
                 "Checkpoint provenance: init_weights=%s augmentation=%s",
@@ -1158,6 +1260,18 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--merge-layer-list",
+        type=str,
+        default=None,
+        metavar="LAYERS",
+        help=(
+            "Goal 2: attentively merge an explicit list of WavLM transformer "
+            "layers, e.g. '6,7,8,9,10,11' for L6-L11 pooling (hidden states "
+            "7-12). Mutually exclusive with --merge-layers. Overrides "
+            "--layer-index. The head's merge count becomes the list length."
+        ),
+    )
+    parser.add_argument(
         "--freeze-merge",
         action="store_true",
         help=(
@@ -1214,6 +1328,22 @@ def main() -> None:
                              "before windowing. 0 (default) = off. Conflicts with --real-codec-p.")
     parser.add_argument("--codec-aug-codecs", type=str, default=",".join(REAL_CODECS),
                         help="docs/17: comma-separated subset of " + ",".join(REAL_CODECS) + ".")
+    parser.add_argument("--rawboost-p", type=float, default=0.0,
+                        help="Goal 2: probability of RawBoost augmentation on the "
+                             "raw utterance before windowing. 0 (default) = off.")
+    parser.add_argument("--neural-codec-p", type=float, default=0.0,
+                        help="Goal 2: probability of a neural codec round trip "
+                             "(Encodec, Opus, MP3) on the raw utterance before "
+                             "windowing. 0 (default) = off. Codecs whose backend "
+                             "is missing are dropped with a warning; if none is "
+                             "available the run fails fast instead of training "
+                             "unaugmented.")
+    parser.add_argument("--neural-codecs", type=str, default=",".join(NEURAL_CODECS),
+                        help="Goal 2: comma-separated subset of " + ",".join(NEURAL_CODECS) + ".")
+    parser.add_argument("--no-calibration-block", action="store_true", default=False,
+                        help="Goal 2: do not write the Platt calibration block "
+                             "into the saved checkpoint. By default the block "
+                             "is written, fitted on the best epoch's dev LLRs.")
     args = parser.parse_args()
 
     # A warm start that was asked for and did not happen is a silent experiment
@@ -1241,6 +1371,7 @@ def main() -> None:
         n_workers=args.workers,
         layer_index=args.layer_index,
         merge_layers=args.merge_layers,
+        merge_layer_list=parse_merge_layer_list(args.merge_layer_list),
         freeze_merge=args.freeze_merge,
         streaming_dev=args.streaming_dev,
         seed=args.seed,
@@ -1255,6 +1386,10 @@ def main() -> None:
         real_codecs=[c.strip() for c in args.real_codecs.split(",") if c.strip()],
         codec_aug_p=args.codec_aug_p,
         codec_aug_codecs=[c.strip() for c in args.codec_aug_codecs.split(",") if c.strip()],
+        rawboost_p=args.rawboost_p,
+        neural_codec_p=args.neural_codec_p,
+        neural_codecs=[c.strip() for c in args.neural_codecs.split(",") if c.strip()],
+        write_calibration_block=not args.no_calibration_block,
     )
 
 
